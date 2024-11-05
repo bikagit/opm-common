@@ -36,11 +36,11 @@ bool test_dense_10x10(Evaluation* load_time, Evaluation* apply_time)
     OPM_ERROR_IF(!apply_time, "Invalid Evaluation");
 
     Opm::Tensor<Evaluation> in{10};
-    in.data_ = {0.3796144,0.83585316,0.19076388,0.029881366,0.9120564,0.53910017,
-0.9167442,0.4047214,0.36840722,0.06841394};
+    in.data_ = {0.5401406,0.067625806,0.013277436,0.6826751,0.6979555,0.19329886,
+0.20994096,0.30320448,0.58662874,0.9045795};
 
     Opm::Tensor<Evaluation> out{1};
-    out.data_ = {-0.13820542};
+    out.data_ = {-0.007366171};
 
     NNTimer load_timer;
     load_timer.start();

@@ -36,12 +36,12 @@ bool test_relu_10(Evaluation* load_time, Evaluation* apply_time)
     OPM_ERROR_IF(!apply_time, "Invalid Evaluation");
 
     Opm::Tensor<Evaluation> in{10};
-    in.data_ = {0.4814067,0.7162516,0.731281,0.6096687,0.2502829,0.44564644,
-0.15723701,0.93854994,0.39685968,0.07241595};
+    in.data_ = {0.11478948,0.9410835,0.28376904,0.25726688,0.9882219,0.21069573,
+0.98714674,0.018556545,0.13675344,0.28590667};
 
     Opm::Tensor<Evaluation> out{10};
-    out.data_ = {0.8344329,0.15581068,0.,0.,0.14855057,0.,
-0.2895283,0.,0.,0.19160327};
+    out.data_ = {0.,0.,0.,0.,0.066772744,0.,
+0.,0.,0.28074092,0.6897066};
 
     NNTimer load_timer;
     load_timer.start();
