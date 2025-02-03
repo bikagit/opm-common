@@ -209,6 +209,7 @@ int main(int argc, char **argv)
     fs.setSaturation(phaseIdx3, 0);
 
     auto relperm = relativePermeabilities<double>(param, fs);
-    std::cout << std::setprecision (15) << relperm[phaseIdx1] << std::endl;
+    std::cout << std::setprecision (15) << relperm[phaseIdx1] <<","<< relperm[phaseIdx2] << std::endl;
+
     return 0;
 }
