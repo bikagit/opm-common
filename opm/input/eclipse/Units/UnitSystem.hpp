@@ -48,6 +48,7 @@ namespace Opm {
             runtime,
             density,
             pressure,
+            pressure_drop,
             temperature_absolute,
             temperature,
             viscosity,
@@ -87,6 +88,7 @@ namespace Opm {
             moles,
             ppm,
             ymodule,
+            thermalconductivity,
             dfactor,
             _count // New entries must be added *before* this
         };

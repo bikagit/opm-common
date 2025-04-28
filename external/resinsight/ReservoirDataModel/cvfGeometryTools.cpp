@@ -218,6 +218,7 @@ double closestAxisSignedAreaPlanarPolygon( const cvf::Vec3d& planeNormal, const 
    Returns an intersection status telling what kind of intersection it is (if any)
    */
 
+static
 GeometryTools::IntersectionStatus inPlaneLineIntersect( double  x1,
                                                         double  y1,
                                                         double  x2,
@@ -1108,7 +1109,7 @@ bool EarClipTesselator::isPointInsideTriangle( const cvf::Vec3d& A,
     double tol      = -m_areaTolerance;
 
     return ( ( aCROSSbp >= tol ) && ( bCROSScp >= tol ) && ( cCROSSap >= tol ) );
-};
+}
 
 //--------------------------------------------------------------------------------------------------
 /// Computes area of the currently stored 2D polygon/contour

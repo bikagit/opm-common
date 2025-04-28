@@ -1523,7 +1523,10 @@ namespace {
             ? multiSegmentWells(schedule[simStep], allWells)
             : std::vector<std::string>{};
 
+        std::size_t i = 0;
         for (const auto& udq : udqs.zudn()) {
+            if(i++ % 2) continue; // Odd elements are the UDQ unit strings
+
             switch (udq.front()) {
             case 'F':
                 restoreFieldUDQValue(udqs, udq, smry);
@@ -1598,7 +1601,7 @@ namespace {
     }
 } // Anonymous namespace
 
-namespace Opm { namespace RestartIO  {
+namespace Opm::RestartIO  {
 
     RestartValue
     load(const std::string&             filename,
@@ -1640,4 +1643,24 @@ namespace Opm { namespace RestartIO  {
         return rst_value;
     }
 
-}} // Opm::RestartIO
+    data::Solution
+    load_solution_only(const std::string&             filename,
+                       int                            report_step,
+                       const std::vector<RestartKey>& solution_keys,
+                       const EclipseState&            es,
+                       const EclipseGrid&             grid)
+    {
+        auto rst_view = std::make_shared<Opm::EclIO::RestartFileView>
+            (std::make_shared<Opm::EclIO::ERst>(filename), report_step);
+
+        if (!rst_view->valid()) {
+            return {};
+        }
+
+        auto sol =  restoreSOLUTION(solution_keys, grid.getNumActive(), *rst_view);
+        sol.convertToSI(es.getUnits());
+
+        return sol;
+    }
+
+} // Opm::RestartIO

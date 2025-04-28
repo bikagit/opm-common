@@ -2,20 +2,26 @@
   Copyright (c) 2016 Robert W. Rose
   Copyright (c) 2018 Paul Maevskikh
   Copyright (c) 2024 NORCE
-  This file is part of the Open Porous Media project (OPM).
 
-  OPM is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
 
-  OPM is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
 
-  You should have received a copy of the GNU General Public License
-  along with OPM.  If not, see <http://www.gnu.org/licenses/>.
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+  Note: This file is based on kerasify/keras_model.hh
 */
 
 #ifndef ML_MODEL_H_
@@ -88,7 +94,7 @@ namespace ML
 
         void flatten()
         {
-            OPM_ERROR_IF(dims_.size() <= 0, "Invalid tensor");
+            OPM_ERROR_IF(dims_.size() == 0, "Invalid tensor");
 
             int elements = dims_[0];
             for (unsigned int i = 1; i < dims_.size(); i++) {
@@ -398,13 +404,9 @@ namespace ML
         {
         }
 
-        virtual ~NNLayerActivation()
-        {
-        }
+        bool loadLayer(std::ifstream& file) override;
 
-        virtual bool loadLayer(std::ifstream& file);
-
-        virtual bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out);
+        bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out) override;
 
     private:
         ActivationType activation_type_;
@@ -425,13 +427,9 @@ namespace ML
         {
         }
 
-        virtual ~NNLayerScaling()
-        {
-        }
+        bool loadLayer(std::ifstream& file) override;
 
-        virtual bool loadLayer(std::ifstream& file);
-
-        virtual bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out);
+        bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out) override;
 
     private:
         Tensor<float> weights_;
@@ -457,13 +455,9 @@ namespace ML
         {
         }
 
-        virtual ~NNLayerUnScaling()
-        {
-        }
+        bool loadLayer(std::ifstream& file) override;
 
-        virtual bool loadLayer(std::ifstream& file);
-
-        virtual bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out);
+        bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out) override;
 
     private:
         Tensor<float> weights_;
@@ -481,17 +475,9 @@ namespace ML
     class NNLayerDense : public NNLayer<Evaluation>
     {
     public:
-        NNLayerDense()
-        {
-        }
+        bool loadLayer(std::ifstream& file) override;
 
-        virtual ~NNLayerDense()
-        {
-        }
-
-        virtual bool loadLayer(std::ifstream& file);
-
-        virtual bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out);
+        bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out) override;
 
     private:
         Tensor<float> weights_;
@@ -507,17 +493,9 @@ namespace ML
     class NNLayerEmbedding : public NNLayer<Evaluation>
     {
     public:
-        NNLayerEmbedding()
-        {
-        }
+        bool loadLayer(std::ifstream& file) override;
 
-        virtual ~NNLayerEmbedding()
-        {
-        }
-
-        virtual bool loadLayer(std::ifstream& file);
-
-        virtual bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out);
+        bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out) override;
 
     private:
         Tensor<float> weights_;
@@ -532,13 +510,7 @@ namespace ML
     public:
         enum class LayerType { kScaling = 1, kUnScaling = 2, kDense = 3, kActivation = 4 };
 
-        NNModel()
-        {
-        }
-
-        virtual ~NNModel()
-        {
-        }
+        virtual ~NNModel() = default;
 
         // loads models (.model files) generated by Kerasify
         virtual bool loadModel(const std::string& filename);
@@ -554,10 +526,6 @@ namespace ML
     class NNTimer
     {
     public:
-        NNTimer()
-        {
-        }
-
         void start()
         {
             start_ = std::chrono::high_resolution_clock::now();

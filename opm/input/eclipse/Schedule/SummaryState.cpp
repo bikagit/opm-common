@@ -91,9 +91,10 @@ namespace {
             "WVPT" , "WVIT" , "GMT"  , "GPTF" , "SGT"  , "GST" , "FGT" , "GCT" , "GIMT" ,
             "WGPT" , "WGIT" , "EGT"  , "EXGT" , "GVPT" , "GVIT" , "LPT" , "VPT" , "VIT" , "NPT" , "NIT",
             "TPT", "TIT", "CPT", "CIT", "SPT", "SIT", "EPT", "EIT", "TPTHEA", "TITHEA",
+            "MMIT", "MOIT", "MUIT", "MMPT", "MOPT", "MUPT",
             "OFT", "OFT+", "OFT-", "OFTG", "OFTL",
             "GFT", "GFT+", "GFT-", "GFTG", "GFTL",
-            "WFT", "WFT+", "WFT-", "GMIT",
+            "WFT", "WFT+", "WFT-", "GMIT", "GMPT",
         };
 
         auto sep_pos = key.find(':');

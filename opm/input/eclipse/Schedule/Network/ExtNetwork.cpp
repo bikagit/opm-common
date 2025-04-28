@@ -16,19 +16,28 @@
   You should have received a copy of the GNU General Public License
   along with OPM.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include <algorithm>
-#include <iterator>
-#include <stdexcept>
-#include <fmt/format.h>
-#include <vector>
-#include <functional>
 
 #include <opm/input/eclipse/Schedule/Network/ExtNetwork.hpp>
 
-namespace Opm {
-namespace Network {
+#include <opm/input/eclipse/Schedule/Network/Branch.hpp>
+#include <opm/input/eclipse/Schedule/Network/Node.hpp>
+#include <opm/input/eclipse/Schedule/Schedule.hpp>
+#include <opm/input/eclipse/Schedule/Well/Well.hpp>
 
-ExtNetwork ExtNetwork::serializationTestObject() {
+#include <algorithm>
+#include <cassert>
+#include <functional>
+#include <iterator>
+#include <stack>
+#include <stdexcept>
+#include <vector>
+
+#include <fmt/format.h>
+
+namespace Opm::Network {
+
+ExtNetwork ExtNetwork::serializationTestObject()
+{
     ExtNetwork object;
     object.m_branches = {Branch::serializationTestObject()};
     object.insert_indexed_node_names = {"test1", "test2"};
@@ -37,30 +46,35 @@ ExtNetwork ExtNetwork::serializationTestObject() {
     return object;
 }
 
-bool ExtNetwork::active() const {
+bool ExtNetwork::active() const
+{
     return !this->m_branches.empty() && !this->m_nodes.empty();
 }
 
-bool ExtNetwork::is_standard_network() const {
+bool ExtNetwork::is_standard_network() const
+{
     return this->m_is_standard_network;
 }
 
-void ExtNetwork::set_standard_network(bool is_standard_network) {
+void ExtNetwork::set_standard_network(bool is_standard_network)
+{
     this->m_is_standard_network = is_standard_network;
 }
 
-bool ExtNetwork::operator==(const ExtNetwork& rhs) const {
+bool ExtNetwork::operator==(const ExtNetwork& rhs) const
+{
     return this->m_branches == rhs.m_branches
         && this->insert_indexed_node_names == rhs.insert_indexed_node_names
         && this->m_nodes == rhs.m_nodes;
 }
 
-
-bool ExtNetwork::has_node(const std::string& name) const {
+bool ExtNetwork::has_node(const std::string& name) const
+{
     return (this->m_nodes.count(name) > 0);
 }
 
-const Node& ExtNetwork::node(const std::string& name) const {
+const Node& ExtNetwork::node(const std::string& name) const
+{
     const auto node_iter = this->m_nodes.find( name );
     if (node_iter == this->m_nodes.end())
         throw std::out_of_range("No such node: " + name);
@@ -68,8 +82,8 @@ const Node& ExtNetwork::node(const std::string& name) const {
     return node_iter->second;
 }
 
-
-std::vector<std::reference_wrapper<const Node>> ExtNetwork::roots() const {
+std::vector<std::reference_wrapper<const Node>> ExtNetwork::roots() const
+{
     if (this->m_nodes.empty())
         throw std::invalid_argument("No root defined for empty network");
 
@@ -124,7 +138,8 @@ void ExtNetwork::add_or_replace_branch(Branch branch)
     this->m_branches.push_back( std::move(branch) );
 }
 
-void ExtNetwork::drop_branch(const std::string& uptree_node, const std::string& downtree_node) {
+void ExtNetwork::drop_branch(const std::string& uptree_node, const std::string& downtree_node)
+{
     auto branch_iter = std::find_if(this->m_branches.begin(),
                                     this->m_branches.end(),
                                     [&uptree_node, &downtree_node](const Branch& b) { return (b.uptree_node() == uptree_node && b.downtree_node() == downtree_node); });
@@ -133,8 +148,8 @@ void ExtNetwork::drop_branch(const std::string& uptree_node, const std::string& 
     }
 }
 
-
-std::optional<Branch> ExtNetwork::uptree_branch(const std::string& node) const {
+std::optional<Branch> ExtNetwork::uptree_branch(const std::string& node) const
+{
     if (!this->has_node(node)) {
         auto msg = fmt::format("Requesting uptree branch of undefined node: {}", node);
         throw std::out_of_range(msg);
@@ -156,8 +171,8 @@ std::optional<Branch> ExtNetwork::uptree_branch(const std::string& node) const {
     throw std::logic_error("Bug - more than one uptree branch for node: " + node);
 }
 
-
-std::vector<Branch> ExtNetwork::downtree_branches(const std::string& node) const {
+std::vector<Branch> ExtNetwork::downtree_branches(const std::string& node) const
+{
     if (!this->has_node(node)) {
         auto msg = fmt::format("Requesting downtree branches of undefined node: {}", node);
         throw std::out_of_range(msg);
@@ -170,7 +185,8 @@ std::vector<Branch> ExtNetwork::downtree_branches(const std::string& node) const
     return branch;
 }
 
-std::vector<const Branch*> ExtNetwork::branches() const {
+std::vector<const Branch*> ExtNetwork::branches() const
+{
     std::vector<const Branch*> branch_pointer;
     std::transform(this->m_branches.begin(), this->m_branches.end(),
                    std::back_inserter(branch_pointer),
@@ -178,11 +194,13 @@ std::vector<const Branch*> ExtNetwork::branches() const {
     return branch_pointer;
 }
 
-int ExtNetwork::NoOfBranches() const {
+int ExtNetwork::NoOfBranches() const
+{
     return this->m_branches.size();
 }
 
-int ExtNetwork::NoOfNodes() const {
+int ExtNetwork::NoOfNodes() const
+{
     return this->m_nodes.size();
 }
 
@@ -218,7 +236,7 @@ void ExtNetwork::update_node(Node node)
     this->m_nodes.insert_or_assign(name, std::move(node) );
 }
 
-void ExtNetwork::add_indexed_node_name(std::string name)
+void ExtNetwork::add_indexed_node_name(const std::string& name)
 {
     this->insert_indexed_node_names.emplace_back(name);
 }
@@ -231,9 +249,30 @@ bool ExtNetwork::has_indexed_node_name(const std::string& name) const
     return (it != this->insert_indexed_node_names.end());
 }
 
-std::vector<std::string> ExtNetwork::node_names() const
+const std::vector<std::string>& ExtNetwork::node_names() const
 {
     return this->insert_indexed_node_names;
 }
+
+std::set<std::string> ExtNetwork::leaf_nodes() const
+{
+    std::set<std::string> leaf_nodes;
+    for (const auto& root : this->roots()) {
+        std::stack<std::string> children;
+        children.push(root.get().name());
+        while (!children.empty()) {
+            const auto& top_node = children.top();
+            children.pop();
+            auto dbranches = this->downtree_branches(top_node);
+            if (dbranches.empty()) {
+                leaf_nodes.emplace(top_node);
+            }
+            for (const auto& branch : dbranches) {
+                children.push(branch.downtree_node());
+            }
+        }
+    }
+    return leaf_nodes;
 }
-}
+
+} // namespace Opm::Network

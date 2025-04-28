@@ -71,9 +71,11 @@ namespace Opm { namespace data {
                 brine            = (1 << 17),
                 alq              = (1 << 18),
                 tracer           = (1 << 19),
-                micp             = (1 << 20),
-                vaporized_water  = (1 << 21),
-                mass_gas         = (1 << 22)
+                microbial        = (1 << 20),
+                oxygen           = (1 << 21),
+                urea             = (1 << 22),
+                vaporized_water  = (1 << 23),
+                mass_gas         = (1 << 24)
             };
 
             using enum_size = std::underlying_type< opt >::type;
@@ -130,7 +132,9 @@ namespace Opm { namespace data {
                 serializer(brine);
                 serializer(alq);
                 serializer(tracer);
-                serializer(micp);
+                serializer(microbial);
+                serializer(oxygen);
+                serializer(urea);
                 serializer(vaporized_water);
                 serializer(mass_gas);
             }
@@ -157,9 +161,11 @@ namespace Opm { namespace data {
                 rat1.set(opt::well_potential_gas, 17.0);
                 rat1.set(opt::brine, 18.0);
                 rat1.set(opt::alq, 19.0);
-                rat1.set(opt::micp, 21.0);
-                rat1.set(opt::vaporized_water, 22.0);
-                rat1.set(opt::mass_gas, 23.0);
+                rat1.set(opt::microbial, 20.0);
+                rat1.set(opt::oxygen, 21.0);
+                rat1.set(opt::urea, 22.0);
+                rat1.set(opt::vaporized_water, 23.0);
+                rat1.set(opt::mass_gas, 24.0);
                 rat1.tracer.insert({"test_tracer", 1.0});
 
                 return rat1;
@@ -193,7 +199,9 @@ namespace Opm { namespace data {
             double brine = 0.0;
             double alq = 0.0;
             std::map<std::string, double> tracer{};
-            double micp = 0.0;
+            double microbial = 0.0;
+            double oxygen = 0.0;
+            double urea = 0.0;
             double vaporized_water = 0.0;
             double mass_gas = 0.0;
     };
@@ -246,6 +254,163 @@ namespace Opm { namespace data {
         void read(MessageBufferType& buffer);
     };
 
+    /// Connection Level Fracturing Statistics
+    struct ConnectionFracturing
+    {
+        /// Statistics collection for a single quantity
+        struct Statistics
+        {
+            /// Arithmetic average.
+            double avg{};
+
+            /// Maximum value.
+            double max{};
+
+            /// Minimum value.
+            double min{};
+
+            /// Unbiased sample standard deviation.
+            ///
+            /// Usable only if sample size is at least two.
+            double stdev{};
+
+            /// Create a serialization test object.
+            static Statistics serializationTestObject()
+            {
+                return {
+                    12.34, 56.78, 9.10, 11.12
+                };
+            }
+
+            /// Convert between byte array and object representation.
+            ///
+            /// \tparam Serializer Byte array conversion protocol.
+            ///
+            /// \param[in,out] serializer Byte array conversion object.
+            template <class Serializer>
+            void serializeOp(Serializer& serializer)
+            {
+                serializer(this->avg);
+                serializer(this->max);
+                serializer(this->min);
+                serializer(this->stdev);
+            }
+
+            /// Equality predicate.
+            ///
+            /// \param[in] that Object against which \code *this \endcode
+            /// will be tested for equality.
+            ///
+            /// \return Whether or not \code *this \endcode is the same as
+            /// \p that.
+            bool operator==(const Statistics& that) const
+            {
+                return (this->avg == that.avg)
+                    && (this->max == that.max)
+                    && (this->min == that.min)
+                    && (this->stdev == that.stdev)
+                    ;
+            }
+
+            /// MPI communication protocol--serialisation operation
+            template <class MessageBufferType>
+            void write(MessageBufferType& buffer) const
+            {
+                buffer.write(this->avg);
+                buffer.write(this->max);
+                buffer.write(this->min);
+                buffer.write(this->stdev);
+            }
+
+            /// MPI communication protocol--deserialisation operation
+            template <class MessageBufferType>
+            void read(MessageBufferType& buffer)
+            {
+                buffer.read(this->avg);
+                buffer.read(this->max);
+                buffer.read(this->min);
+                buffer.read(this->stdev);
+            }
+        };
+
+        /// Sample size.
+        ///
+        /// Expected to be the same for each quantiy.
+        std::size_t numCells{};
+
+        /// Statistical measures for connection's fracture pressures.
+        Statistics press{};
+
+        /// Statistical measures for connection's fracture fracture flow rate.
+        Statistics rate{};
+
+        /// Statistical measures for connection's fracture fracture width.
+        Statistics width{};
+
+        /// Create a serialisation test object.
+        static ConnectionFracturing serializationTestObject()
+        {
+            auto fract = ConnectionFracturing{};
+
+            fract.numCells = 123;
+            fract.press = Statistics::serializationTestObject();
+            fract.rate = Statistics::serializationTestObject();
+            fract.width = Statistics::serializationTestObject();
+
+            return fract;
+        }
+
+        /// Convert between byte array and object representation.
+        ///
+        /// \tparam Serializer Byte array conversion protocol.
+        ///
+        /// \param[in,out] serializer Byte array conversion object.
+        template <class Serializer>
+        void serializeOp(Serializer& serializer)
+        {
+            serializer(this->numCells);
+            serializer(this->press);
+            serializer(this->rate);
+            serializer(this->width);
+        }
+
+        /// Equality predicate.
+        ///
+        /// \param[in] that Object against which \code *this \endcode will
+        /// be tested for equality.
+        ///
+        /// \return Whether or not \code *this \endcode is the same as \p
+        /// that.
+        bool operator==(const ConnectionFracturing& that) const
+        {
+            return (this->numCells == that.numCells)
+                && (this->press == that.press)
+                && (this->rate == that.rate)
+                && (this->width == that.width)
+                ;
+        }
+
+        /// MPI communication protocol--serialisation operation
+        template <class MessageBufferType>
+        void write(MessageBufferType& buffer) const
+        {
+            buffer.write(this->numCells);
+            buffer.write(this->press);
+            buffer.write(this->rate);
+            buffer.write(this->width);
+        }
+
+        /// MPI communication protocol--deserialisation operation
+        template <class MessageBufferType>
+        void read(MessageBufferType& buffer)
+        {
+            buffer.read(this->numCells);
+            buffer.read(this->press);
+            buffer.read(this->rate);
+            buffer.read(this->width);
+        }
+    };
+
     struct Connection
     {
         using global_index = std::size_t;
@@ -263,7 +428,10 @@ namespace Opm { namespace data {
         double d_factor{};
         double compact_mult{1.0}; // Rock compaction transmissibility multiplier (ROCKTAB)
 
-        ConnectionFiltrate filtrate;
+        ConnectionFiltrate filtrate{};
+
+        /// Connection level fracturing statistics.
+        ConnectionFracturing fract{};
 
         bool operator==(const Connection& conn2) const
         {
@@ -279,6 +447,7 @@ namespace Opm { namespace data {
                 && (d_factor == conn2.d_factor)
                 && (compact_mult == conn2.compact_mult)
                 && (filtrate == conn2.filtrate)
+                && (this->fract == conn2.fract)
                 ;
         }
 
@@ -304,6 +473,7 @@ namespace Opm { namespace data {
             serializer(d_factor);
             serializer(compact_mult);
             serializer(filtrate);
+            serializer(this->fract);
         }
 
         static Connection serializationTestObject()
@@ -312,7 +482,8 @@ namespace Opm { namespace data {
                 1, Rates::serializationTestObject(),
                 2.0, 3.0, 4.0, 5.0,
                 6.0, 7.0, 8.0, 9.0, 0.987,
-                ConnectionFiltrate::serializationTestObject()
+                ConnectionFiltrate::serializationTestObject(),
+                ConnectionFracturing::serializationTestObject()
             };
         }
     };
@@ -1115,7 +1286,9 @@ namespace Opm { namespace data {
              brine == rate.brine &&
              alq == rate.alq &&
              tracer == rate.tracer &&
-             micp == rate.micp &&
+             microbial == rate.microbial &&
+             oxygen == rate.oxygen &&
+             urea == rate.urea &&
              vaporized_water == rate.vaporized_water &&
              mass_gas == rate.mass_gas;
     }
@@ -1153,7 +1326,9 @@ namespace Opm { namespace data {
             case opt::alq: return this->alq;
             case opt::tracer: /* Should _not_ be called with tracer argument */
                 break;
-            case opt::micp: return this->micp;
+            case opt::microbial: return this->microbial;
+            case opt::oxygen: return this->oxygen;
+            case opt::urea: return this->urea;
             case opt::vaporized_water: return this->vaporized_water;
             case opt::mass_gas: return this->mass_gas;
         }
@@ -1237,7 +1412,9 @@ namespace Opm { namespace data {
                 buffer.write(rate);
             }
 
-            buffer.write(this->micp);
+            buffer.write(this->microbial);
+            buffer.write(this->oxygen);
+            buffer.write(this->urea);
             buffer.write(this->vaporized_water);
             buffer.write(this->mass_gas);
     }
@@ -1268,6 +1445,7 @@ namespace Opm { namespace data {
             buffer.write(this->d_factor);
             buffer.write(this->compact_mult);
             this->filtrate.write(buffer);
+            this->fract.write(buffer);
     }
 
     void Connection::init_json(Json::JsonObject& json_data) const {
@@ -1413,7 +1591,9 @@ namespace Opm { namespace data {
                 this->tracer.emplace(tracer_name, tracer_rate);
             }
 
-            buffer.read(this->micp);
+            buffer.read(this->microbial);
+            buffer.read(this->oxygen);
+            buffer.read(this->urea);
             buffer.read(this->vaporized_water);
             buffer.read(this->mass_gas);
     }
@@ -1444,6 +1624,7 @@ namespace Opm { namespace data {
             buffer.read(this->d_factor);
             buffer.read(this->compact_mult);
             this->filtrate.read(buffer);
+            this->fract.read(buffer);
    }
 
     template <class MessageBufferType>

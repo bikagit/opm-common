@@ -15,21 +15,21 @@
 
   You should have received a copy of the GNU General Public License
   along with OPM.  If not, see <http://www.gnu.org/licenses/>.
- */
-
-#include <stdexcept>
+*/
 
 #define BOOST_TEST_MODULE GroupTests
 #include <boost/test/unit_test.hpp>
-#include <opm/input/eclipse/Python/Python.hpp>
 
-#include <opm/input/eclipse/Deck/Deck.hpp>
-#include <opm/input/eclipse/Parser/Parser.hpp>
 #include <opm/input/eclipse/Parser/ParseContext.hpp>
+
+#include <opm/input/eclipse/EclipseState/Aquifer/NumericalAquifer/NumericalAquifers.hpp>
 #include <opm/input/eclipse/EclipseState/Grid/EclipseGrid.hpp>
 #include <opm/input/eclipse/EclipseState/Grid/FieldPropsManager.hpp>
 #include <opm/input/eclipse/EclipseState/Runspec.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/TableManager.hpp>
+
+#include <opm/input/eclipse/Python/Python.hpp>
+
 #include <opm/input/eclipse/Schedule/Group/GConSump.hpp>
 #include <opm/input/eclipse/Schedule/Group/GSatProd.hpp>
 #include <opm/input/eclipse/Schedule/Group/GConSale.hpp>
@@ -42,6 +42,15 @@
 #include <opm/input/eclipse/Schedule/Well/Well.hpp>
 
 #include <opm/common/utility/TimeService.hpp>
+
+#include <opm/input/eclipse/Deck/Deck.hpp>
+
+#include <opm/input/eclipse/Parser/Parser.hpp>
+
+#include <memory>
+#include <optional>
+#include <string>
+#include <stdexcept>
 
 using namespace Opm;
 
@@ -56,7 +65,7 @@ Schedule create_schedule(const std::string& deck_string)
     const FieldPropsManager fp(deck, Phases{true, true, true}, grid, table);
     const Runspec runspec(deck);
 
-    return { deck, grid, fp, runspec, std::make_shared<Python>() };
+    return { deck, grid, fp, NumericalAquifers{}, runspec, std::make_shared<Python>() };
 }
 
 } // Anonymous namespace
@@ -132,7 +141,7 @@ GEFAC
 
     const auto& group1 = schedule.getGroup("PRODUC", 0);
     BOOST_CHECK_EQUAL(group1.getGroupEfficiencyFactor(), 0.85);
-    BOOST_CHECK(group1.getTransferGroupEfficiencyFactor());
+    BOOST_CHECK(group1.useEfficiencyInNetwork());
 }
 
 
@@ -820,13 +829,17 @@ GCONPROD
         BOOST_CHECK( !prod_group.has_control(Phase::GAS, Group::InjectionCMode::RESV) );
         BOOST_CHECK( f1_group.has_control(Group::ProductionCMode::RESV) );
 
+        {
         auto [name, number] = *gpm_prod->region();
         BOOST_CHECK_EQUAL(number, 2);
         BOOST_CHECK_EQUAL(name, "FIPNUM");
-
+        }
+        {
         const auto& gpm_c1 = c1_group.gpmaint();
-        BOOST_CHECK(!gpm_c1->region());
-
+        auto [name, number] = *gpm_c1->region();
+        BOOST_CHECK_EQUAL(number, 0);
+        BOOST_CHECK_EQUAL(name, "FIPNUM");
+        }
         const auto& plat_prod = plat_group.gpmaint();
         BOOST_CHECK( !plat_prod );
     }

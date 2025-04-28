@@ -33,6 +33,7 @@
 
 #include <opm/common/OpmLog/KeywordLocation.hpp>
 
+#include <opm/input/eclipse/EclipseState/Aquifer/NumericalAquifer/NumericalAquifers.hpp>
 #include <opm/input/eclipse/EclipseState/Grid/EclipseGrid.hpp>
 #include <opm/input/eclipse/EclipseState/Grid/FieldPropsManager.hpp>
 #include <opm/input/eclipse/EclipseState/Runspec.hpp>
@@ -43,6 +44,7 @@
 #include <opm/input/eclipse/Schedule/Action/Actdims.hpp>
 #include <opm/input/eclipse/Schedule/Action/ActionAST.hpp>
 #include <opm/input/eclipse/Schedule/Action/ActionContext.hpp>
+#include <opm/input/eclipse/Schedule/Action/ActionParser.hpp>
 #include <opm/input/eclipse/Schedule/Action/ActionResult.hpp>
 #include <opm/input/eclipse/Schedule/Action/ActionX.hpp>
 #include <opm/input/eclipse/Schedule/Action/Actions.hpp>
@@ -88,8 +90,11 @@ Schedule make_schedule(const std::string& deck_string,
     const FieldPropsManager fp(deck, Phases{true, true, true}, grid1, table);
     const Runspec runspec(deck);
 
-    ErrorGuard errors;
-    return { deck, grid1, fp, runspec, parseContext, errors, std::make_shared<Python>() };
+    ErrorGuard errors{};
+    return {
+        deck, grid1, fp, NumericalAquifers{}, runspec,
+        parseContext, errors, std::make_shared<Python>()
+    };
 }
 
 } // Anonymous namespace
@@ -936,7 +941,7 @@ TSTEP
     auto python = std::make_shared<Python>();
 
     Runspec runspec (deck);
-    Schedule sched(deck, grid1, fp, runspec, python);
+    Schedule sched(deck, grid1, fp, NumericalAquifers{}, runspec, python);
     const auto& actions0 = sched[0].actions.get();
     BOOST_CHECK_EQUAL(actions0.ecl_size(), 0U);
 
@@ -1098,7 +1103,10 @@ ENDACTIO
     const FieldPropsManager fp(deck, Phases{true, true, true}, grid1, table);
 
     const Runspec runspec(deck);
-    const Schedule sched(deck, grid1, fp, runspec, std::make_shared<Python>());
+    const Schedule sched {
+        deck, grid1, fp, NumericalAquifers{},
+        runspec, std::make_shared<Python>()
+    };
     const auto& action1 = sched[0].actions.get()["A"];
 
     SummaryState st(TimeService::now(), runspec.udqParams().undefinedValue());
@@ -1148,7 +1156,7 @@ WOPR 'OPX'  = 1000 /
 /
 
 ENDACTIO
-        )"};
+)"};
 
     const auto deck = Parser{}.parseString(deck_string);
     EclipseGrid grid1(10,10,10);
@@ -1156,7 +1164,10 @@ ENDACTIO
     const FieldPropsManager fp(deck, Phases{true, true, true}, grid1, table);
 
     const Runspec runspec (deck);
-    const Schedule sched(deck, grid1, fp, runspec, std::make_shared<Python>());
+    const Schedule sched {
+        deck, grid1, fp, NumericalAquifers{},
+        runspec, std::make_shared<Python>()
+    };
     const auto& action1 = sched[1].actions.get()["A"];
     const auto& action2 = sched[2].actions.get()["A"];
 
@@ -1896,4 +1907,220 @@ BOOST_AUTO_TEST_CASE(Multiple_AND_Clauses_Single_WellMatch)
     const auto w1V = w1.asVector();
     const auto expect = std::vector { "P-1"s };
     BOOST_CHECK_EQUAL_COLLECTIONS(w1V.begin(), w1V.end(), expect.begin(), expect.end());
+}
+
+BOOST_AUTO_TEST_CASE(ParseNestedExpression)
+{
+    using namespace std::string_literals;
+
+    /// FGOR > 432.1 AND /
+    /// (WMCTL 'PROD*' = 1 OR /
+    ///  GWIR < GUWIRMIN) /
+    const auto ast = Opm::Action::Parser::parseCondition(std::vector {
+        "FGOR"s, ">"s, "432.1"s, "AND"s,
+        "("s, "WMCTL"s, "PROD*"s, "="s, "1"s, "OR"s,
+        "GWIR"s, "<"s, "GUWIRMIN"s, ")"s,
+    });
+
+    auto requisiteVectors = std::unordered_set<std::string>{};
+    ast->required_summary(requisiteVectors);
+
+    auto sortedVectors = std::vector<std::string> {
+        requisiteVectors.begin(), requisiteVectors.end()
+    };
+    std::sort(sortedVectors.begin(), sortedVectors.end());
+
+    const auto expected = std::vector {
+        "FGOR"s, "GUWIRMIN"s, "GWIR"s, "WMCTL"s,
+    };
+
+    BOOST_CHECK_EQUAL_COLLECTIONS(sortedVectors.begin(), sortedVectors.end(),
+                                  expected     .begin(), expected     .end());
+}
+
+BOOST_AUTO_TEST_CASE(RegionVector_In_Condition)
+{
+    using namespace std::string_literals;
+
+    /// RPR 1 RE3 < 215.0 /
+    const auto ast = Opm::Action::Parser::parseCondition(std::vector {
+        "RPR"s, "1"s, "RE3"s, "<"s, "215.0"s,
+    });
+
+    auto requisiteVectors = std::unordered_set<std::string>{};
+    ast->required_summary(requisiteVectors);
+
+    auto sortedVectors = std::vector<std::string> {
+        requisiteVectors.begin(), requisiteVectors.end()
+    };
+    std::sort(sortedVectors.begin(), sortedVectors.end());
+
+    const auto expected = std::vector {
+        "RPR__RE3"s,
+    };
+
+    BOOST_CHECK_EQUAL_COLLECTIONS(sortedVectors.begin(), sortedVectors.end(),
+                                  expected     .begin(), expected     .end());
+}
+
+BOOST_AUTO_TEST_CASE(RegionVector_In_Condition_Default_RegSet)
+{
+    using namespace std::string_literals;
+
+    /// RPR 1 1* < 215.0 /
+    const auto ast = Opm::Action::Parser::parseCondition(std::vector {
+        "RPR"s, "1"s, "1*"s, "<"s, "215.0"s,
+    });
+
+    auto requisiteVectors = std::unordered_set<std::string>{};
+    ast->required_summary(requisiteVectors);
+
+    auto sortedVectors = std::vector<std::string> {
+        requisiteVectors.begin(), requisiteVectors.end()
+    };
+    std::sort(sortedVectors.begin(), sortedVectors.end());
+
+    const auto expected = std::vector {
+        "RPR"s,
+    };
+
+    BOOST_CHECK_EQUAL_COLLECTIONS(sortedVectors.begin(), sortedVectors.end(),
+                                  expected     .begin(), expected     .end());
+}
+
+BOOST_AUTO_TEST_CASE(RegionVector_In_Condition_Default_RegSet_2)
+{
+    using namespace std::string_literals;
+
+    /// RPR 1 ' ' < 215.0 /
+    const auto ast = Opm::Action::Parser::parseCondition(std::vector {
+        "RPR"s, "1"s, " "s, "<"s, "215.0"s,
+    });
+
+    auto requisiteVectors = std::unordered_set<std::string>{};
+    ast->required_summary(requisiteVectors);
+
+    auto sortedVectors = std::vector<std::string> {
+        requisiteVectors.begin(), requisiteVectors.end()
+    };
+    std::sort(sortedVectors.begin(), sortedVectors.end());
+
+    const auto expected = std::vector {
+        "RPR"s,
+    };
+
+    BOOST_CHECK_EQUAL_COLLECTIONS(sortedVectors.begin(), sortedVectors.end(),
+                                  expected     .begin(), expected     .end());
+}
+
+BOOST_AUTO_TEST_CASE(Eval_RegionVector_In_Condition)
+{
+    using namespace std::string_literals;
+
+    /// RPR 1 RE3 < 215.0 /
+    const auto actCond = Action::AST { std::vector {
+        "RPR"s, "1"s, "RE3"s, "<"s, "215.0"s,
+    }};
+
+    auto st = SummaryState { TimeService::now(), 0.0 };
+
+    st.update_region_var("RE3", "RPR", 1, 225.0); // > 215
+    st.update_region_var("RE3", "RPR", 2, 217.5); // > 215
+    st.update_region_var("RE3", "RPR", 3, 210.0); // < 215
+
+    auto wlm = WListManager{};
+
+    auto context = Action::Context {st, wlm};
+
+    {
+        const auto result = actCond.eval(context);
+        BOOST_CHECK_MESSAGE(! result.conditionSatisfied(),
+                            "Condition must NOT be satisfied");
+    }
+
+    st.update_region_var("RE3", "RPR", 1, 205.0); // < 215
+
+    {
+        const auto result = actCond.eval(context);
+        BOOST_CHECK_MESSAGE(result.conditionSatisfied(),
+                            "Condition must be satisfied");
+    }
+}
+
+BOOST_AUTO_TEST_CASE(Eval_RegionVector_In_Condition_Default_RegSet)
+{
+    using namespace std::string_literals;
+
+    /// RPR 1 1* < 215.0 / -- RegSet = 1* => FIPNUM
+    const auto actCond = Action::AST { std::vector {
+        "RPR"s, "1"s, "1*"s, "<"s, "215.0"s,
+    }};
+
+    auto st = SummaryState { TimeService::now(), 0.0 };
+
+    st.update_region_var("RE3", "RPR", 1, 225.0); // > 215
+    st.update_region_var("RE3", "RPR", 2, 217.5); // > 215
+    st.update_region_var("RE3", "RPR", 3, 210.0); // < 215
+
+    st.update_region_var("NUM", "RPR", 1, 225.0); // > 215
+    st.update_region_var("NUM", "RPR", 2, 217.5); // > 215
+    st.update_region_var("NUM", "RPR", 3, 210.0); // < 215
+
+    auto wlm = WListManager{};
+
+    auto context = Action::Context {st, wlm};
+
+    {
+        const auto result = actCond.eval(context);
+        BOOST_CHECK_MESSAGE(! result.conditionSatisfied(),
+                            "Condition must NOT be satisfied");
+    }
+
+    st.update_region_var("RE3", "RPR", 1, 205.0); // < 215
+    st.update_region_var("NUM", "RPR", 1, 205.0); // < 215
+
+    {
+        const auto result = actCond.eval(context);
+        BOOST_CHECK_MESSAGE(result.conditionSatisfied(),
+                            "Condition must be satisfied");
+    }
+}
+
+BOOST_AUTO_TEST_CASE(Eval_RegionVector_In_Condition_Default_RegSet_2)
+{
+    using namespace std::string_literals;
+
+    /// RPR 1 ' ' < 215.0 / -- RegSet = ' ' => FIPNUM
+    const auto actCond = Action::AST { std::vector {
+        "RPR"s, "1"s, " "s, "<"s, "215.0"s,
+    }};
+
+    auto st = SummaryState { TimeService::now(), 0.0 };
+
+    st.update_region_var("RE3", "RPR", 1, 225.0); // > 215
+    st.update_region_var("RE3", "RPR", 2, 217.5); // > 215
+    st.update_region_var("RE3", "RPR", 3, 210.0); // < 215
+
+    st.update_region_var("NUM", "RPR", 1, 225.0); // > 215
+    st.update_region_var("NUM", "RPR", 2, 217.5); // > 215
+    st.update_region_var("NUM", "RPR", 3, 210.0); // < 215
+
+    auto wlm = WListManager{};
+
+    auto context = Action::Context {st, wlm};
+
+    {
+        const auto result = actCond.eval(context);
+        BOOST_CHECK_MESSAGE(! result.conditionSatisfied(),
+                            "Condition must NOT be satisfied");
+    }
+
+    st.update_region_var("RE3", "RPR", 1, 205.0); // < 215
+    st.update_region_var("NUM", "RPR", 1, 205.0); // < 215
+
+    {
+        const auto result = actCond.eval(context);
+        BOOST_CHECK_MESSAGE(result.conditionSatisfied(),
+                            "Condition must be satisfied");
+    }
 }

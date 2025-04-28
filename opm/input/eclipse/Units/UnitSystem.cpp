@@ -57,7 +57,9 @@ namespace {
         0.0,
         0.0,
         0.0,
+        0.0,
         Metric::TemperatureOffset,
+        0.0,
         0.0,
         0.0,
         0.0,
@@ -105,6 +107,7 @@ namespace {
         1 / Metric::RunTime,
         1 / Metric::Density,
         1 / Metric::Pressure,
+        1 / Metric::PressureDrop,
         1 / Metric::AbsoluteTemperature,
         1 / Metric::Temperature,
         1 / Metric::Viscosity,
@@ -144,6 +147,7 @@ namespace {
         1 / Metric::Moles,
         1 / Metric::PPM,
         1 / Metric::Ymodule,
+        1 / Metric::ThermalConductivity,
         1 / (Metric::Time / Metric::GasSurfaceVolume),
     };
 
@@ -154,6 +158,7 @@ namespace {
         Metric::RunTime,
         Metric::Density,
         Metric::Pressure,
+        Metric::PressureDrop,
         Metric::AbsoluteTemperature,
         Metric::Temperature,
         Metric::Viscosity,
@@ -193,6 +198,7 @@ namespace {
         Metric::Moles,
         Metric::PPM,
         Metric::Ymodule,
+        Metric::ThermalConductivity,
         Metric::Time / Metric::GasSurfaceVolume,
     };
 
@@ -203,6 +209,7 @@ namespace {
         "SECONDS",
         "KG/M3",
         "BARSA",
+        "BARS",
         "K",
         "C",
         "CP",
@@ -242,6 +249,7 @@ namespace {
         "KG-M",
         "PPM", /*Parts per million */
         "GPa",
+        "KJ/M/DAY/K",
         "DAY/SM3",
     };
 
@@ -273,7 +281,9 @@ namespace {
         0.0,
         0.0,
         0.0,
+        0.0,
         Field::TemperatureOffset,
+        0.0,
         0.0,
         0.0,
         0.0,
@@ -321,6 +331,7 @@ namespace {
         1 / Field::RunTime,
         1 / Field::Density,
         1 / Field::Pressure,
+        1 / Field::PressureDrop,
         1 / Field::AbsoluteTemperature,
         1 / Field::Temperature,
         1 / Field::Viscosity,
@@ -360,6 +371,7 @@ namespace {
         1 / Field::Moles,
         1 / Field::PPM,
         1 / Field::Ymodule,
+        1 / Field::ThermalConductivity,
         1 / (Field::Time / Field::GasSurfaceVolume)
     };
 
@@ -370,6 +382,7 @@ namespace {
          Field::RunTime,
          Field::Density,
          Field::Pressure,
+         Field::PressureDrop,
          Field::AbsoluteTemperature,
          Field::Temperature,
          Field::Viscosity,
@@ -409,6 +422,7 @@ namespace {
          Field::Moles,
          Field::PPM,
          Field::Ymodule,
+         Field::ThermalConductivity,
          Field::Time / Field::GasSurfaceVolume,
     };
 
@@ -419,6 +433,7 @@ namespace {
         "SECONDS",
         "LB/FT3",
         "PSIA",
+        "PSI",
         "R",
         "F",
         "CP",
@@ -458,6 +473,7 @@ namespace {
         "LB-M",
         "PPM",
         "GPa",
+        "BTU/FT/DAY/R",
         "DAY/MSCF",
     };
 
@@ -489,7 +505,9 @@ namespace {
         0.0,
         0.0,
         0.0,
+        0.0,
         Lab::TemperatureOffset,
+        0.0,
         0.0,
         0.0,
         0.0,
@@ -537,6 +555,7 @@ namespace {
         1 / Lab::RunTime,
         1 / Lab::Density,
         1 / Lab::Pressure,
+        1 / Lab::PressureDrop,
         1 / Lab::AbsoluteTemperature,
         1 / Lab::Temperature,
         1 / Lab::Viscosity,
@@ -576,6 +595,7 @@ namespace {
         1 / Lab::Moles,
         1 / Lab::PPM,
         1 / Lab::Ymodule,
+        1 / Lab::ThermalConductivity,
         1 / (Lab::Time / Lab::GasSurfaceVolume)
     };
 
@@ -586,6 +606,7 @@ namespace {
         Lab::RunTime,
         Lab::Density,
         Lab::Pressure,
+        Lab::PressureDrop,
         Lab::AbsoluteTemperature,
         Lab::Temperature,
         Lab::Viscosity,
@@ -625,6 +646,7 @@ namespace {
         Lab::Moles,
         Lab::PPM,
         Lab::Ymodule,
+        Lab::ThermalConductivity,
         Lab::Time / Lab::GasSurfaceVolume
     };
 
@@ -634,6 +656,7 @@ namespace {
         "HOURS",
         "SECONDS",
         "G/CC",
+        "ATMA",
         "ATM",
         "K",
         "C",
@@ -674,6 +697,7 @@ namespace {
         "g-M",
         "PPM",
         "GPa",
+        "J/CM/HR/K",
         "HR/SCC",
     };
 
@@ -705,7 +729,9 @@ namespace {
         0.0,
         0.0,
         0.0,
+        0.0,
         PVT_M::TemperatureOffset,
+        0.0,
         0.0,
         0.0,
         0.0,
@@ -753,6 +779,7 @@ namespace {
         1 / PVT_M::RunTime,
         1 / PVT_M::Density,
         1 / PVT_M::Pressure,
+        1 / PVT_M::PressureDrop,
         1 / PVT_M::AbsoluteTemperature,
         1 / PVT_M::Temperature,
         1 / PVT_M::Viscosity,
@@ -792,6 +819,7 @@ namespace {
         1 / PVT_M::Moles,
         1 / PVT_M::PPM,
         1 / PVT_M::Ymodule,
+        1 / PVT_M::ThermalConductivity,
         1 / (PVT_M::Time / PVT_M::GasSurfaceVolume),
     };
 
@@ -802,6 +830,7 @@ namespace {
         PVT_M::RunTime,
         PVT_M::Density,
         PVT_M::Pressure,
+        PVT_M::PressureDrop,
         PVT_M::AbsoluteTemperature,
         PVT_M::Temperature,
         PVT_M::Viscosity,
@@ -841,6 +870,7 @@ namespace {
         PVT_M::Moles,
         PVT_M::PPM,
         PVT_M::Ymodule,
+        PVT_M::ThermalConductivity,
         PVT_M::Time / PVT_M::GasSurfaceVolume,
     };
 
@@ -850,6 +880,7 @@ namespace {
         "DAYS",
         "SECONDS",
         "KG/M3",
+        "ATMA",
         "ATM",
         "K",
         "C",
@@ -890,6 +921,7 @@ namespace {
         "KG-M",
         "PPM",
         "GPa",
+        "KJ/M/SEC/K",
         "DAY/SM3",
     };
 
@@ -914,6 +946,8 @@ namespace {
     // INPUT Unit Conventions
 
     static const double from_input_offset[] = {
+        0.0,
+        0.0,
         0.0,
         0.0,
         0.0,
@@ -1009,9 +1043,13 @@ namespace {
         1,
         1,
         1,
+        1,
+        1,
     };
 
     static const double from_input[] = {
+        1,
+        1,
         1,
         1,
         1,
@@ -1067,6 +1105,7 @@ namespace {
         "SECONDS",
         "KG/M3",
         "BARSA",
+        "BARS",
         "K",
         "C",
         "CP",
@@ -1106,6 +1145,7 @@ namespace {
         "g-M",
         "PPM",
         "GPa",
+        "KJ/M/DAY/K",
         "DAY/SM3",
     };
 
@@ -1149,6 +1189,7 @@ namespace {
         this->addDimension("1"         , 1.0);
         this->addDimension("Unit"         , 1.0);
         this->addDimension("Pressure"  , 1.0);
+        this->addDimension("PressureDrop", 1.0);
         this->addDimension("Temperature", 1.0);
         this->addDimension("AbsoluteTemperature", 1.0, 0.0);
         this->addDimension("Length"    , 1.0);
@@ -1189,6 +1230,7 @@ namespace {
         this->addDimension("1"         , 1.0);
         this->addDimension("Unit"         , 1.0);
         this->addDimension("Pressure"  , PVT_M::Pressure );
+        this->addDimension("PressureDrop", PVT_M::PressureDrop );
         this->addDimension("Temperature", PVT_M::Temperature, PVT_M::TemperatureOffset);
         this->addDimension("AbsoluteTemperature", PVT_M::AbsoluteTemperature);
         this->addDimension("Length"    , PVT_M::Length);
@@ -1217,6 +1259,7 @@ namespace {
         this->addDimension("Moles", PVT_M::Moles);
         this->addDimension("ContextDependent", std::numeric_limits<double>::quiet_NaN());
         this->addDimension("Ymodule", PVT_M::Ymodule);
+        this->addDimension("ThermalConductivity", PVT_M::ThermalConductivity);
     }
 
 
@@ -1230,6 +1273,7 @@ namespace {
         this->addDimension("1"    , 1.0);
         this->addDimension("Unit"         , 1.0);
         this->addDimension("Pressure", Lab::Pressure );
+        this->addDimension("PressureDrop", Lab::PressureDrop );
         this->addDimension("Temperature", Lab::Temperature, Lab::TemperatureOffset);
         this->addDimension("AbsoluteTemperature", Lab::AbsoluteTemperature);
         this->addDimension("Length", Lab::Length);
@@ -1258,6 +1302,7 @@ namespace {
         this->addDimension("Moles", Lab::Moles);
         this->addDimension("ContextDependent", std::numeric_limits<double>::quiet_NaN());
         this->addDimension("Ymodule", Lab::Ymodule);
+        this->addDimension("ThermalConductivity", Lab::ThermalConductivity);
     }
 
 
@@ -1272,6 +1317,7 @@ namespace {
         this->addDimension("1"         , 1.0);
         this->addDimension("Unit"         , 1.0);
         this->addDimension("Pressure"  , Metric::Pressure );
+        this->addDimension("PressureDrop", Metric::PressureDrop );
         this->addDimension("Temperature", Metric::Temperature, Metric::TemperatureOffset);
         this->addDimension("AbsoluteTemperature", Metric::AbsoluteTemperature);
         this->addDimension("Length"    , Metric::Length);
@@ -1300,6 +1346,7 @@ namespace {
         this->addDimension("Moles", Metric::Moles);
         this->addDimension("ContextDependent", std::numeric_limits<double>::quiet_NaN());
         this->addDimension("Ymodule", Metric::Ymodule);
+        this->addDimension("ThermalConductivity", Metric::ThermalConductivity);
     }
 
     void UnitSystem::initFIELD() {
@@ -1312,6 +1359,7 @@ namespace {
         this->addDimension("1"    , 1.0);
         this->addDimension("Unit"         , 1.0);
         this->addDimension("Pressure", Field::Pressure );
+        this->addDimension("PressureDrop", Field::PressureDrop );
         this->addDimension("Temperature", Field::Temperature, Field::TemperatureOffset);
         this->addDimension("AbsoluteTemperature", Field::AbsoluteTemperature);
         this->addDimension("Length", Field::Length);
@@ -1340,6 +1388,7 @@ namespace {
         this->addDimension("Moles", Field::Moles);
         this->addDimension("ContextDependent", std::numeric_limits<double>::quiet_NaN());
         this->addDimension("Ymodule", Field::Ymodule);
+        this->addDimension("ThermalConductivity", Field::ThermalConductivity);
     }
 
 

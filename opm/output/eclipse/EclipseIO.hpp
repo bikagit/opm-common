@@ -148,7 +148,7 @@ public:
                        bool                 isSubstep,
                        double               seconds_elapsed,
                        RestartValue         value,
-                       const bool write_double = false,
+                       const bool           write_double = false,
                        std::optional<int>   time_step = std::nullopt);
 
     /// Will load solution data and wellstate from the restart file.  This
@@ -185,6 +185,29 @@ public:
                              SummaryState&                  summary_state,
                              const std::vector<RestartKey>& solution_keys,
                              const std::vector<RestartKey>& extra_keys = {}) const;
+
+    /// Will load solution data from the restart file.  This
+    /// method will consult the IOConfig object to get filename.
+    ///
+    /// The map keys should be a map of keyword names and their
+    /// corresponding dimension object.  In other words, loading the state
+    /// from a simple two phase simulation you would pass:
+    ///
+    ///    keys = {
+    ///        {"PRESSURE" , UnitSystem::measure::pressure },
+    ///        {"SWAT"     , UnitSystem::measure::identity },
+    ///    }
+    ///
+    /// For a three phase black oil simulation you would add pairs for SGAS,
+    /// RS and RV.  If you request keys which are not found in the restart
+    /// file an exception will be raised.  This also happens if the size of
+    /// a vector does not match the expected size.
+    ///
+    /// The function will consult the InitConfig object in the EclipseState
+    /// object to determine which file and report step to load.
+    ///
+    data::Solution loadRestartSolution(const std::vector<RestartKey>& solution_keys,
+                                       const int                      report_step) const;
 
     const out::Summary& summary() const;
     const SummaryConfig& finalSummaryConfig() const;

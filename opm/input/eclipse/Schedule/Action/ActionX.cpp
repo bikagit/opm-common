@@ -23,8 +23,9 @@
 
 #include <opm/io/eclipse/rst/action.hpp>
 
-#include <opm/input/eclipse/Schedule/Action/ActionValue.hpp>
 #include <opm/input/eclipse/Schedule/Action/Actdims.hpp>
+#include <opm/input/eclipse/Schedule/Action/ActionParser.hpp>
+#include <opm/input/eclipse/Schedule/Action/ActionValue.hpp>
 #include <opm/input/eclipse/Schedule/Action/State.hpp>
 #include <opm/input/eclipse/Schedule/Well/WellMatcher.hpp>
 
@@ -114,6 +115,7 @@ bool ActionX::valid_keyword(const std::string& keyword)
 
         "UDQ",
 
+        "WCONHIST", "WCONINJH",
         "WCONINJE", "WCONPROD",
         "WECON", "WEFAC",
         "WELOPEN", "WELPI", "WELSEGS", "WELSPECS", "WELTARG",

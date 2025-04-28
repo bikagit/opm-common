@@ -104,6 +104,10 @@ public:
 
     using GasInflowEquation = WellGasInflowEquation;
 
+    void flag_lgr_well();
+    void set_lgr_well_tag(const std::string& lgr_tag_name);
+    bool is_lgr_well() const;
+    std::optional<std::string> get_lgr_well_tag() const;
     struct WellGuideRate {
         bool available;
         double guide_rate;
@@ -159,6 +163,9 @@ public:
         InjectorCMode controlMode;
 
         double rsRvInj;
+
+        // injection stream compostion for compositional simulation
+        std::optional<std::vector<double>> gas_inj_composition{};
 
         bool operator==(const WellInjectionProperties& other) const;
         bool operator!=(const WellInjectionProperties& other) const;
@@ -226,6 +233,9 @@ public:
         void update_uda(const UDQConfig& udq_config, UDQActive& udq_active, UDAControl control, const UDAValue& value);
         void handleWTMULT(Well::WELTARGCMode cmode, double factor);
 
+        void setGasInjComposition(const std::vector<double>& composition);
+        const std::vector<double>& gasInjComposition() const;
+
         template<class Serializer>
         void serializeOp(Serializer& serializer)
         {
@@ -244,6 +254,7 @@ public:
             serializer(injectorType);
             serializer(controlMode);
             serializer(rsRvInj);
+            serializer(gas_inj_composition);
         }
     };
 
@@ -370,7 +381,7 @@ public:
         void init_history(const DeckRecord& record);
         void init_vfp(const std::optional<VFPProdTable::ALQ_TYPE>& alq_type, const int vfp_table_nr, const UnitSystem& unit_system, const DeckRecord& record);
 
-        WellProductionProperties(const DeckRecord& record);
+        explicit WellProductionProperties(const DeckRecord& record);
 
         double getBHPLimit() const;
     };
@@ -440,7 +451,7 @@ public:
     bool hasRefDepth() const;
     double getRefDepth() const;
     double getDrainageRadius() const;
-    double getEfficiencyFactor() const;
+    double getEfficiencyFactor(bool network = false) const;
     double getSolventFraction() const;
     Status getStatus() const;
     const std::string& groupName() const;
@@ -517,7 +528,7 @@ public:
     bool updateWellGuideRate(bool available, double guide_rate, GuideRateTarget guide_phase, double scale_factor);
     bool updateWellGuideRate(double guide_rate);
     bool updateAvailableForGroupControl(bool available);
-    bool updateEfficiencyFactor(double efficiency_factor);
+    bool updateEfficiencyFactor(double efficiency_factor, bool use_efficiency_in_network);
 
     bool updateSolventFraction(double solvent_fraction);
     bool updateTracer(std::shared_ptr<WellTracerProperties> tracer_properties);
@@ -533,11 +544,12 @@ public:
     bool updateWSEGVALV(const std::vector<std::pair<int, Valve> >& valve_pairs);
     bool updateWSEGAICD(const std::vector<std::pair<int, AutoICD> >& aicd_pairs, const KeywordLocation& location);
     bool updateWPAVE(const PAvg& pavg);
+  
+
     void updateWPaveRefDepth(double ref_depth);
     bool updateWVFPDP(std::shared_ptr<WVFPDP> wvfpdp);
     bool updateWVFPEXP(std::shared_ptr<WVFPEXP> wvfpexp);
     bool updateWDFAC(std::shared_ptr<WDFAC> wdfac);
-
 
     bool handleWELSEGS(const DeckKeyword& keyword);
     bool handleCOMPSEGS(const DeckKeyword& keyword, const ScheduleGrid& grid, const ParseContext& parseContext, ErrorGuard& errors);
@@ -599,8 +611,11 @@ public:
         serializer(pvt_table);
         serializer(gas_inflow);
         serializer(wtype);
+        serializer(ref_type);
+        serializer(lgr_tag);
         serializer(guide_rate);
         serializer(efficiency_factor);
+        serializer(use_efficiency_in_network);
         serializer(solvent_fraction);
         serializer(has_produced);
         serializer(has_injected);
@@ -628,6 +643,11 @@ public:
     }
 
 private:
+    enum class WellRefinementType {
+        STANDARD,
+        LGR,
+        MIXED,
+    };
     void switchToInjector();
     void switchToProducer();
 
@@ -635,6 +655,7 @@ private:
 
     std::string wname{};
     std::string group_name{};
+
     std::size_t init_step{};
     std::size_t insert_index{};
     int headI{};
@@ -646,14 +667,18 @@ private:
     bool automatic_shutin{false};
     int pvt_table{};
 
+
     // Will NOT be loaded/assigned from restart file
     GasInflowEquation gas_inflow = GasInflowEquation::STD;
 
     const UnitSystem* unit_system{nullptr};
     double udq_undefined{};
     WellType wtype{};
+    WellRefinementType ref_type{WellRefinementType::STANDARD};
+    std::string lgr_tag{};
     WellGuideRate guide_rate{};
     double efficiency_factor{};
+    bool use_efficiency_in_network{};
     double solvent_fraction{};
     bool has_produced = false;
     bool has_injected = false;

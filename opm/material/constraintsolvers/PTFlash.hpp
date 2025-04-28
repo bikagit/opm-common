@@ -67,6 +67,7 @@ class PTFlash
     static constexpr int numComponents = FluidSystem::numComponents;
     enum { oilPhaseIdx = FluidSystem::oilPhaseIdx};
     enum { gasPhaseIdx = FluidSystem::gasPhaseIdx};
+    enum { waterPhaseIdx = FluidSystem::waterPhaseIdx};
     static constexpr int numMiscibleComponents = FluidSystem::numMiscibleComponents;
     static constexpr int numMisciblePhases = FluidSystem::numMisciblePhases; //oil, gas
     static constexpr int numEq = numMisciblePhases + numMisciblePhases * numMiscibleComponents;
@@ -79,7 +80,7 @@ public:
      *
      */
     template <class FluidState>
-    static void solve(FluidState& fluid_state,
+    static bool solve(FluidState& fluid_state,
                       const std::string& twoPhaseMethod,
                       Scalar flash_tolerance,
                       const EOSType& eos_type,
@@ -115,6 +116,8 @@ public:
 
         // we update the derivatives in fluid_state
         updateDerivatives_(fluid_state_scalar, fluid_state, eos_type, is_single_phase);
+
+        return is_single_phase;
     } //end solve
 
     /*!
@@ -706,7 +709,7 @@ protected:
         using ParamCache = typename FluidSystem::template ParameterCache<typename CompositionalFluidState<Eval, FluidSystem>::Scalar>;
         ParamCache paramCache(eos_type);
 
-        for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx) {
+        for (unsigned phaseIdx = 0; phaseIdx < numMisciblePhases; ++phaseIdx) {
             paramCache.updatePhase(flash_fluid_state, phaseIdx);
             for (unsigned compIdx = 0; compIdx < numComponents; ++compIdx) {
                 // TODO: will phi here carry the correct derivatives?
@@ -745,7 +748,7 @@ protected:
             }
             flash_fluid_state.setLvalue(l);
 
-            for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx) {
+            for (unsigned phaseIdx = 0; phaseIdx < numMisciblePhases; ++phaseIdx) {
                 paramCache.updatePhase(flash_fluid_state, phaseIdx);
                 for (unsigned compIdx = 0; compIdx < numComponents; ++compIdx) {
                     Eval phi = FluidSystem::fugacityCoefficient(flash_fluid_state, paramCache, phaseIdx, compIdx);
@@ -898,7 +901,7 @@ protected:
         // TODO: we probably can simplify SecondaryFlashFluidState::Scalar
         using SecondaryParamCache = typename FluidSystem::template ParameterCache<typename SecondaryFlashFluidState::Scalar>;
         SecondaryParamCache secondary_param_cache(eos_type);
-        for (unsigned phase_idx = 0; phase_idx < numPhases; ++phase_idx) {
+        for (unsigned phase_idx = 0; phase_idx < numMisciblePhases; ++phase_idx) {
             secondary_param_cache.updatePhase(secondary_fluid_state, phase_idx);
             for (unsigned comp_idx = 0; comp_idx < numComponents; ++comp_idx) {
                 SecondaryEval phi = FluidSystem::fugacityCoefficient(secondary_fluid_state, secondary_param_cache, phase_idx, comp_idx);
@@ -948,7 +951,7 @@ protected:
         // TODO: is PrimaryFlashFluidState::Scalar> PrimaryEval here?
         using PrimaryParamCache = typename FluidSystem::template ParameterCache<typename PrimaryFlashFluidState::Scalar>;
         PrimaryParamCache primary_param_cache(eos_type);
-        for (unsigned phase_idx = 0; phase_idx < numPhases; ++phase_idx) {
+        for (unsigned phase_idx = 0; phase_idx < numMisciblePhases; ++phase_idx) {
             primary_param_cache.updatePhase(primary_fluid_state, phase_idx);
             for (unsigned comp_idx = 0; comp_idx < numComponents; ++comp_idx) {
                 PrimaryEval phi = FluidSystem::fugacityCoefficient(primary_fluid_state, primary_param_cache, phase_idx, comp_idx);
@@ -969,7 +972,7 @@ protected:
         // SecondaryNewtonMatrix xx;
         // pri_jac.solve(xx, sec_jac);
         pri_jac.invert();
-        sec_jac.template leftmultiply(pri_jac);
+        sec_jac.template leftmultiply<PrimaryNewtonMatrix>(pri_jac);
 
         ComponentVector x(numComponents), y(numComponents);
         InputEval L_eval = L;
@@ -991,7 +994,7 @@ protected:
         // p_l and p_v are the same here, in the future, there might be slightly more complicated scenarios when capillary
         // pressure joins
 
-        constexpr size_t num_deri = numComponents;
+        constexpr size_t num_deri = InputEval::numVars;
         for (unsigned compIdx = 0; compIdx < numComponents; ++compIdx) {
             std::vector<double> deri(num_deri, 0.);
             // derivatives from P
@@ -1105,7 +1108,7 @@ protected:
             // Calculate fugacity coefficient
             using ParamCache = typename FluidSystem::template ParameterCache<typename FlashFluidState::Scalar>;
             ParamCache paramCache(eos_type);
-            for (int phaseIdx=0; phaseIdx<numPhases; ++phaseIdx){
+            for (int phaseIdx=0; phaseIdx<numMisciblePhases; ++phaseIdx){
                 paramCache.updatePhase(fluid_state, phaseIdx);
                 for (int compIdx=0; compIdx<numComponents; ++compIdx){
                     auto phi = FluidSystem::fugacityCoefficient(fluid_state, paramCache, phaseIdx, compIdx);

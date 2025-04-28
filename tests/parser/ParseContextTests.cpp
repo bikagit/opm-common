@@ -20,9 +20,27 @@
 #define BOOST_TEST_MODULE ParseContextTests
 #include <boost/test/unit_test.hpp>
 
+#include <opm/input/eclipse/Parser/InputErrorAction.hpp>
+#include <opm/input/eclipse/Parser/ParseContext.hpp>
+
+#include <opm/common/utility/OpmInputError.hpp>
+
+#include <opm/input/eclipse/EclipseState/Aquifer/NumericalAquifer/NumericalAquifers.hpp>
+#include <opm/input/eclipse/EclipseState/Grid/FieldPropsManager.hpp>
+#include <opm/input/eclipse/EclipseState/Grid/EclipseGrid.hpp>
+#include <opm/input/eclipse/EclipseState/Tables/TableManager.hpp>
+#include <opm/input/eclipse/EclipseState/Runspec.hpp>
+
 #include <opm/input/eclipse/Python/Python.hpp>
+
+#include <opm/input/eclipse/Schedule/Schedule.hpp>
+
 #include <opm/input/eclipse/Parser/ErrorGuard.hpp>
+
+#include <opm/input/eclipse/Deck/Deck.hpp>
+
 #include <opm/input/eclipse/Parser/Parser.hpp>
+
 #include <opm/input/eclipse/Parser/ParserKeywords/D.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/E.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/G.hpp>
@@ -30,17 +48,6 @@
 #include <opm/input/eclipse/Parser/ParserKeywords/R.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/S.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/T.hpp>
-#include <opm/input/eclipse/Parser/InputErrorAction.hpp>
-#include <opm/input/eclipse/Parser/ParseContext.hpp>
-#include <opm/common/utility/OpmInputError.hpp>
-
-
-#include <opm/input/eclipse/Deck/Deck.hpp>
-#include <opm/input/eclipse/EclipseState/Grid/FieldPropsManager.hpp>
-#include <opm/input/eclipse/EclipseState/Grid/EclipseGrid.hpp>
-#include <opm/input/eclipse/EclipseState/Tables/TableManager.hpp>
-#include <opm/input/eclipse/EclipseState/Runspec.hpp>
-#include <opm/input/eclipse/Schedule/Schedule.hpp>
 
 #include <cstdlib>
 #include <memory>
@@ -297,6 +304,12 @@ BOOST_AUTO_TEST_CASE(TestRandomSlash) {
         "  10 10 10 /\n"
         "   /\n";
 
+    const char * deck3 =
+        "SCHEDULE\n"
+        "TSTEP\n"
+        "  10 10 10 /\n"
+        "   //\n"
+        "/ any comment\n";
 
     ErrorGuard errors;
     ParseContext parseContext;
@@ -310,12 +323,14 @@ BOOST_AUTO_TEST_CASE(TestRandomSlash) {
     parseContext.update(ParseContext::PARSE_RANDOM_TEXT , InputErrorAction::IGNORE);
     BOOST_CHECK_THROW( parser.parseString( deck1 , parseContext, errors ) , OpmInputError);
     BOOST_CHECK_THROW( parser.parseString( deck2 , parseContext, errors ) , OpmInputError);
+    BOOST_CHECK_THROW( parser.parseString( deck3 , parseContext, errors ) , OpmInputError);
 
 
     parseContext.update(ParseContext::PARSE_RANDOM_SLASH , InputErrorAction::IGNORE);
     parseContext.update(ParseContext::PARSE_RANDOM_TEXT , InputErrorAction::THROW_EXCEPTION);
     BOOST_CHECK_NO_THROW( parser.parseString( deck1 , parseContext, errors ) );
     BOOST_CHECK_NO_THROW( parser.parseString( deck2 , parseContext, errors ) );
+    BOOST_CHECK_NO_THROW( parser.parseString( deck3 , parseContext, errors ) );
 }
 
 
@@ -712,7 +727,7 @@ BOOST_AUTO_TEST_CASE( test_invalid_wtemplate_config ) {
         FieldPropsManager fp( deckUnSupported, Phases{true, true, true}, grid, table);
         Runspec runspec( deckUnSupported);
 
-        BOOST_CHECK_THROW( Schedule( deckUnSupported , grid , fp, runspec , parseContext, errors, python), OpmInputError);
+        BOOST_CHECK_THROW( Schedule( deckUnSupported, grid, fp, NumericalAquifers{}, runspec, parseContext, errors, python), OpmInputError);
     }
 }
 
@@ -759,6 +774,8 @@ RPTRUNSPEC
 }
 
 
+namespace {
+
 Deck parse(bool throw_opm, bool& opm_caught, bool& std_caught) {
     KeywordLocation location("kw", "file", 100);
     try {
@@ -777,7 +794,7 @@ Deck parse(bool throw_opm, bool& opm_caught, bool& std_caught) {
     }
 }
 
-
+} // Anonymous namespace
 
 BOOST_AUTO_TEST_CASE(OPM_ERROR) {
     KeywordLocation location("kw", "file", 100);

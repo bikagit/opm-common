@@ -2,27 +2,31 @@
   Copyright (c) 2016 Robert W. Rose
   Copyright (c) 2018 Paul Maevskikh
   Copyright (c) 2024 NORCE
-  This file is part of the Open Porous Media project (OPM).
 
-  OPM is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
 
-  OPM is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
 
-  You should have received a copy of the GNU General Public License
-  along with OPM.  If not, see <http://www.gnu.org/licenses/>.
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+  Note: This file is based on kerasify/keras_model_test.cc
 */
 
-#include <fmt/format.h>
 #include <opm/common/ErrorMacros.hpp>
 #include <opm/ml/ml_model.hpp>
 
-#include <cstdio>
 #include <tests/ml/ml_tools/include/test_dense_10x1.hpp>
 #include <tests/ml/ml_tools/include/test_dense_10x10.hpp>
 #include <tests/ml/ml_tools/include/test_dense_10x10x10.hpp>
@@ -33,17 +37,16 @@
 #include <tests/ml/ml_tools/include/test_relu_10.hpp>
 #include <tests/ml/ml_tools/include/test_scalingdense_10x1.hpp>
 
+#include <cstdio>
 
-namespace Opm
-{
+#include <fmt/format.h>
+
+namespace Opm {
 
 using namespace ML;
 
-
 template <class Evaluation>
-bool
-
-tensor_test()
+bool tensor_test()
 {
     std::printf("TEST tensor_test\n");
 
@@ -176,55 +179,28 @@ tensor_test()
     return true;
 }
 
-
 } // namespace Opm
 
-
-int
-main()
+int main()
 {
-    typedef Opm::DenseAd::Evaluation<double, 1> Evaluation;
+    using Evaluation = Opm::DenseAd::Evaluation<double, 1>;
 
     Evaluation load_time = 0.0;
     Evaluation apply_time = 0.0;
 
-    if (!tensor_test<Evaluation>()) {
-        return 1;
+    try {
+        tensor_test<Evaluation>();
+        test_dense_1x1<Evaluation>(&load_time, &apply_time);
+        test_dense_10x1<Evaluation>(&load_time, &apply_time);
+        test_dense_2x2<Evaluation>(&load_time, &apply_time);
+        test_dense_10x10<Evaluation>(&load_time, &apply_time);
+        test_dense_10x10x10<Evaluation>(&load_time, &apply_time);
+        test_relu_10<Evaluation>(&load_time, &apply_time);
+        test_dense_relu_10<Evaluation>(&load_time, &apply_time);
+        test_dense_tanh_10<Evaluation>(&load_time, &apply_time);
+        test_scalingdense_10x1<Evaluation>(&load_time, &apply_time);
     }
-
-    if (!test_dense_1x1<Evaluation>(&load_time, &apply_time)) {
-        return 1;
-    }
-
-    if (!test_dense_10x1<Evaluation>(&load_time, &apply_time)) {
-        return 1;
-    }
-
-    if (!test_dense_2x2<Evaluation>(&load_time, &apply_time)) {
-        return 1;
-    }
-
-    if (!test_dense_10x10<Evaluation>(&load_time, &apply_time)) {
-        return 1;
-    }
-
-    if (!test_dense_10x10x10<Evaluation>(&load_time, &apply_time)) {
-        return 1;
-    }
-
-    if (!test_relu_10<Evaluation>(&load_time, &apply_time)) {
-        return 1;
-    }
-
-    if (!test_dense_relu_10<Evaluation>(&load_time, &apply_time)) {
-        return 1;
-    }
-
-    if (!test_dense_tanh_10<Evaluation>(&load_time, &apply_time)) {
-        return 1;
-    }
-
-    if (!test_scalingdense_10x1<Evaluation>(&load_time, &apply_time)) {
+    catch(...) {
         return 1;
     }
 

@@ -155,8 +155,11 @@ namespace Opm {
         /// @{
         constexpr const double Pascal = Newton / square(meter); // == 1
         constexpr const double barsa  = 100000 * Pascal;
+        constexpr const double bars   = 100000 * Pascal;
+        constexpr const double atma   = 101325 * Pascal;
         constexpr const double atm    = 101325 * Pascal;
         constexpr const double psia   = lbf / square(inch);
+        constexpr const double psi    = lbf / square(inch);
         /// @}
 
         /// \name Temperature. This one is more complicated
@@ -258,6 +261,7 @@ namespace Opm {
         using namespace prefix;
         using namespace unit;
         constexpr const double Pressure             = barsa;
+        constexpr const double PressureDrop         = bars;
         constexpr const double Temperature          = degCelsius;
         constexpr const double TemperatureOffset    = degCelsiusOffset;
         constexpr const double AbsoluteTemperature  = degCelsius; // actually [K], but the these two are identical
@@ -286,6 +290,7 @@ namespace Opm {
         constexpr const double Moles                = kilo*mol;
         constexpr const double PPM                  = ppm;
         constexpr const double Ymodule              = giga*Pascal;
+        constexpr const double ThermalConductivity  = kilo*joule/(meter*day*degCelsius);
     }
 
 
@@ -293,6 +298,7 @@ namespace Opm {
         using namespace prefix;
         using namespace unit;
         constexpr const double Pressure             = psia;
+        constexpr const double PressureDrop         = psi;
         constexpr const double Temperature          = degFahrenheit;
         constexpr const double TemperatureOffset    = degFahrenheitOffset;
         constexpr const double AbsoluteTemperature  = degFahrenheit; // actually [°R], but the these two are identical
@@ -300,8 +306,8 @@ namespace Opm {
         constexpr const double Time                 = day;
         constexpr const double RunTime              = second;
         constexpr const double Mass                 = pound;
-        constexpr const double Permeability = milli*darcy;
-        constexpr const double Transmissibility = centi*Poise*stb/(day*psia);
+        constexpr const double Permeability         = milli*darcy;
+        constexpr const double Transmissibility     = centi*Poise*stb/(day*psia);
         constexpr const double LiquidSurfaceVolume  = stb;
         constexpr const double GasSurfaceVolume     = 1000*cubic(feet);
         constexpr const double ReservoirVolume      = stb;
@@ -321,13 +327,15 @@ namespace Opm {
         constexpr const double Moles                = kilo*pound*mol;
         constexpr const double PPM                  = ppm;
         constexpr const double Ymodule              = giga*Pascal;
+        constexpr const double ThermalConductivity  = btu/(feet*day*degFahrenheit);
     }
 
 
     namespace Lab {
         using namespace prefix;
         using namespace unit;
-        constexpr const double Pressure             = atm;
+        constexpr const double Pressure             = atma;
+        constexpr const double PressureDrop         = atm;
         constexpr const double Temperature          = degCelsius;
         constexpr const double TemperatureOffset    = degCelsiusOffset;
         constexpr const double AbsoluteTemperature  = degCelsius; // actually [K], but the these two are identical
@@ -356,13 +364,15 @@ namespace Opm {
         constexpr const double Moles                = mol;
         constexpr const double PPM                  = ppm;
         constexpr const double Ymodule              = giga*Pascal;
+        constexpr const double ThermalConductivity  = joule/(centi*meter*hour*degCelsius);
     }
 
 
     namespace PVT_M {
         using namespace prefix;
         using namespace unit;
-        constexpr const double Pressure             = atm;
+        constexpr const double Pressure             = atma;
+        constexpr const double PressureDrop         = atm;
         constexpr const double Temperature          = degCelsius;
         constexpr const double TemperatureOffset    = degCelsiusOffset;
         constexpr const double AbsoluteTemperature  = degCelsius; // actually [K], but the these two are identical
@@ -391,6 +401,7 @@ namespace Opm {
         constexpr const double Moles                = kilo*mol;
         constexpr const double PPM                  = ppm;
         constexpr const double Ymodule              = giga*Pascal;
+        constexpr const double ThermalConductivity  = kilo*joule/(meter*day*degCelsius);
     }
 }
 

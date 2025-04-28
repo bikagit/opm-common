@@ -46,6 +46,7 @@ list (APPEND MAIN_SOURCE_FILES
       opm/common/utility/numeric/calculateCellVol.cpp
       opm/common/utility/numeric/GeometryUtil.cpp
       opm/common/utility/numeric/VectorUtil.cpp
+      opm/common/utility/numeric/GridUtil.cpp
       opm/common/utility/numeric/MonotCubicInterpolator.cpp
       opm/common/utility/numeric/RootFinders.cpp
       opm/material/common/Spline.cpp
@@ -120,7 +121,6 @@ if(ENABLE_ECL_INPUT)
     opm/input/eclipse/EclipseState/EclipseConfig.cpp
     opm/input/eclipse/EclipseState/EclipseState.cpp
     opm/input/eclipse/EclipseState/EndpointScaling.cpp
-    opm/input/eclipse/EclipseState/MICPpara.cpp
     opm/input/eclipse/EclipseState/Phase.cpp
     opm/input/eclipse/EclipseState/Runspec.cpp
     opm/input/eclipse/EclipseState/TracerConfig.cpp
@@ -226,6 +226,8 @@ if(ENABLE_ECL_INPUT)
     opm/input/eclipse/Schedule/OilVaporizationProperties.cpp
     opm/input/eclipse/Schedule/RFTConfig.cpp
     opm/input/eclipse/Schedule/RPTConfig.cpp
+    opm/input/eclipse/Schedule/RPTKeywordNormalisation.cpp
+    opm/input/eclipse/Schedule/RptschedKeywordNormalisation.cpp
     opm/input/eclipse/Schedule/RSTConfig.cpp
     opm/input/eclipse/Schedule/RXXKeywordHandlers.cpp
     opm/input/eclipse/Schedule/Schedule.cpp
@@ -236,6 +238,7 @@ if(ENABLE_ECL_INPUT)
     opm/input/eclipse/Schedule/ScheduleState.cpp
     opm/input/eclipse/Schedule/ScheduleStatic.cpp
     opm/input/eclipse/Schedule/ScheduleTypes.cpp
+    opm/input/eclipse/Schedule/SimpleRPTIntegerControlHandler.cpp
     opm/input/eclipse/Schedule/Source.cpp
     opm/input/eclipse/Schedule/SummaryState.cpp
     opm/input/eclipse/Schedule/Tuning.cpp
@@ -289,7 +292,8 @@ if(ENABLE_ECL_INPUT)
     opm/input/eclipse/Schedule/ResCoup/MasterGroup.cpp
     opm/input/eclipse/Schedule/ResCoup/Slaves.cpp
     opm/input/eclipse/Schedule/ResCoup/MasterMinimumTimeStep.cpp
-    opm/input/eclipse/Schedule/ResCoup/CouplingFile.cpp
+    opm/input/eclipse/Schedule/ResCoup/ReadCouplingFile.cpp
+    opm/input/eclipse/Schedule/ResCoup/WriteCouplingFile.cpp
     opm/input/eclipse/Schedule/UDQ/UDQKeywordHandlers.cpp
     opm/input/eclipse/Schedule/UDQ/UDQActive.cpp
     opm/input/eclipse/Schedule/UDQ/UDQAssign.cpp
@@ -323,6 +327,7 @@ if(ENABLE_ECL_INPUT)
     opm/input/eclipse/Schedule/Well/WellEconProductionLimits.cpp
     opm/input/eclipse/Schedule/Well/WellEnums.cpp
     opm/input/eclipse/Schedule/Well/WellFoamProperties.cpp
+    opm/input/eclipse/Schedule/Well/WellFractureSeeds.cpp
     opm/input/eclipse/Schedule/Well/WellInjectionProperties.cpp
     opm/input/eclipse/Schedule/Well/WellKeywordHandlers.cpp
     opm/input/eclipse/Schedule/Well/WellMatcher.cpp
@@ -453,8 +458,7 @@ if(ENABLE_ECL_OUTPUT)
           opm/output/eclipse/RestartValue.cpp
           opm/output/eclipse/WriteInit.cpp
           opm/output/eclipse/WriteRFT.cpp
-          opm/output/eclipse/WriteRPT.cpp
-          opm/output/eclipse/report/WELSPECS.cpp
+          opm/output/eclipse/report/WellSpecification.cpp
           opm/utility/EModel.cpp
       )
 endif()
@@ -462,7 +466,9 @@ endif()
 list (APPEND TEST_SOURCE_FILES
       tests/test_calculateCellVol.cpp
       tests/test_cmp.cpp
+      tests/test_CompletedCells.cpp
       tests/test_ConditionalStorage.cpp
+      tests/test_critical_error.cpp
       tests/test_cubic.cpp
       tests/test_EvaluationFormat.cpp
       tests/test_densead.cpp
@@ -473,12 +479,14 @@ list (APPEND TEST_SOURCE_FILES
       tests/test_OpmLog.cpp
       tests/test_param.cpp
       tests/test_RootFinders.cpp
+      tests/test_ScheduleGrid.cpp
       tests/test_SegmentMatcher.cpp
       tests/test_sparsevector.cpp
-      tests/test_ThreadSafeMapBuilder.cpp
       tests/test_uniformtablelinear.cpp
+      tests/test_Uns2CPG.cpp
       tests/material/test_2dtables.cpp
       tests/material/test_blackoilfluidstate.cpp
+      tests/material/test_blackoilfluidsystem_nonstatic.cpp
       tests/material/test_components.cpp
       tests/material/test_binarycoefficients.cpp
       tests/material/test_fluidmatrixinteractions.cpp
@@ -488,6 +496,12 @@ list (APPEND TEST_SOURCE_FILES
       tests/test_Visitor.cpp
       tests/ml/ml_model_test.cpp
 )
+
+if(OpenMP_FOUND)
+list (APPEND TEST_SOURCE_FILES
+      tests/test_ThreadSafeMapBuilder.cpp
+)
+endif()
 
 # tests that need to be linked to dune-common
 list(APPEND DUNE_TEST_SOURCE_FILES
@@ -500,10 +514,10 @@ list(APPEND DUNE_TEST_SOURCE_FILES
 
 if(ENABLE_ECL_INPUT)
   list(APPEND TEST_SOURCE_FILES
-    tests/rst_test.cpp
     tests/test_ActiveGridCells.cpp
     tests/test_CopyablePtr.cpp
     tests/test_CSRGraphFromCoordinates.cpp
+    tests/test_CSRGraphFromCoordinates_Merge.cpp
     tests/test_DatumDepth.cpp
     tests/test_ERsm.cpp
     tests/test_GuideRate.cpp
@@ -517,13 +531,16 @@ if(ENABLE_ECL_INPUT)
     tests/test_ExtESmry.cpp
     tests/test_FIPRegionStatistics.cpp
     tests/test_RegionSetMatcher.cpp
+    tests/test_RPTConfig.cpp
     tests/test_PAvgCalculator.cpp
     tests/test_PAvgDynamicSourceData.cpp
     tests/test_Serialization.cpp
+    tests/test_WellFractureSeeds.cpp
     tests/material/test_co2brinepvt.cpp
     tests/material/test_h2brinepvt.cpp
     tests/material/test_hysteresis.cpp
     tests/material/test_eclblackoilfluidsystem.cpp
+    tests/material/test_eclblackoilfluidsystemnonstatic.cpp
     tests/material/test_eclblackoilpvt.cpp
     tests/material/test_eclmateriallawmanager.cpp
     tests/parser/ACTIONX.cpp
@@ -603,6 +620,7 @@ if(ENABLE_ECL_INPUT)
     tests/parser/WellSolventTests.cpp
     tests/parser/WellTracerTests.cpp
     tests/parser/WellTests.cpp
+    tests/parser/WellTestsLGR.cpp
     tests/parser/WLIST.cpp
     tests/parser/WriteRestartFileEventsTests.cpp
     tests/parser/WTEST.cpp
@@ -658,6 +676,7 @@ list (APPEND TEST_DATA_FILES
       tests/material/co2_unittest_below_sat.json
       tests/material/h2o_unittest.json
       tests/material/h2_unittest.json
+      tests/material/ref_values_threecomponents_ptflash.json
       tests/ml/ml_tools/models/test_dense_1x1.model
       tests/ml/ml_tools/models/test_dense_2x2.model
       tests/ml/ml_tools/models/test_dense_10x1.model
@@ -800,6 +819,7 @@ if(ENABLE_ECL_INPUT)
     examples/opmhash.cpp
     examples/rst_deck.cpp
     examples/wellgraph.cpp
+    examples/networkgraph.cpp
     examples/make_ext_smry.cpp
     examples/co2brinepvt.cpp
     examples/hysteresis.cpp
@@ -823,6 +843,7 @@ if(ENABLE_ECL_INPUT)
 endif()
 
 list( APPEND PUBLIC_HEADER_FILES
+      opm/common/CriticalError.hpp
       opm/common/ErrorMacros.hpp
       opm/common/Exceptions.hpp
       opm/common/TimingMacros.hpp
@@ -839,6 +860,7 @@ list( APPEND PUBLIC_HEADER_FILES
       opm/common/OpmLog/StreamLog.hpp
       opm/common/OpmLog/TimerLog.hpp
       opm/common/utility/ActiveGridCells.hpp
+      opm/common/utility/ConstexprAssert.hpp
       opm/common/utility/CSRGraphFromCoordinates.hpp
       opm/common/utility/CSRGraphFromCoordinates_impl.hpp
       opm/common/utility/DemangledType.hpp
@@ -851,6 +873,7 @@ list( APPEND PUBLIC_HEADER_FILES
       opm/common/utility/numeric/calculateCellVol.hpp
       opm/common/utility/numeric/GeometryUtil.hpp
       opm/common/utility/numeric/VectorUtil.hpp
+      opm/common/utility/numeric/GridUtil.hpp
       opm/common/utility/numeric/buildUniformMonotoneTable.hpp
       opm/common/utility/numeric/linearInterpolation.hpp
       opm/common/utility/numeric/MonotCubicInterpolator.hpp
@@ -873,6 +896,7 @@ list( APPEND PUBLIC_HEADER_FILES
       opm/common/utility/Serializer.hpp
       opm/common/utility/String.hpp
       opm/common/utility/TimeService.hpp
+      opm/common/utility/VectorWithDefaultAllocator.hpp
       opm/common/utility/Visitor.hpp
       opm/material/components/Lnapl.hpp
       opm/material/components/N2.hpp
@@ -944,6 +968,9 @@ list( APPEND PUBLIC_HEADER_FILES
       opm/material/fluidsystems/GasPhase.hpp
       opm/material/fluidsystems/TwoPhaseImmiscibleFluidSystem.hpp
       opm/material/fluidsystems/BlackOilFluidSystem.hpp
+      opm/material/fluidsystems/BlackOilFluidSystem_macrotemplate.hpp
+      opm/material/fluidsystems/BlackOilFluidSystemNonStatic.hpp
+      opm/material/fluidsystems/BlackOilFunctions.hpp
       opm/material/fluidsystems/LiquidPhase.hpp
       opm/material/fluidsystems/PTFlashParameterCache.hpp
       opm/material/fluidsystems/Spe5ParameterCache.hpp
@@ -974,7 +1001,7 @@ list( APPEND PUBLIC_HEADER_FILES
       opm/material/fluidsystems/H2OAirFluidSystem.hpp
       opm/material/fluidsystems/H2ON2FluidSystem.hpp
       opm/material/fluidsystems/ThreeComponentFluidSystem.hh
-      opm/material/fluidsystems/GenericOilGasFluidSystem.hpp
+      opm/material/fluidsystems/GenericOilGasWaterFluidSystem.hpp
       opm/material/fluidmatrixinteractions/EclTwoPhaseMaterial.hpp
       opm/material/fluidmatrixinteractions/SatCurveMultiplexerParams.hpp
       opm/material/fluidmatrixinteractions/EclTwoPhaseMaterialParams.hpp
@@ -1211,7 +1238,6 @@ if(ENABLE_ECL_INPUT)
        opm/input/eclipse/EclipseState/Grid/MinpvMode.hpp
        opm/input/eclipse/EclipseState/EndpointScaling.hpp
        opm/input/eclipse/EclipseState/TracerConfig.hpp
-       opm/input/eclipse/EclipseState/MICPpara.hpp
        opm/input/eclipse/EclipseState/WagHysteresisConfig.hpp
        opm/input/eclipse/EclipseState/Tables/DenT.hpp
        opm/input/eclipse/EclipseState/Tables/JouleThomson.hpp
@@ -1302,6 +1328,8 @@ if(ENABLE_ECL_INPUT)
        opm/input/eclipse/EclipseState/Tables/Sof3Table.hpp
        opm/input/eclipse/EclipseState/Tables/SgofTable.hpp
        opm/input/eclipse/EclipseState/Tables/TracerVdTable.hpp
+       opm/input/eclipse/EclipseState/Tables/BiofilmTable.hpp
+       opm/input/eclipse/EclipseState/Tables/DiffMICPTable.hpp
        opm/input/eclipse/EclipseState/Co2StoreConfig.hpp
        opm/input/eclipse/EclipseState/EclipseState.hpp
        opm/input/eclipse/EclipseState/EclipseConfig.hpp
@@ -1342,7 +1370,8 @@ if(ENABLE_ECL_INPUT)
        opm/input/eclipse/Schedule/ResCoup/MasterGroup.hpp
        opm/input/eclipse/Schedule/ResCoup/Slaves.hpp
        opm/input/eclipse/Schedule/ResCoup/MasterMinimumTimeStep.hpp
-       opm/input/eclipse/Schedule/ResCoup/CouplingFile.hpp
+       opm/input/eclipse/Schedule/ResCoup/ReadCouplingFile.hpp
+       opm/input/eclipse/Schedule/ResCoup/WriteCouplingFile.hpp
        opm/input/eclipse/Schedule/VFPInjTable.hpp
        opm/input/eclipse/Schedule/VFPProdTable.hpp
        opm/input/eclipse/Schedule/Well/Connection.hpp
@@ -1362,6 +1391,7 @@ if(ENABLE_ECL_INPUT)
        opm/input/eclipse/Schedule/Well/WListManager.hpp
        opm/input/eclipse/Schedule/Well/WellEconProductionLimits.hpp
        opm/input/eclipse/Schedule/Well/WellFoamProperties.hpp
+       opm/input/eclipse/Schedule/Well/WellFractureSeeds.hpp
        opm/input/eclipse/Schedule/Well/WellBrineProperties.hpp
        opm/input/eclipse/Schedule/Well/WellMICPProperties.hpp
        opm/input/eclipse/Schedule/Well/WellPolymerProperties.hpp
@@ -1377,6 +1407,8 @@ if(ENABLE_ECL_INPUT)
        opm/input/eclipse/Schedule/SummaryState.hpp
        opm/input/eclipse/Schedule/RFTConfig.hpp
        opm/input/eclipse/Schedule/RPTConfig.hpp
+       opm/input/eclipse/Schedule/RPTKeywordNormalisation.hpp
+       opm/input/eclipse/Schedule/RptschedKeywordNormalisation.hpp
        opm/input/eclipse/Schedule/RSTConfig.hpp
        opm/input/eclipse/Schedule/Schedule.hpp
        opm/input/eclipse/Schedule/ScheduleBlock.hpp
@@ -1386,6 +1418,7 @@ if(ENABLE_ECL_INPUT)
        opm/input/eclipse/Schedule/ScheduleState.hpp
        opm/input/eclipse/Schedule/ScheduleStatic.hpp
        opm/input/eclipse/Schedule/ScheduleTypes.hpp
+       opm/input/eclipse/Schedule/SimpleRPTIntegerControlHandler.hpp
        opm/input/eclipse/Schedule/Source.hpp
        opm/input/eclipse/Schedule/Tuning.hpp
        opm/input/eclipse/Schedule/WriteRestartFileEvents.hpp
@@ -1527,8 +1560,8 @@ if(ENABLE_ECL_OUTPUT)
         opm/output/eclipse/WindowedArray.hpp
         opm/output/eclipse/WriteInit.hpp
         opm/output/eclipse/WriteRFT.hpp
-        opm/output/eclipse/WriteRPT.hpp
         opm/output/eclipse/WriteRestartHelpers.hpp
+        opm/output/eclipse/report/WellSpecification.hpp
         opm/utility/CopyablePtr.hpp
         opm/utility/EModel.hpp
         )

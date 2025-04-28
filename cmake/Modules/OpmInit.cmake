@@ -21,11 +21,6 @@
 #   - CMP0074 to indicate that <PackageName>_ROOT can be used to find package
 #             config files
 macro(OpmSetPolicies)
-  if (POLICY CMP0026)
-    # Needed as we query LOCATION in OpmCompile.cmake and OpmSatellites.cmake
-    cmake_policy(SET CMP0026 OLD)
-  endif()
-
   if (POLICY CMP0048)
     # We do not set version. Hence NEW should work and this can be removed later
     cmake_policy(SET CMP0048 NEW)
@@ -46,22 +41,6 @@ macro(OpmSetPolicies)
   if(POLICY CMP0074)
     cmake_policy(SET CMP0074 NEW)
   endif()
-
-  # include special
-  if (CMAKE_VERSION VERSION_LESS "2.8.3")
-    message (STATUS "Enabling compatibility modules for CMake 2.8.3")
-    list (APPEND CMAKE_MODULE_PATH "${OPM_MACROS_ROOT}/cmake/Modules/compat-2.8.3")
-  endif (CMAKE_VERSION VERSION_LESS "2.8.3")
-
-  if (CMAKE_VERSION VERSION_LESS "2.8.5")
-    message (STATUS "Enabling compatibility modules for CMake 2.8.5")
-    list (APPEND CMAKE_MODULE_PATH "${OPM_MACROS_ROOT}/cmake/Modules/compat-2.8.5")
-  endif (CMAKE_VERSION VERSION_LESS "2.8.5")
-
-  if (CMAKE_VERSION VERSION_LESS "2.8.7")
-    message (STATUS "Enabling compatibility modules for CMake 2.8.7")
-    list (APPEND CMAKE_MODULE_PATH "${OPM_MACROS_ROOT}/cmake/Modules/compat-2.8.7")
-  endif (CMAKE_VERSION VERSION_LESS "2.8.7")
 endmacro()
 
 

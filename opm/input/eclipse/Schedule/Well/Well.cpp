@@ -303,6 +303,7 @@ Well::Well(const RestartIO::RstWell& rst_well,
     wtype(rst_well.wtype),
     guide_rate(guideRate(rst_well)),
     efficiency_factor(rst_well.efficiency_factor),
+    use_efficiency_in_network(true),   // @TODO@ Find and read the actual value from restart
     solvent_fraction(def_solvent_fraction),
     has_produced(rst_well.void_total != 0),
     has_injected(rst_well.void_inj_total != 0),    
@@ -514,6 +515,7 @@ Well::Well(const std::string& wname_arg,
     wtype(wtype_arg),
     guide_rate({true, -1, Well::GuideRateTarget::UNDEFINED,ParserKeywords::WGRUPCON::SCALING_FACTOR::defaultValue}),
     efficiency_factor(1.0),
+    use_efficiency_in_network(true),
     solvent_fraction(0.0),
     derive_refdepth_from_conns_{ ! ref_depth_arg.has_value() || (*ref_depth_arg < 0.0) },
     econ_limits(std::make_shared<WellEconProductionLimits>()),
@@ -561,6 +563,7 @@ Well Well::serializationTestObject()
     result.wtype = WellType(Phase::WATER);
     result.guide_rate = WellGuideRate::serializationTestObject();
     result.efficiency_factor = 8.0;
+    result.use_efficiency_in_network = true;
     result.solvent_fraction = 9.0;
     result.prediction_mode = false;
     result.derive_refdepth_from_conns_ = false;
@@ -582,10 +585,10 @@ Well Well::serializationTestObject()
     result.default_well_inj_temperature = 0.0;
     result.well_inj_mult = InjMult::serializationTestObject();
     result.m_filter_concentration = UDAValue::serializationTestObject();
-
+    result.lgr_tag = "LGR-test";
+    result.ref_type = WellRefinementType::LGR;
     return result;
 }
-
 
 bool Well::updateWPAVE(const PAvg& pavg)
 {
@@ -597,14 +600,45 @@ bool Well::updateWPAVE(const PAvg& pavg)
     return true;
 }
 
-bool Well::updateEfficiencyFactor(double efficiency_factor_arg)
+void Well::flag_lgr_well(void)
 {
+    ref_type = WellRefinementType::LGR;
+}
+
+void Well::set_lgr_well_tag(const std::string& lgr_tag_name)
+{
+    lgr_tag = lgr_tag_name;
+}
+
+std::optional<std::string> Well::get_lgr_well_tag(void) const
+{   
+    if (this->ref_type == WellRefinementType::STANDARD)
+        return std::nullopt;
+    return lgr_tag;
+}
+
+
+
+
+bool Well::is_lgr_well(void) const
+{
+    return this->ref_type == WellRefinementType::LGR;
+}
+
+
+bool Well::updateEfficiencyFactor(double efficiency_factor_arg, bool use_efficiency_in_network_arg) {
+    bool update = false;
     if (this->efficiency_factor != efficiency_factor_arg) {
         this->efficiency_factor = efficiency_factor_arg;
-        return true;
+        update = true;
     }
 
-    return false;
+    if (this->use_efficiency_in_network != use_efficiency_in_network_arg) {
+        this->use_efficiency_in_network = use_efficiency_in_network_arg;
+        update = true;
+    }
+
+    return update;
 }
 
 bool Well::updateWellGuideRate(double guide_rate_arg)
@@ -974,13 +1008,15 @@ bool Well::updateConnections(std::shared_ptr<WellConnections> connections_arg, c
 
     if (this->pvt_table == 0 && !this->connections->empty()) {
         const auto& lowest = this->connections->lowest();
-        const auto& props = grid.get_cell(lowest.getI(), lowest.getJ(), lowest.getK()).props;
+        const auto& props = grid.get_cell(lowest.getI(), lowest.getJ(), lowest.getK(), get_lgr_well_tag()).props;
         this->pvt_table = props->pvtnum;
         update = true;
     }
 
     return update;
 }
+
+
 
 bool Well::updateSolventFraction(const double solvent_fraction_arg)
 {
@@ -1120,13 +1156,14 @@ double Well::getGuideRateScalingFactor() const
     return this->guide_rate.scale_factor;
 }
 
-double Well::getEfficiencyFactor() const
-{
+double Well::getEfficiencyFactor(bool network) const {
+    if (network && !this->use_efficiency_in_network) {
+        return 1.0;
+    }
     return this->efficiency_factor;
 }
 
-double Well::getSolventFraction() const
-{
+double Well::getSolventFraction() const {
     return this->solvent_fraction;
 }
 
@@ -1756,12 +1793,15 @@ bool Well::handleWELSEGS(const DeckKeyword& keyword)
 {
     if (this->segments != nullptr) {
         auto new_segments = std::make_shared<WellSegments>(*this->segments);
-        new_segments->loadWELSEGS(keyword);
+        new_segments->loadWELSEGS(keyword, *unit_system);
 
         this->updateSegments(std::move(new_segments));
     }
     else {
-        this->updateSegments(std::make_shared<WellSegments>(keyword));
+        auto well_segments = std::make_shared<WellSegments>();
+        well_segments->loadWELSEGS(keyword, *unit_system);
+
+        this->updateSegments(std::move(well_segments));
     }
 
     return true;
@@ -2037,7 +2077,8 @@ bool Well::cmp_structure(const Well& other) const
         && (this->getAutomaticShutIn() == other.getAutomaticShutIn())
         && (this->udq_undefined == other.udq_undefined)
         && (this->getPreferredPhase() == other.getPreferredPhase()) // wellType()
-        && (this->getEfficiencyFactor() == other.getEfficiencyFactor())
+        && (this->efficiency_factor == other.efficiency_factor)
+        && (this->use_efficiency_in_network == other.use_efficiency_in_network)
         && (this->getConnections() == other.getConnections())
         ;
 }
@@ -2074,6 +2115,9 @@ bool Well::operator==(const Well& data) const
         && (this->default_well_inj_temperature == data.default_well_inj_temperature)
         && (this->well_inj_mult == data.well_inj_mult)
         && (this->m_filter_concentration == data.m_filter_concentration)
+        && (this->lgr_tag == data.lgr_tag)
+        && (this->ref_type == data.ref_type)
+
         ;
 }
 

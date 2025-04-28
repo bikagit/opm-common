@@ -26,6 +26,7 @@
 
 #include <opm/io/eclipse/rst/udq.hpp>
 
+#include <opm/input/eclipse/EclipseState/Aquifer/NumericalAquifer/NumericalAquifers.hpp>
 #include <opm/input/eclipse/EclipseState/EclipseState.hpp>
 #include <opm/input/eclipse/EclipseState/Grid/FieldPropsManager.hpp>
 #include <opm/input/eclipse/EclipseState/Runspec.hpp>
@@ -82,11 +83,14 @@ namespace {
         }
         else {
             EclipseGrid grid(10,10,10);
-            TableManager table(deck);
-            FieldPropsManager fp(deck, Phases{true, true, true}, grid, table);
-            Runspec runspec(deck);
+            const TableManager table(deck);
+            const FieldPropsManager fp(deck, Phases{true, true, true}, grid, table);
+            const Runspec runspec(deck);
 
-            return { deck, grid, fp, runspec, std::make_shared<Python>() };
+            return {
+                deck, grid, fp, NumericalAquifers{},
+                runspec, std::make_shared<Python>()
+            };
         }
     }
 
@@ -1892,13 +1896,11 @@ WCONPROD
         BOOST_CHECK_EQUAL( record0.uda_code, 300004);
         BOOST_CHECK_EQUAL( record0.input_index, 2U);
         BOOST_CHECK_EQUAL( record0.use_count, 2U);
-        BOOST_CHECK_EQUAL( record0.use_index, 0U);
 
         const auto& record1 = iuad[1];
         BOOST_CHECK_EQUAL( record1.uda_code, 600004);
         BOOST_CHECK_EQUAL( record1.input_index, 3U);
         BOOST_CHECK_EQUAL( record1.use_count, 2U);
-        BOOST_CHECK_EQUAL( record1.use_index, 2U);
     }
 
     {
@@ -1914,25 +1916,21 @@ WCONPROD
         BOOST_CHECK_EQUAL( record0.uda_code, 300004);
         BOOST_CHECK_EQUAL( record0.input_index, 2U);
         BOOST_CHECK_EQUAL( record0.use_count, 1U);
-        BOOST_CHECK_EQUAL( record0.use_index, 0U);
 
         const auto& record1 = iuad[1];
         BOOST_CHECK_EQUAL( record1.uda_code, 600004);
         BOOST_CHECK_EQUAL( record1.input_index, 3U);
         BOOST_CHECK_EQUAL( record1.use_count, 1U);
-        BOOST_CHECK_EQUAL( record1.use_index, 1U);
 
         const auto& record2 = iuad[2];
         BOOST_CHECK_EQUAL( record2.uda_code, 300004);
         BOOST_CHECK_EQUAL( record2.input_index, 4U);
         BOOST_CHECK_EQUAL( record2.use_count, 1U);
-        BOOST_CHECK_EQUAL( record2.use_index, 2U);
 
         const auto& record3 = iuad[3];
         BOOST_CHECK_EQUAL( record3.uda_code, 600004);
         BOOST_CHECK_EQUAL( record3.input_index, 5U);
         BOOST_CHECK_EQUAL( record3.use_count, 1U);
-        BOOST_CHECK_EQUAL( record3.use_index, 3U);
     }
 
     {
@@ -1948,14 +1946,13 @@ WCONPROD
         BOOST_CHECK_EQUAL( record0.uda_code, 300004);
         BOOST_CHECK_EQUAL( record0.input_index, 4U);
         BOOST_CHECK_EQUAL( record0.use_count, 1U);
-        BOOST_CHECK_EQUAL( record0.use_index, 0U);
 
         const auto& record1 = iuad[1];
         BOOST_CHECK_EQUAL( record1.uda_code, 600004);
         BOOST_CHECK_EQUAL( record1.input_index, 5U);
         BOOST_CHECK_EQUAL( record1.use_count, 1U);
-        BOOST_CHECK_EQUAL( record1.use_index, 1U);
     }
+
     {
         const auto& udq_config = schedule.getUDQConfig(2);
         const auto& def = udq_config.definitions();

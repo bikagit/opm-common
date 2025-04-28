@@ -30,6 +30,7 @@
 #ifndef OPM_PTFlash_PARAMETER_CACHE_HPP
 #define OPM_PTFlash_PARAMETER_CACHE_HPP
 
+#include <opm/material/common/Valgrind.hpp>
 #include <opm/material/fluidsystems/ParameterCacheBase.hpp>
 #include <opm/material/eos/CubicEOS.hpp>
 #include <opm/material/eos/CubicEOSParams.hpp>
@@ -56,6 +57,9 @@ class PTFlashParameterCache
     enum { numPhases = FluidSystem::numPhases };
     enum { oilPhaseIdx = FluidSystem::oilPhaseIdx };
     enum { gasPhaseIdx = FluidSystem::gasPhaseIdx };
+    enum { waterPhaseIdx = FluidSystem::waterPhaseIdx };
+
+    static constexpr bool waterEnabled = FluidSystem::waterEnabled;
 
     static_assert(static_cast<int>(oilPhaseIdx) >= 0, "Oil phase index must be non-negative");
     static_assert(static_cast<int>(oilPhaseIdx) < static_cast<int>(numPhases),
@@ -72,7 +76,7 @@ public:
     //! The cached parameters for the gas phase
     using GasPhaseParams = Opm::CubicEOSParams<Scalar, FluidSystem, gasPhaseIdx>;
 
-    PTFlashParameterCache(EOSType eos_type)
+    explicit PTFlashParameterCache(EOSType eos_type)
     {
         VmUpToDate_[oilPhaseIdx] = false;
         Valgrind::SetUndefined(Vm_[oilPhaseIdx]);
@@ -89,6 +93,10 @@ public:
                      unsigned phaseIdx,
                      int exceptQuantities = ParentType::None)
     {
+        if (waterEnabled && phaseIdx == static_cast<unsigned int>(waterPhaseIdx)) {
+            return;
+        }
+
         assert ((phaseIdx == static_cast<unsigned int>(oilPhaseIdx)) ||
                 (phaseIdx == static_cast<unsigned int>(gasPhaseIdx)));
 

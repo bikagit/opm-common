@@ -62,11 +62,9 @@ namespace Opm {
     class GuideRateModel;
     class HandlerContext;
     enum class InputErrorAction;
+    class NumericalAquifers;
     class ParseContext;
     class Python;
-    namespace ReservoirCoupling {
-        class CouplingInfo;
-    }
     class Runspec;
     class RPTConfig;
     class ScheduleGrid;
@@ -83,6 +81,10 @@ namespace Opm {
     class WelSegsSet;
     class WellTestConfig;
 } // namespace Opm
+
+namespace Opm::ReservoirCoupling {
+    class CouplingInfo;
+} // namespace Opm::ReservoirCoupling
 
 namespace Opm::Action {
     class ActionX;
@@ -119,6 +121,7 @@ namespace Opm {
         Schedule(const Deck& deck,
                  const EclipseGrid& grid,
                  const FieldPropsManager& fp,
+                 const NumericalAquifers& numAquifers,
                  const Runspec &runspec,
                  const ParseContext& parseContext,
                  ErrorGuard& errors,
@@ -134,6 +137,7 @@ namespace Opm {
         Schedule(const Deck& deck,
                  const EclipseGrid& grid,
                  const FieldPropsManager& fp,
+                 const NumericalAquifers& numAquifers,
                  const Runspec &runspec,
                  const ParseContext& parseContext,
                  T&& errors,
@@ -148,6 +152,7 @@ namespace Opm {
         Schedule(const Deck& deck,
                  const EclipseGrid& grid,
                  const FieldPropsManager& fp,
+                 const NumericalAquifers& numAquifers,
                  const Runspec &runspec,
                  std::shared_ptr<const Python> python,
                  const bool lowActionParsingStrictness = false,
@@ -224,7 +229,6 @@ namespace Opm {
         std::vector<std::string> wellNames(const std::string& pattern) const;
         std::vector<std::string> wellNames(std::size_t timeStep) const;
         std::vector<std::string> wellNames() const;
-
         /// Query for group existence at particular time
         ///
         /// \param[in] groupName Fully specified group name.
@@ -284,7 +288,10 @@ namespace Opm {
         /// \param[in] timeStep Zero-based report step index.
         std::vector<const Group*> restart_groups(std::size_t timeStep) const;
 
-        std::vector<std::string> changed_wells(std::size_t reportStep) const;
+        std::vector<std::string>
+        changed_wells(std::size_t reportStep,
+                      std::size_t initialStep = 0) const;
+
         const Well& getWell(std::size_t well_index, std::size_t timeStep) const;
         const Well& getWell(const std::string& wellName, std::size_t timeStep) const;
         const Well& getWellatEnd(const std::string& well_name) const;
@@ -312,10 +319,12 @@ namespace Opm {
         void add_event(ScheduleEvents::Events, std::size_t report_step);
         void applyWellProdIndexScaling(const std::string& well_name, const std::size_t reportStep, const double scalingFactor);
 
+        //! \brief Clear out all registered events at a given report step.
+        void clearEvents(const std::size_t report_step);
+
         WellProducerCMode getGlobalWhistctlMmode(std::size_t timestep) const;
 
         const UDQConfig& getUDQConfig(std::size_t timeStep) const;
-        void evalAction(const SummaryState& summary_state, std::size_t timeStep);
 
         GTNode groupTree(std::size_t report_step) const;
         GTNode groupTree(const std::string& root_node, std::size_t report_step) const;
@@ -413,6 +422,8 @@ namespace Opm {
             serializer(this->snapshots);
             serializer(this->restart_output);
             serializer(this->completed_cells);
+            serializer(this->completed_cells_lgr);
+            serializer(this->completed_cells_lgr_map);
             serializer(this->m_treat_critical_as_non_critical);
             serializer(this->current_report_step);
             serializer(this->m_lowActionParsingStrictness);
@@ -466,7 +477,8 @@ namespace Opm {
         std::vector<ScheduleState> snapshots{};
         WriteRestartFileEvents restart_output{};
         CompletedCells completed_cells{};
-
+        std::vector<CompletedCells> completed_cells_lgr{};
+        std::unordered_map<std::string, std::size_t> completed_cells_lgr_map;
         // Boolean indicating the strictness of parsing process for ActionX and PyAction.
         // If lowActionParsingStrictness is true, the simulator tries to apply unsupported
         // keywords, if lowActionParsingStrictness is false, the simulator only applies
@@ -487,6 +499,9 @@ namespace Opm {
         // It is a shared_ptr, so a Schedule can be constructed using the copy constructor sharing the simUpdateFromPython.
         // The copy constructor is needed for creating a mocked simulator (msim).
         std::shared_ptr<SimulatorUpdate> simUpdateFromPython{};
+
+        void init_completed_cells_lgr(const EclipseGrid& ecl_grid);
+        void init_completed_cells_lgr_map(const EclipseGrid& ecl_grid);
 
         void load_rst(const RestartIO::RstState& rst,
                       const TracerConfig& tracer_config,
@@ -510,7 +525,6 @@ namespace Opm {
 
         void updateGuideRateModel(const GuideRateModel& new_model, std::size_t report_step);
         GTNode groupTree(const std::string& root_node, std::size_t report_step, std::size_t level, const std::optional<std::string>& parent_name) const;
-        bool checkGroups(const ParseContext& parseContext, ErrorGuard& errors);
         bool updateWellStatus( const std::string& well, std::size_t reportStep, WellStatus status, std::optional<KeywordLocation> = {});
         void addWellToGroup( const std::string& group_name, const std::string& well_name , std::size_t timeStep);
         void iterateScheduleSection(std::size_t load_start,
@@ -554,9 +568,7 @@ namespace Opm {
         std::vector<std::string> wellNames(const std::string& pattern,
                                            const HandlerContext& context,
                                            bool allowEmpty = false);
-        std::vector<std::string> wellNames(const std::string& pattern, std::size_t timeStep, const std::vector<std::string>& matching_wells, InputErrorAction error_action, ErrorGuard& errors, const KeywordLocation& location) const;
         static std::string formatDate(std::time_t t);
-        std::string simulationDays(std::size_t currentStep) const;
         void applyGlobalWPIMULT( const std::unordered_map<std::string, double>& wpimult_global_factor);
 
         bool must_write_rst_file(std::size_t report_step) const;

@@ -23,28 +23,32 @@
 #include <opm/common/utility/OpmInputError.hpp>
 #include <opm/common/utility/String.hpp>
 
-#include <opm/input/eclipse/Deck/DeckKeyword.hpp>
-
-#include <opm/input/eclipse/Parser/ParseContext.hpp>
-#include <opm/input/eclipse/Parser/ParserKeywords/F.hpp>
-#include <opm/input/eclipse/Parser/ParserKeywords/W.hpp>
+#include <opm/input/eclipse/EclipseState/Grid/EclipseGrid.hpp>
 
 #include <opm/input/eclipse/Schedule/Network/ExtNetwork.hpp>
+#include <opm/input/eclipse/Schedule/ScheduleGrid.hpp>
 #include <opm/input/eclipse/Schedule/ScheduleState.hpp>
 #include <opm/input/eclipse/Schedule/ScheduleStatic.hpp>
 #include <opm/input/eclipse/Schedule/UDQ/UDQActive.hpp>
 #include <opm/input/eclipse/Schedule/UDQ/UDQConfig.hpp>
 #include <opm/input/eclipse/Schedule/Well/NameOrder.hpp>
 #include <opm/input/eclipse/Schedule/Well/WDFAC.hpp>
-#include <opm/input/eclipse/Schedule/Well/Well.hpp>
-#include <opm/input/eclipse/Schedule/Well/WellConnections.hpp>
-#include <opm/input/eclipse/Schedule/Well/WellEconProductionLimits.hpp>
-#include <opm/input/eclipse/Schedule/Well/WellTestConfig.hpp>
 #include <opm/input/eclipse/Schedule/Well/WListManager.hpp>
 #include <opm/input/eclipse/Schedule/Well/WVFPDP.hpp>
 #include <opm/input/eclipse/Schedule/Well/WVFPEXP.hpp>
+#include <opm/input/eclipse/Schedule/Well/Well.hpp>
+#include <opm/input/eclipse/Schedule/Well/WellConnections.hpp>
+#include <opm/input/eclipse/Schedule/Well/WellEconProductionLimits.hpp>
+#include <opm/input/eclipse/Schedule/Well/WellFractureSeeds.hpp>
+#include <opm/input/eclipse/Schedule/Well/WellTestConfig.hpp>
 
 #include <opm/input/eclipse/Units/UnitSystem.hpp>
+
+#include <opm/input/eclipse/Deck/DeckKeyword.hpp>
+
+#include <opm/input/eclipse/Parser/ParseContext.hpp>
+#include <opm/input/eclipse/Parser/ParserKeywords/F.hpp>
+#include <opm/input/eclipse/Parser/ParserKeywords/W.hpp>
 
 #include "../HandlerContext.hpp"
 
@@ -53,6 +57,10 @@
 
 #include <algorithm>
 #include <memory>
+#include <numeric>
+#include <string>
+#include <unordered_set>
+#include <vector>
 
 namespace Opm {
 
@@ -165,6 +173,7 @@ void handleWCONHIST(HandlerContext& handlerContext)
                 handlerContext.state().events().addEvent( ScheduleEvents::PRODUCTION_UPDATE );
                 handlerContext.state().wellgroup_events().addEvent( well2.name(), ScheduleEvents::PRODUCTION_UPDATE);
                 handlerContext.state().wells.update( well2 );
+                handlerContext.affected_well(well_name);
             }
 
             // Always check if well can be opened (it could have been closed for numerical reasons and possible to operate with new params)
@@ -243,6 +252,7 @@ void handleWCONINJE(HandlerContext& handlerContext)
                     handlerContext.state().wellgroup_events().addEvent( well_name, ScheduleEvents::INJECTION_TYPE_CHANGED);
                 }
                 handlerContext.state().wells.update( std::move(well2) );
+                handlerContext.affected_well(well_name);
             }
 
             if (handlerContext.state().wells.get( well_name ).getStatus() == Well::Status::OPEN) {
@@ -253,8 +263,6 @@ void handleWCONINJE(HandlerContext& handlerContext)
             if (injection->updateUDQActive(handlerContext.state().udq.get(), udq_active)) {
                 handlerContext.state().udq_active.update( std::move(udq_active) );
             }
-
-            handlerContext.affected_well(well_name);
         }
     }
 }
@@ -322,13 +330,13 @@ void handleWCONINJH(HandlerContext& handlerContext)
                     handlerContext.state().wellgroup_events().addEvent( well_name, ScheduleEvents::INJECTION_TYPE_CHANGED);
                 }
                 handlerContext.state().wells.update( std::move(well2) );
+                handlerContext.affected_well(well_name);
             }
 
             // Always check if well can be opened (it could have been closed for numerical reasons and possible to operate with new params)
             if (handlerContext.getWellStatus(well_name) == WellStatus::OPEN) {
                 handlerContext.state().wellgroup_events().addEvent( well_name, ScheduleEvents::REQUEST_OPEN_WELL);
             }
-
         }
     }
 }
@@ -425,14 +433,13 @@ void handleWCONPROD(HandlerContext& handlerContext)
                 handlerContext.state().events().addEvent( ScheduleEvents::PRODUCTION_UPDATE );
                 handlerContext.state().wellgroup_events().addEvent( well2.name(), ScheduleEvents::PRODUCTION_UPDATE);
                 handlerContext.state().wells.update( std::move(well2) );
+                handlerContext.affected_well(well_name);
             }
 
             auto udq_active = handlerContext.state().udq_active.get();
             if (properties->updateUDQActive(handlerContext.state().udq.get(), udq_active)) {
                 handlerContext.state().udq_active.update( std::move(udq_active));
             }
-
-            handlerContext.affected_well(well_name);
         }
     }
 }
@@ -444,6 +451,29 @@ void handleWCYCLE(HandlerContext& handlerContext)
         new_config.addRecord(record);
     }
     handlerContext.state().wcycle.update(std::move(new_config));
+}
+
+void handleWELLSTRE(HandlerContext& handlerContext)
+{
+    auto& inj_streams = handlerContext.state().inj_streams;
+    for (const auto& record : handlerContext.keyword) {
+        const auto stream_name = record.getItem<ParserKeywords::WELLSTRE::STREAM>().getTrimmedString(0);
+        const auto& composition = record.getItem<ParserKeywords::WELLSTRE::COMPOSITIONS>().getSIDoubleData();
+        const std::size_t num_comps = handlerContext.static_schedule().m_runspec.numComps();
+        if (composition.size() != num_comps) {
+            const std::string msg = fmt::format("The number of the composition values for stream '{}' is not the same as the number of components.", stream_name);
+            throw OpmInputError(msg, handlerContext.keyword.location());
+        }
+
+        const double sum = std::accumulate(composition.begin(), composition.end(), 0.0);
+        if (std::abs(sum - 1.0) > std::numeric_limits<double>::epsilon()) {
+            const std::string msg = fmt::format("The sum of the composition values for stream '{}' is not 1.0, but {}.", stream_name, sum);
+            throw OpmInputError(msg, handlerContext.keyword.location());
+        }
+        auto composition_ptr = std::make_shared<std::vector<double>>(composition);
+        inj_streams.update(stream_name, std::move(composition_ptr));
+    }
+
 }
 
 void handleWELOPEN(HandlerContext& handlerContext)
@@ -524,6 +554,44 @@ void handleWELOPEN(HandlerContext& handlerContext)
             handlerContext.record_well_structure_change();
 
             handlerContext.state().events().addEvent(ScheduleEvents::COMPLETION_CHANGE);
+        }
+    }
+}
+
+void handleWINJGAS(HandlerContext& handlerContext)
+{
+    // \Note: we do not support the item 4 MAKEUPGAS and item 5 STAGE in WINJGAS keyword yet
+    for (const auto& record : handlerContext.keyword) {
+        const std::string fluid_nature = record.getItem<ParserKeywords::WINJGAS::FLUID>().getTrimmedString(0);
+
+        // \Note: technically, only the first two characters are significant
+        // with some testing, we can determine whether we want to enforce this.
+        // at the moment, we only support full string STREAM for fluid nature
+        if (fluid_nature != "STREAM") {
+            const std::string msg = fmt::format("The fluid nature '{}' is not supported in WINJGAS keyword.", fluid_nature);
+            throw OpmInputError(msg, handlerContext.keyword.location());
+        }
+
+        const std::string stream_name = record.getItem<ParserKeywords::WINJGAS::STREAM>().getTrimmedString(0);
+        // we make sure the stream is defined in WELLSTRE keyword
+        const auto& inj_streams = handlerContext.state().inj_streams;
+        if (!inj_streams.has(stream_name)) {
+            const std::string msg = fmt::format("The stream '{}' is not defined in WELLSTRE keyword.", stream_name);
+            throw OpmInputError(msg, handlerContext.keyword.location());
+        }
+
+        const std::string wellNamePattern = record.getItem<ParserKeywords::WINJGAS::WELL>().getTrimmedString(0);
+        const auto well_names = handlerContext.wellNames(wellNamePattern, false);
+        for (const auto& well_name : well_names) {
+            auto well2 = handlerContext.state().wells.get(well_name);
+            auto injection = std::make_shared<Well::WellInjectionProperties>(well2.getInjectionProperties());
+
+            const auto& inj_stream = inj_streams.get(stream_name);
+            injection->setGasInjComposition(inj_stream);
+
+            if (well2.updateInjection(injection)) {
+                handlerContext.state().wells.update(std::move(well2));
+            }
         }
     }
 }
@@ -635,6 +703,26 @@ Well{0} entered with 'FIELD' parent group:
     }
 }
 
+
+void handleWELSPECL(HandlerContext& handlerContext)
+{
+    using Kw = ParserKeywords::WELSPECL;
+    auto getTrimmedName = [&handlerContext](const auto& item)
+    {
+        return trim_wgname(handlerContext.keyword,
+                           item.template get<std::string>(0),
+                           handlerContext.parseContext,
+                           handlerContext.errors);
+    };
+    handleWELSPECS(handlerContext);
+    for (const auto& record : handlerContext.keyword) {
+        const auto wellName = getTrimmedName(record.getItem<Kw::WELL>());
+        const auto lgrTag = getTrimmedName(record.getItem<Kw::LGR>());
+        handlerContext.state().wells.get(wellName).flag_lgr_well();
+        handlerContext.state().wells.get(wellName).set_lgr_well_tag(lgrTag);
+    }
+}
+
 /*
   The documentation for the WELTARG keyword says that the well
   must have been fully specified and initialized using one of the
@@ -651,6 +739,7 @@ Well{0} entered with 'FIELD' parent group:
   WCONPROD / WCONHIST before WELTARG is applied, if not the units for the
   rates will be wrong.
 */
+
 void handleWELTARG(HandlerContext& handlerContext)
 {
     const double SiFactorP = handlerContext.static_schedule().m_unit_system.parse("Pressure").getSIScaling();
@@ -703,9 +792,8 @@ void handleWELTARG(HandlerContext& handlerContext)
                     handlerContext.state().events().addEvent( ScheduleEvents::INJECTION_UPDATE );
                 }
                 handlerContext.state().wells.update( std::move(well2) );
+                handlerContext.affected_well(well_name);
             }
-
-            handlerContext.affected_well(well_name);
         }
     }
 }
@@ -888,6 +976,76 @@ void handleWPAVEDEP(HandlerContext& handlerContext)
     }
 }
 
+/// Handler function for well fracturing seeds
+///
+/// Keyword structure:
+///
+///   WSEED
+///     WellName  I  J  K  nx  ny  nz /
+///     WellName  I  J  K  nx  ny  nz /
+///     WellName  I  J  K  nx  ny  nz /
+///   /
+///
+/// in which 'WellName' is a well, well list, well template or well list
+/// template.  I,J,K are regular well connection coordinates and nx,ny,nz
+/// are the components of the fracturing plane's normal vector.
+void handleWSEED(HandlerContext& handlerContext)
+{
+    const auto* grid = handlerContext.grid.get_grid();
+    if (grid == nullptr) {
+        return;
+    }
+
+    auto& seeds = handlerContext.state().wseed;
+    auto updated_seed_wells = std::unordered_set<std::string>{};
+
+    for (const auto& record : handlerContext.keyword) {
+        const auto wellNamePattern = record.getItem<ParserKeywords::WSEED::WELL>()
+            .getTrimmedString(0);
+
+        const auto well_names = handlerContext.wellNames(wellNamePattern, false);
+        if (well_names.empty()) {
+            handlerContext.invalidNamePattern(wellNamePattern);
+            continue;
+        }
+
+        // Subtract one to convert one-based input indices to zero-based
+        // internal processing indices.
+        const auto cellSeedIndex = grid->getGlobalIndex
+            (record.getItem<ParserKeywords::WSEED::I>().get<int>(0) - 1,
+             record.getItem<ParserKeywords::WSEED::J>().get<int>(0) - 1,
+             record.getItem<ParserKeywords::WSEED::K>().get<int>(0) - 1);
+
+        const auto cellSeedNormal = WellFractureSeeds::NormalVector {
+            record.getItem<ParserKeywords::WSEED::NORMAL_X>().getSIDouble(0),
+            record.getItem<ParserKeywords::WSEED::NORMAL_Y>().getSIDouble(0),
+            record.getItem<ParserKeywords::WSEED::NORMAL_Z>().getSIDouble(0),
+        };
+
+        for (const auto& well_name : well_names) {
+            const auto hasConn = handlerContext.state()
+                .wells(well_name)
+                .getConnections()
+                .hasGlobalIndex(cellSeedIndex);
+
+            if (! hasConn) { continue; }
+
+            auto seed = seeds.has(well_name)
+                ? std::make_shared<WellFractureSeeds>(seeds(well_name))
+                : std::make_shared<WellFractureSeeds>(well_name);
+
+            if (seed->updateSeed(cellSeedIndex, cellSeedNormal)) {
+                updated_seed_wells.insert(well_name);
+                seeds.update(well_name, std::move(seed));
+            }
+        }
+    }
+
+    for (const auto& updated_seed_well : updated_seed_wells) {
+        seeds.get(updated_seed_well).finalizeSeeds();
+    }
+}
+
 void handleWTEST(HandlerContext& handlerContext)
 {
     auto new_config = handlerContext.state().wtest_config.get();
@@ -925,13 +1083,17 @@ getWellHandlers()
         { "WCONPROD", &handleWCONPROD },
         { "WCYCLE",   &handleWCYCLE   },
         { "WELOPEN" , &handleWELOPEN  },
+        { "WELLSTRE", &handleWELLSTRE },
         { "WELSPECS", &handleWELSPECS },
+        { "WELSPECL", &handleWELSPECL },
         { "WELTARG" , &handleWELTARG  },
         { "WELTRAJ" , &handleWELTRAJ  },
         { "WHISTCTL", &handleWHISTCTL },
+        { "WINJGAS",  &handleWINJGAS  },
         { "WLIST"   , &handleWLIST    },
         { "WPAVE"   , &handleWPAVE    },
         { "WPAVEDEP", &handleWPAVEDEP },
+        { "WSEED"   , &handleWSEED    },
         { "WTEST"   , &handleWTEST    },
     };
 }
