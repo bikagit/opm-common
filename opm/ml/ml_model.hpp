@@ -38,7 +38,6 @@ namespace Opm
 
 namespace ML
 {
-
     // NN layer
     // ---------------------
     /** \class Tensor class
