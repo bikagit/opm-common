@@ -36,6 +36,7 @@
 
 #include <ctime>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -73,14 +74,15 @@ struct RstState
     std::vector<RstWell> wells;
     std::vector<RstGroup> groups;
     std::vector<RstUDQ> udqs;
-    RstUDQActive udq_active;
+    std::optional<RstUDQActive> udq_active;
     std::vector<RstAction> actions;
     Tuning tuning;
     OilVaporizationProperties oilvap;
     std::unordered_map<std::string, std::vector<std::string>> wlists;
 
 private:
-    void load_oil_vaporization(const std::vector<int>& intehead,
+    void load_oil_vaporization(const std::vector<int>&    intehead,
+                               const std::vector<bool>&   logihead,
                                const std::vector<double>& doubhead);
 
     void load_tuning(const std::vector<int>& intehead,

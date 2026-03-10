@@ -54,12 +54,9 @@ void ScheduleBlock::push_back(const DeckKeyword& keyword)
 
 std::optional<DeckKeyword> ScheduleBlock::get(const std::string& kw) const
 {
-    auto kwPos = std::find_if(this->m_keywords.begin(),
-                              this->m_keywords.end(),
-                              [&kw](const DeckKeyword& keyword)
-                              {
-                                  return keyword.name() == kw;
-                              });
+    const auto kwPos = std::ranges::find_if(this->m_keywords,
+                                            [&kw](const DeckKeyword& keyword)
+                                            { return keyword.name() == kw; });
 
     return (kwPos == this->m_keywords.end())
         ? std::nullopt

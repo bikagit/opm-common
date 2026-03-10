@@ -31,7 +31,7 @@ namespace {
 template <typename Map, typename Predicate>
 bool mapContains(const Map& map, Predicate&& p)
 {
-    return std::any_of(map.begin(), map.end(), std::forward<Predicate>(p));
+    return std::ranges::any_of(map, std::forward<Predicate>(p));
 }
 
 template <typename Map, typename Predicate>
@@ -187,11 +187,9 @@ bool RFTConfig::active() const
 
 bool RFTConfig::rft() const
 {
-    return std::any_of(this->rft_state.begin(), this->rft_state.end(),
-                       [](const auto& rft_pair)
-                       {
-                           return rft_pair.second != RFT::FOPN;
-                       });
+    return std::ranges::any_of(this->rft_state,
+                               [](const auto& rft_pair)
+                               { return rft_pair.second != RFT::FOPN; });
 }
 
 bool RFTConfig::rft(const std::string& wname) const

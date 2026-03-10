@@ -112,9 +112,9 @@ BOOST_AUTO_TEST_CASE(WCONPROD_MissingCmode) {
     auto deck =  parser.parseFile(scheduleFile);
     EclipseGrid grid(10,10,3);
     TableManager table ( deck );
-    FieldPropsManager fp(deck, Phases{true, true, true}, grid, table);
+    const Runspec runspec (deck);
+    const FieldPropsManager fp(deck, runspec.phases(), grid, table);
     auto python = std::make_shared<Python>();
-    Runspec runspec (deck);
     BOOST_CHECK_NO_THROW( Schedule(deck, grid, fp, NumericalAquifers{}, runspec, python) );
 }
 
@@ -125,8 +125,8 @@ BOOST_AUTO_TEST_CASE(WCONPROD_Missing_DATA) {
     auto deck =  parser.parseFile(scheduleFile);
     EclipseGrid grid(10,10,3);
     TableManager table ( deck );
-    FieldPropsManager fp(deck, Phases{true, true, true}, grid, table);
-    Runspec runspec (deck);
+    const Runspec runspec (deck);
+    const FieldPropsManager fp(deck, runspec.phases(), grid, table);
     auto python = std::make_shared<Python>();
     BOOST_CHECK_THROW( Schedule(deck, grid, fp, NumericalAquifers{}, runspec, python) , std::exception );
 }
@@ -137,8 +137,8 @@ BOOST_AUTO_TEST_CASE(WellTestRefDepth) {
     const auto deck = Parser{}.parseFile(scheduleFile);
     EclipseGrid grid(40,60,30);
     const TableManager table ( deck );
-    const FieldPropsManager fp(deck, Phases{true, true, true}, grid, table);
     const Runspec runspec (deck);
+    const FieldPropsManager fp(deck, runspec.phases(), grid, table);
     const Schedule sched {
         deck, grid, fp, NumericalAquifers{},
         runspec, std::make_shared<Python>()
@@ -158,8 +158,8 @@ BOOST_AUTO_TEST_CASE(WellTesting) {
     const auto deck = Parser{}.parseFile(scheduleFile);
     EclipseGrid grid(40,60,30);
     const TableManager table ( deck );
-    const FieldPropsManager fp(deck, Phases{true, true, true}, grid, table);
     const Runspec runspec (deck);
+    const FieldPropsManager fp(deck, runspec.phases(), grid, table);
     const Schedule sched {
         deck, grid, fp, NumericalAquifers{},
         runspec, std::make_shared<Python>()
@@ -297,8 +297,8 @@ BOOST_AUTO_TEST_CASE(WellTestCOMPDAT_DEFAULTED_ITEMS) {
     const auto deck = Parser{}.parseFile(scheduleFile);
     EclipseGrid grid(10,10,10);
     const TableManager table ( deck );
-    const FieldPropsManager fp(deck, Phases{true, true, true}, grid, table);
     const Runspec runspec (deck);
+    const FieldPropsManager fp(deck, runspec.phases(), grid, table);
     const Schedule sched {
         deck, grid, fp, NumericalAquifers{},
         runspec, std::make_shared<Python>()
@@ -311,8 +311,8 @@ BOOST_AUTO_TEST_CASE(WellTestCOMPDAT) {
     const auto deck = Parser{}.parseFile(scheduleFile);
     EclipseGrid grid(40,60,30);
     const TableManager table ( deck );
-    const FieldPropsManager fp(deck, Phases{true, true, true}, grid, table);
     const Runspec runspec (deck);
+    const FieldPropsManager fp(deck, runspec.phases(), grid, table);
     const Schedule sched {
         deck, grid, fp, NumericalAquifers{},
         runspec, std::make_shared<Python>()
@@ -605,8 +605,8 @@ BOOST_AUTO_TEST_CASE(WELLS_SHUT) {
     const auto deck = Parser{}.parseFile(scheduleFile);
     EclipseGrid grid(20,40,1);
     const TableManager table ( deck );
-    const FieldPropsManager fp(deck, Phases{true, true, true}, grid, table);
     const Runspec runspec (deck);
+    const FieldPropsManager fp(deck, runspec.phases(), grid, table);
     const Schedule sched {
         deck, grid, fp, NumericalAquifers{},
         runspec, std::make_shared<Python>()
@@ -651,50 +651,50 @@ BOOST_AUTO_TEST_CASE(WellTestWPOLYMER) {
         const auto& well1 = sched.getWell("INJE01", 0);
         BOOST_CHECK( well1.isInjector());
         const WellPolymerProperties& props_well10 = well1.getPolymerProperties();
-        BOOST_CHECK_CLOSE(1.5*Metric::PolymerDensity, props_well10.m_polymerConcentration, 0.0001);
+        BOOST_CHECK_CLOSE(1.5*Metric::Concentration, props_well10.m_polymerConcentration, 0.0001);
     }
     {
         const auto& well1 = sched.getWell("INJE01", 1);
         const WellPolymerProperties& props_well11 = well1.getPolymerProperties();
-        BOOST_CHECK_CLOSE(1.0*Metric::PolymerDensity, props_well11.m_polymerConcentration, 0.0001);
+        BOOST_CHECK_CLOSE(1.0*Metric::Concentration, props_well11.m_polymerConcentration, 0.0001);
     }
     {
         const auto& well1 = sched.getWell("INJE01", 2);
         const WellPolymerProperties& props_well12 = well1.getPolymerProperties();
-        BOOST_CHECK_CLOSE(0.1*Metric::PolymerDensity, props_well12.m_polymerConcentration, 0.0001);
+        BOOST_CHECK_CLOSE(0.1*Metric::Concentration, props_well12.m_polymerConcentration, 0.0001);
     }
 
     {
         const auto& well2 = sched.getWell("INJE02", 0);
         BOOST_CHECK( well2.isInjector());
         const WellPolymerProperties& props_well20 = well2.getPolymerProperties();
-        BOOST_CHECK_CLOSE(2.0*Metric::PolymerDensity, props_well20.m_polymerConcentration, 0.0001);
+        BOOST_CHECK_CLOSE(2.0*Metric::Concentration, props_well20.m_polymerConcentration, 0.0001);
     }
     {
         const auto& well2 = sched.getWell("INJE02", 1);
         const WellPolymerProperties& props_well21 = well2.getPolymerProperties();
-        BOOST_CHECK_CLOSE(1.5*Metric::PolymerDensity, props_well21.m_polymerConcentration, 0.0001);
+        BOOST_CHECK_CLOSE(1.5*Metric::Concentration, props_well21.m_polymerConcentration, 0.0001);
     }
     {
         const auto& well2 = sched.getWell("INJE02", 2);
         const WellPolymerProperties& props_well22 = well2.getPolymerProperties();
-        BOOST_CHECK_CLOSE(0.2*Metric::PolymerDensity, props_well22.m_polymerConcentration, 0.0001);
+        BOOST_CHECK_CLOSE(0.2*Metric::Concentration, props_well22.m_polymerConcentration, 0.0001);
     }
     {
         const auto& well3 = sched.getWell("INJE03", 0);
         BOOST_CHECK( well3.isInjector());
         const WellPolymerProperties& props_well30 = well3.getPolymerProperties();
-        BOOST_CHECK_CLOSE(2.5*Metric::PolymerDensity, props_well30.m_polymerConcentration, 0.0001);
+        BOOST_CHECK_CLOSE(2.5*Metric::Concentration, props_well30.m_polymerConcentration, 0.0001);
     }
     {
         const auto& well3 = sched.getWell("INJE03", 1);
         const WellPolymerProperties& props_well31 = well3.getPolymerProperties();
-        BOOST_CHECK_CLOSE(2.0*Metric::PolymerDensity, props_well31.m_polymerConcentration, 0.0001);
+        BOOST_CHECK_CLOSE(2.0*Metric::Concentration, props_well31.m_polymerConcentration, 0.0001);
     }
     {
         const auto& well3 = sched.getWell("INJE03", 2);
         const WellPolymerProperties& props_well32 = well3.getPolymerProperties();
-        BOOST_CHECK_CLOSE(0.3*Metric::PolymerDensity, props_well32.m_polymerConcentration, 0.0001);
+        BOOST_CHECK_CLOSE(0.3*Metric::Concentration, props_well32.m_polymerConcentration, 0.0001);
     }
 }
 

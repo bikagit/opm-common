@@ -228,10 +228,26 @@ namespace {
         this->limit_.mu  = 1.0 /
             (this->limit_.fvf * linInterp(this->p_, recipBmu, this->limit_.p));
 
-        const auto p0 = 1.0*Opm::unit::barsa;
+        // We should pad the table if extrapolating b to one bar
+        // yields a smaller b factor than (typically) 0.1 * b[0].
+        const auto p1bar = 1.0 * Opm::unit::barsa;
+        this->needPadding_
+            = (this->p_[0] > p1bar) && (linInterp(this->p_, b, p1bar) < 1.0 / this->limit_.fvf);
 
-        this->needPadding_ = (this->p_[0] > p0) &&
-            (linInterp(this->p_, b, p0) < 1.0 / this->limit_.fvf);
+        if (!this->needPadding_) {
+            // We should also pad the table if extrapolating b yields
+            // negative b factor at zero pressure.
+            const auto p0bar = 0.0 * Opm::unit::barsa;
+            this->needPadding_ = (this->p_[0] > p0bar) && (linInterp(this->p_, b, p0bar) < 0.0);
+            if (this->needPadding_) {
+                // Set the limit object to contain the extra entry at
+                // zero pressure we want to insert
+                this->limit_.fvf = 1.1 * prop.fvf(0);
+                this->limit_.p   = p0bar;
+                this->limit_.rv  = prop.vaporisedOil(0);
+                this->limit_.mu  = prop.viscosity(0);
+            }
+        }
     }
 
     Opm::SimpleTable LowPressureTablePadding::padding() const
@@ -244,11 +260,11 @@ namespace {
 
         auto padTable = Opm::SimpleTable { std::move(padSchema) };
 
-        const auto p0 = 1.0*Opm::unit::barsa;
+        const auto p1bar = 1.0 * Opm::unit::barsa;
 
         if (this->limit_.p < this->p_[0]) {
-            if (p0 < this->limit_.p) {
-                padTable.addRow({ p0, this->limit_.rv, 1.1*this->limit_.fvf, this->limit_.mu }, "PAD");
+            if (p1bar < this->limit_.p) {
+                padTable.addRow({ p1bar, this->limit_.rv, 1.1 * this->limit_.fvf, this->limit_.mu }, "PAD");
             }
 
             padTable.addRow({ this->limit_.p, this->limit_.rv, this->limit_.fvf, this->limit_.mu }, "PAD");
@@ -1970,19 +1986,19 @@ PcfactTable::getPcMultiplierColumn() const
 
 BiofilmTable::BiofilmTable(const DeckItem& item, const int tableID)
 {
-    m_schema.addColumn(ColumnSchema("DENSITY_BIOFILM", Table::RANDOM, Table::DEFAULT_NONE));
-    m_schema.addColumn(ColumnSchema("MICROBIAL_DEATH_RATE", Table::RANDOM, Table::DEFAULT_NONE));
-    m_schema.addColumn(ColumnSchema("MAXIMUM_GROWTH_RATE", Table::RANDOM, Table::DEFAULT_NONE));
-    m_schema.addColumn(ColumnSchema("HALF_VELOCITY_OXYGEN", Table::RANDOM, Table::DEFAULT_NONE));
-    m_schema.addColumn(ColumnSchema("YIELD_GROWTH_COEFFICIENT", Table::RANDOM, Table::DEFAULT_NONE));
-    m_schema.addColumn(ColumnSchema("OXYGEN_CONSUMPTION_FACTOR", Table::RANDOM, Table::DEFAULT_NONE));
-    m_schema.addColumn(ColumnSchema("MICROBIAL_ATTACHMENT_RATE", Table::RANDOM, Table::DEFAULT_NONE));
-    m_schema.addColumn(ColumnSchema("DETACHMENT_RATE", Table::RANDOM, Table::DEFAULT_NONE));
-    m_schema.addColumn(ColumnSchema("DETACHMENT_EXPONENT", Table::RANDOM, Table::DEFAULT_NONE));
-    m_schema.addColumn(ColumnSchema("MAXIMUM_UREA_UTILIZATION", Table::RANDOM, Table::DEFAULT_NONE));
-    m_schema.addColumn(ColumnSchema("HALF_VELOCITY_UREA", Table::RANDOM, Table::DEFAULT_NONE));
-    m_schema.addColumn(ColumnSchema("DENSITY_CALCITE", Table::RANDOM, Table::DEFAULT_NONE));
-    m_schema.addColumn(ColumnSchema("YIELD_UREA_TO_CALCITE_COEFFICIENT", Table::RANDOM, Table::DEFAULT_NONE));
+    m_schema.addColumn(ColumnSchema("DENSITY_BIOFILM", Table::RANDOM, Table::DEFAULT_CONST));
+    m_schema.addColumn(ColumnSchema("MICROBIAL_DEATH_RATE", Table::RANDOM, Table::DEFAULT_CONST));
+    m_schema.addColumn(ColumnSchema("MAXIMUM_GROWTH_RATE", Table::RANDOM, Table::DEFAULT_CONST));
+    m_schema.addColumn(ColumnSchema("HALF_VELOCITY_OXYGEN", Table::RANDOM, Table::DEFAULT_CONST));
+    m_schema.addColumn(ColumnSchema("YIELD_GROWTH_COEFFICIENT", Table::RANDOM, Table::DEFAULT_CONST));
+    m_schema.addColumn(ColumnSchema("OXYGEN_CONSUMPTION_FACTOR", Table::RANDOM, Table::DEFAULT_CONST));
+    m_schema.addColumn(ColumnSchema("MICROBIAL_ATTACHMENT_RATE", Table::RANDOM, Table::DEFAULT_CONST));
+    m_schema.addColumn(ColumnSchema("DETACHMENT_RATE", Table::RANDOM, Table::DEFAULT_CONST));
+    m_schema.addColumn(ColumnSchema("DETACHMENT_EXPONENT", Table::RANDOM, Table::DEFAULT_CONST));
+    m_schema.addColumn(ColumnSchema("MAXIMUM_UREA_UTILIZATION", Table::RANDOM, Table::DEFAULT_CONST));
+    m_schema.addColumn(ColumnSchema("HALF_VELOCITY_UREA", Table::RANDOM, Table::DEFAULT_CONST));
+    m_schema.addColumn(ColumnSchema("DENSITY_CALCITE", Table::RANDOM, Table::DEFAULT_CONST));
+    m_schema.addColumn(ColumnSchema("YIELD_UREA_TO_CALCITE_COEFFICIENT", Table::RANDOM, Table::DEFAULT_CONST));
 
     SimpleTable::init("BIOFPARA", item, tableID);
 }
@@ -2006,7 +2022,7 @@ BiofilmTable::getMaximumGrowthRate() const
 }
 
 const TableColumn&
-BiofilmTable::getHalfVelocityOxygen() const
+BiofilmTable::getHalfVelocityGrowth() const
 {
     return SimpleTable::getColumn(3);
 }
@@ -2067,9 +2083,9 @@ BiofilmTable::getYieldUreaToCalciteCoefficient() const
 
 DiffMICPTable::DiffMICPTable(const DeckItem& item, const int tableID)
 {
-    m_schema.addColumn(ColumnSchema("MICROBIAL_DIFFUSION", Table::RANDOM, Table::DEFAULT_NONE));
-    m_schema.addColumn(ColumnSchema("OXYGEN_DIFFUSION", Table::RANDOM, Table::DEFAULT_NONE));
-    m_schema.addColumn(ColumnSchema("UREA_DIFFUSION", Table::RANDOM, Table::DEFAULT_NONE));
+    m_schema.addColumn(ColumnSchema("MICROBIAL_DIFFUSION", Table::RANDOM, Table::DEFAULT_CONST));
+    m_schema.addColumn(ColumnSchema("OXYGEN_DIFFUSION", Table::RANDOM, Table::DEFAULT_CONST));
+    m_schema.addColumn(ColumnSchema("UREA_DIFFUSION", Table::RANDOM, Table::DEFAULT_CONST));
 
     SimpleTable::init("DIFFMICP", item, tableID);
 }
@@ -2679,10 +2695,12 @@ namespace
 
     bool all_defaulted(const DeckRecord& record)
     {
-        return std::all_of(record.begin(), record.end(), [](const DeckItem& item) {
-            const auto& vstat = item.getValueStatus();
-            return std::all_of(vstat.begin(), vstat.end(), &value::defaulted);
-        });
+        return std::ranges::all_of(record,
+                                   [](const DeckItem& item)
+                                   {
+                                       const auto& vstat = item.getValueStatus();
+                                       return std::ranges::all_of(vstat, &value::defaulted);
+                                   });
     }
 
 } // Anonymous namespace
@@ -2765,16 +2783,15 @@ DensityTable::DensityTable(const GravityTable& gravity)
     //
     // with SG being the specific gravity of oil relative to pure water.
 
-    std::transform(gravity.begin(), gravity.end(),
-                   std::back_inserter(this->table_),
-        [](const GRAVITYRecord& record)
-    {
-        return DENSITYRecord {
-            (141.5 / (record.oil_api + 131.5)) * default_water_density,
-            record.water_sg * default_water_density,
-            record.gas_sg * default_air_density
-        };
-    });
+    std::ranges::transform(gravity, std::back_inserter(this->table_),
+                           [](const GRAVITYRecord& record)
+                           {
+                               return DENSITYRecord {
+                                   (141.5 / (record.oil_api + 131.5)) * default_water_density,
+                                   record.water_sg * default_water_density,
+                                   record.gas_sg * default_air_density
+                               };
+                           });
 }
 
 // ------------------------------------------------------------------------

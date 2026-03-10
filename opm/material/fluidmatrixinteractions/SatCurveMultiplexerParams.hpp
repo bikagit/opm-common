@@ -35,9 +35,10 @@
 
 #include <opm/material/common/EnsureFinalized.hpp>
 
-#include <type_traits>
 #include <cassert>
 #include <memory>
+#include <stdexcept>
+#include <type_traits>
 
 namespace Opm {
 
@@ -45,6 +46,21 @@ enum class SatCurveMultiplexerApproach {
     PiecewiseLinear,
     LET
 };
+
+template <SatCurveMultiplexerApproach ApproachArg>
+struct SatCurveMultiplexerDispatch
+{
+    static constexpr auto approach = ApproachArg;
+};
+
+// Helper struct to tell if a parameter pack starts with SatCurveMultiplexerDispatch.
+template <typename ...Args>
+struct FrontIsSatCurveMultiplexerDispatch : public std::false_type {};
+template <SatCurveMultiplexerApproach Value, typename ...Args>
+struct FrontIsSatCurveMultiplexerDispatch<SatCurveMultiplexerDispatch<Value>, Args...> : public std::true_type {};
+template <typename ...Args>
+constexpr bool FrontIsSatCurveMultiplexerDispatchV = FrontIsSatCurveMultiplexerDispatch<Args...>::value;
+
 
 /*!
  * \ingroup FluidMatrixInteractions
@@ -168,6 +184,22 @@ public:
             break;
         }
     }
+
+    Scalar SnTrapped([[maybe_unused]] bool maximumTrapping) const
+    {
+        throw std::logic_error("SatCurveMultiplexerParams::SnTrapped() not implemented");
+    }
+
+    Scalar SnStranded([[maybe_unused]] Scalar sg, [[maybe_unused]] Scalar krg) const
+    {
+        throw std::logic_error("SatCurveMultiplexerParams::SnStranded() not implemented");
+    }
+
+    Scalar SwTrapped() const
+    {
+        throw std::logic_error("SatCurveMultiplexerParams::SwTrapped() not implemented");
+    }
+
 
 private:
     template <class ParamT>

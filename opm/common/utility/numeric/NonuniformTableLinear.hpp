@@ -185,10 +185,10 @@ namespace Opm
         } else {
             if (y_values_reversed_.empty()) {
                 y_values_reversed_ = y_values_;
-                std::reverse(y_values_reversed_.begin(), y_values_reversed_.end());
+                std::ranges::reverse(y_values_reversed_);
                 assert(isNondecreasing(y_values_reversed_.begin(), y_values_reversed_.end()));
                 x_values_reversed_ = x_values_;
-                std::reverse(x_values_reversed_.begin(), x_values_reversed_.end());
+                std::ranges::reverse(x_values_reversed_);
             }
             return Opm::linearInterpolation(y_values_reversed_, x_values_reversed_, y);
         }

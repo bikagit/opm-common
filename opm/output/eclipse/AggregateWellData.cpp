@@ -25,6 +25,7 @@
 
 #include <opm/output/data/Wells.hpp>
 
+#include <opm/input/eclipse/EclipseState/Grid/EclipseGrid.hpp>
 #include <opm/input/eclipse/Schedule/Action/ActionAST.hpp>
 #include <opm/input/eclipse/Schedule/Action/ActionContext.hpp>
 #include <opm/input/eclipse/Schedule/Action/ActionResult.hpp>
@@ -38,6 +39,7 @@
 #include <opm/input/eclipse/Schedule/SummaryState.hpp>
 #include <opm/input/eclipse/Schedule/VFPProdTable.hpp>
 #include <opm/input/eclipse/Schedule/Well/WDFAC.hpp>
+#include <opm/input/eclipse/Schedule/Well/Connection.hpp>
 #include <opm/input/eclipse/Schedule/Well/Well.hpp>
 #include <opm/input/eclipse/Schedule/Well/WellConnections.hpp>
 #include <opm/input/eclipse/Schedule/Well/WellEconProductionLimits.hpp>
@@ -61,11 +63,13 @@
 #include <cstddef>
 #include <cstring>
 #include <exception>
-#include <iterator>
 #include <iostream>
+#include <iterator>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <tuple>
+#include <vector>
 
 #include <fmt/format.h>
 
@@ -110,6 +114,22 @@ namespace {
         for (const auto& wname : wells) {
             const auto& well = sched.getWell(wname, simStep);
             wellOp(well, well.seqIndex());
+        }
+    }
+
+    template <typename WellOp>
+    void wellLoop(const std::vector<std::string>& wells,
+                  const Opm::Schedule&            sched,
+                  const std::size_t               simStep,
+                  const std::string&              lgrTag,
+                  WellOp&&                        wellOp)
+    {
+        for (const auto& wname : wells) {
+            const auto& well = sched.getWell(wname, simStep);
+            if (well.get_lgr_well_tag().value_or("") != lgrTag) {
+                continue; // skip wells not in the specified LGR
+            }
+            wellOp(well, well.seqIndexLGR());
         }
     }
 
@@ -344,6 +364,23 @@ namespace {
             iWell[Ix::WTestRemaining] = wtest_rst->num_test;
         }
 
+        template <typename IWellArray>
+        void assignLGRindexGlobalGrid(const Opm::Well&           well,
+                                      const Opm::EclipseGrid&    grid,
+                                      IWellArray&                iWell)
+        {
+             using Ix = VI::IWell::index;
+             iWell[Ix::LGRIndex] = grid.get_lgr_cell_index(well.get_lgr_well_tag().value()) + 1;
+        }
+
+        template <typename IWellArray>
+        void assignLGRindexLGRGrid(const Opm::Well&           well,
+                                   IWellArray&                iWell)
+        {
+             using Ix = VI::IWell::index;
+             iWell[Ix::LGRIndex] = well.seqIndexAllLGR() + 1;
+        }
+
         int wgrupConGuideratePhase(const Opm::Well::GuideRateTarget grTarget)
         {
             using GRTarget = Opm::Well::GuideRateTarget;
@@ -466,6 +503,77 @@ namespace {
             iWell[Ix::EconLimitQuantity] = econLimitQuantity(limits.quantityLimit());
         }
 
+        template <typename IWellArray>
+        void staticContribWellHead(const Opm::Well& well,
+                                   IWellArray&      iWell)
+        {
+            using Ix = VI::IWell::index;
+
+            auto isRegularConn = [](const Opm::Connection& conn)
+            { return conn.kind() != Opm::Connection::CTFKind::DynamicFracturing; };
+
+            const auto& conns = well.getConnections();
+
+            iWell[Ix::NConn]  = std::ranges::count_if(conns, isRegularConn);
+            iWell[Ix::IHead]  = well.getHeadI() + 1;
+            iWell[Ix::JHead]  = well.getHeadJ() + 1;
+            iWell[Ix::FirstK] = 0;
+            iWell[Ix::LastK]  = 0;
+
+            if (!well.isMultiSegment() && (iWell[Ix::NConn] != 0)) {
+                const auto firstPos = std::ranges::find_if(conns, isRegularConn);
+
+                const auto lastPos  = std::find_if(std::make_reverse_iterator(conns.end()),
+                                                   std::make_reverse_iterator(conns.begin()),
+                                                   isRegularConn);
+
+                assert (firstPos != conns.end());
+                assert (lastPos  != std::make_reverse_iterator(conns.begin()));
+
+                iWell[Ix::FirstK] = firstPos->getK() + 1;
+                iWell[Ix::LastK]  = lastPos ->getK() + 1;
+            }
+        }
+
+        template <typename IWellArray>
+        void staticContribWellHeadLGR(const Opm::Well&        well,
+                                      const Opm::EclipseGrid& grid,
+                                      IWellArray&             iWell)
+        {
+            using Ix = VI::IWell::index;
+
+            staticContribWellHead(well, iWell);
+
+            const auto& lgrTag = well.get_lgr_well_tag().value_or("");
+
+            auto& I = iWell[Ix::IHead]; // One-based index.
+            auto& J = iWell[Ix::JHead]; // One-based index.
+
+            auto firstK = iWell[Ix::FirstK]; // One-based index.  Zero for MSW.
+            auto lastK  = iWell[Ix::LastK];  // One-based index.  Zero for MSW.
+
+            if (! well.isMultiSegment()) {
+                // Use zero-based lookup indices for non-MS wells.
+                --firstK;
+                --lastK;
+            }
+
+            // Subtract one for zero-based lookup indices.
+            const auto topIJK = grid
+                .getLGR_fatherIJK(I - 1, J - 1, firstK, lgrTag);
+
+            if (! well.isMultiSegment()) {
+                const auto botIJK = grid
+                    .getLGR_fatherIJK(I - 1, J - 1, lastK, lgrTag);
+
+                iWell[Ix::FirstK] = topIJK[2] + 1;
+                iWell[Ix::LastK]  = botIJK[2] + 1;
+            }
+
+            I = topIJK[0] + 1;
+            J = topIJK[1] + 1;
+        }
+
         template <class IWellArray>
         void staticContrib(const Opm::Well&                well,
                            const Opm::GasLiftOpt&          glo,
@@ -473,35 +581,29 @@ namespace {
                            const Opm::WellTestState&       wtest_state,
                            const Opm::SummaryState&        st,
                            const std::size_t               msWellID,
-                           const std::map <const std::string, size_t>&  GroupMapNameInd,
-                           IWellArray&                     iWell)
+                           const std::map<const std::string, size_t>& GroupMapNameInd,
+                           IWellArray&                     iWell,
+                           const std::optional<std::reference_wrapper<const Opm::EclipseGrid>>&
+                                                           grid = std::nullopt,
+                           const bool                      global_grid = true)
         {
             using Ix = VI::IWell::index;
 
-            iWell[Ix::IHead] = well.getHeadI() + 1;
-            iWell[Ix::JHead] = well.getHeadJ() + 1;
-            iWell[Ix::Status] = wellStatus(well.getStatus());
-
-            // Connections
-            {
-                const auto& conn = well.getConnections();
-
-                iWell[Ix::NConn]  = static_cast<int>(conn.size());
-
-                if (well.isMultiSegment()) {
-                    // Set top and bottom connections to zero for multi
-                    // segment wells
-                    iWell[Ix::FirstK] = 0;
-                    iWell[Ix::LastK]  = 0;
-                }
-                else {
-                    iWell[Ix::FirstK] = (iWell[Ix::NConn] == 0)
-                        ? 0 : conn.get(0).getK() + 1;
-
-                    iWell[Ix::LastK] = (iWell[Ix::NConn] == 0)
-                        ? 0 : conn.get(conn.size() - 1).getK() + 1;
-                }
+            if (!well.is_lgr_well() || !global_grid) {
+                // Global well in global grid or LGR well in local grid.
+                staticContribWellHead(well, iWell);
             }
+            else if (grid.has_value()) {
+                // LGR well in global grid.
+                staticContribWellHeadLGR(well, *grid, iWell);
+            }
+            else {
+                throw std::invalid_argument {
+                    "Grid is expected for LGR well, but no grid provided"
+                };
+            }
+
+            iWell[Ix::Status] = wellStatus(well.getStatus());
 
             iWell[Ix::Group] =
                 groupIndex(trim(well.groupName()), GroupMapNameInd);
@@ -536,6 +638,15 @@ namespace {
             assignTHPLookupOptions(well, iWell);
             assignEconomicLimits(well, iWell);
             assignWellTest(well.name(), wtest_config, wtest_state, iWell);
+
+            if (grid.has_value() && well.is_lgr_well()) {
+                if (global_grid) {
+                    assignLGRindexGlobalGrid(well, *grid, iWell);
+                }
+                else {
+                    assignLGRindexLGRGrid(well, iWell);
+                }
+            }
         }
 
         template <class IWellArray>
@@ -556,12 +667,9 @@ namespace {
             using Value = VI::IWell::Value::Status;
 
             const auto any_flowing_conn =
-                std::any_of(std::begin(xw.connections),
-                            std::end  (xw.connections),
-                    [](const Opm::data::Connection& c)
-                {
-                    return c.rates.flowing();
-                });
+                std::ranges::any_of(xw.connections,
+                                    [](const Opm::data::Connection& c)
+                                    { return c.rates.flowing(); });
 
             iWell[Ix::item9] = any_flowing_conn
                 ? 0 : -1;
@@ -584,12 +692,9 @@ namespace {
             }
 
             const auto any_flowing_conn =
-                std::any_of(std::begin(xw.connections),
-                            std::end  (xw.connections),
-                    [](const Opm::data::Connection& c)
-                {
-                    return c.rates.flowing();
-                });
+                std::ranges::any_of(xw.connections,
+                                    [](const Opm::data::Connection& c)
+                                    { return c.rates.flowing(); });
 
             iWell[Ix::item9] = any_flowing_conn
                 ? iWell[Ix::ActWCtrl] : -1;
@@ -1080,14 +1185,22 @@ namespace {
         void assignTracerData(const Opm::TracerConfig& tracers,
                               const Opm::SummaryState& smry,
                               const std::string&       wname,
-                              SWellArray&              sWell)
+                              SWellArray&              sWell,
+                              const bool               isTemp = false)
         {
             auto output_index = static_cast<std::size_t>(VI::SWell::index::TracerOffset);
+            // Temperature tracer is first, if present
+            if (isTemp) sWell[output_index++] = smry.get_well_var(wname, "WTICHEA", 0.0);
 
             for (const auto& tracer : tracers) {
                 if (tracer.phase == Opm::Phase::WATER) {
                     sWell[output_index++] =
                         smry.get_well_var(wname, fmt::format("WTIC{}", tracer.name), 0.0);
+                } else {
+                    sWell[output_index++] =
+                        smry.get_well_var(wname, fmt::format("WTICF{}", tracer.name), 0.0);
+                    sWell[output_index++] =
+                        smry.get_well_var(wname, fmt::format("WTICS{}", tracer.name), 0.0);
                 }
             }
         }
@@ -1133,7 +1246,8 @@ namespace {
             assignDFactorCorrelation(well, units, sWell);
             assignEconomicLimits(well, swprop, sWell);
             assignWellTest(well.name(), sched, wtest_state, sim_step, swprop, sWell);
-            assignTracerData(tracers, smry, well.name(), sWell);
+
+            assignTracerData(tracers, smry, well.name(), sWell, sched.runspec().temp());
             assignBhpVfpAdjustment(well, swprop, sWell);
         }
     } // SWell
@@ -1333,75 +1447,156 @@ namespace {
             xWell[Ix::PrimGuideRate] = xWell[Ix::PrimGuideRate_2] = -get("WOIGR");
         }
 
+        template <typename XWellArray,
+                typename TempCallback,
+                typename WaterCallback,
+                typename HCCallback>
+        std::size_t tracerLoop(XWellArray& xWell,
+                            const Opm::TracerConfig& tracers,
+                            TempCallback&& processTemperature,
+                            WaterCallback&& processWaterTracer,
+                            HCCallback&& processHCTracer)
+        {
+            auto ix = std::size_t {0};
+
+            ix += processTemperature(&xWell[ix]);
+
+            for (const auto& tracer : tracers) {
+                if (tracer.phase == Opm::Phase::WATER) {
+                    ix += processWaterTracer(tracer, &xWell[ix]);
+                }
+                else {
+                    ix += processHCTracer(tracer, &xWell[ix]);
+                }
+            }
+
+            return ix;
+        }
+
+        template <typename XWellArray>
+        std::size_t assignTracerQuantity(const bool isTemp,
+                                        const double sign,
+                                        const std::string& quantityPrefix,
+                                        const std::string& wellName,
+                                        const Opm::TracerConfig& tracers,
+                                        const Opm::SummaryState& smry,
+                                        XWellArray& xWell)
+        {
+            auto processWaterTracer = [&smry, sign, &quantityPrefix, &wellName](const auto& tracer, auto* xwel)
+            {
+                xwel[0] = sign * smry.get_well_var(wellName, quantityPrefix + tracer.name, 0.0);
+                return std::size_t{1};
+            };
+
+            auto processHCTracer = [&smry, sign, quantityPrefix, &wellName](const auto& tracer, auto* xwel)
+            {
+                xwel[0] = sign * smry.get_well_var(wellName, quantityPrefix + 'F' + tracer.name, 0.0);
+                xwel[1] = sign * smry.get_well_var(wellName, quantityPrefix + 'S' + tracer.name, 0.0);
+                return std::size_t{2};
+            };
+
+            if (! isTemp) {
+                return tracerLoop(xWell, tracers,
+                                [](auto*) { return std::size_t{0}; },
+                                processWaterTracer, processHCTracer);
+            }
+
+            const auto tempQuant = sign * smry.get_well_var(wellName, quantityPrefix + "HEA", 0.0);
+            auto processTemperature = [tempQuant](auto* xwell)
+            {
+                xwell[0] = tempQuant;
+                return std::size_t {1};
+            };
+
+            return tracerLoop(xWell, tracers, processTemperature, processWaterTracer, processHCTracer);
+        }
+
+        template <typename XWellArray>
+        std::size_t assignTracerRates(const bool isInjector,
+                                    const bool isTemp,
+                                    const std::string& wellName,
+                                    const Opm::TracerConfig& tracers,
+                                    const Opm::SummaryState& smry,
+                                    XWellArray xWell)
+        {
+            const auto sign = isInjector ? -1.0 : 1.0;
+            const auto prefix = isInjector ? std::string { "WTIR" } : std::string { "WTPR" };
+
+            return assignTracerQuantity(isTemp, sign, prefix, wellName, tracers, smry, xWell);
+        }
+
+        template <typename XWellArray>
+        std::size_t assignTracerCumulatives(const bool isInjection,
+                                            const bool isTemp,
+                                            const std::string& wellName,
+                                            const Opm::TracerConfig& tracers,
+                                            const Opm::SummaryState& smry,
+                                            XWellArray xWell)
+        {
+            const auto sign = 1.0; // Cumulatives are always positive;
+            const auto prefix = isInjection ? std::string { "WTIT" } : std::string { "WTPT" };
+
+            return assignTracerQuantity(isTemp, sign, prefix, wellName, tracers, smry, xWell);
+        }
+
+        template <typename XWellArray>
+        std::size_t assignTracerConcentration(const bool isInjection,
+                                            const bool isTemp,
+                                            const std::string& wellName,
+                                            const Opm::TracerConfig& tracers,
+                                            const Opm::SummaryState& smry,
+                                            XWellArray xWell)
+        {
+            const auto sign = 1.0; // Concentrations are always positive;
+            const auto prefix = isInjection ? std::string { "WTIC" } : std::string { "WTPC" };
+
+            return assignTracerQuantity(isTemp, sign, prefix, wellName, tracers, smry, xWell);
+        }
+
+
         template <class XWellArray>
         void assignTracerData(const Opm::TracerConfig& tracers,
-                              const Opm::Tracers& tracer_dims,
                               const Opm::SummaryState& smry,
                               const Opm::Well& well,
-                              XWellArray& xWell)
+                              XWellArray& xWell,
+                              const bool isTemp)
         {
-            if (tracers.empty() || tracer_dims.water_tracers() == 0)
+            if (tracers.empty() && !isTemp)
                 return;
 
             using Ix = ::Opm::RestartIO::Helpers::VectorItems::XWell::index;
             std::fill(xWell.begin() + Ix::TracerOffset, xWell.end(), 0);
 
+            // For each vector in rate, prod_total, inj_total, inj_conc, prod_conc:
+            //    TEMP (if present), then each tracer in definition order (TRACER) [free then solution conc for HC tracers]
 
-            for (std::size_t tracer_index=0; tracer_index < tracers.size(); tracer_index++) {
-                const auto& tracer = tracers[tracer_index];
-                std::size_t output_index = Ix::TracerOffset + tracer_index;
-                if (well.isInjector()) {
-                    const auto& wtir = smry.get_well_var(well.name(), fmt::format("WTIR{}", tracer.name), 0);
-                    xWell[output_index] = -wtir;
-                } else {
-                    const auto& wtpr = smry.get_well_var(well.name(), fmt::format("WTPR{}", tracer.name), 0);
-                    xWell[output_index] = wtpr;
-                }
+            const auto& wname = well.name();
+            auto output_index = static_cast<std::size_t>(Ix::TracerOffset);
+
+            // Flow rates.
+            output_index += assignTracerRates(well.isInjector(), isTemp, wname, tracers, smry, &xWell[output_index]);
+
+            // Cumulative production volume.
+            output_index += assignTracerCumulatives(/* injection = */ false, isTemp, wname, tracers, smry, &xWell[output_index]);
+
+            // Cumulative injection volume.
+            output_index += assignTracerCumulatives(/* injection = */ true, isTemp, wname, tracers, smry, &xWell[output_index]);
+
+            // Tracer concentrations (twice)
+            for (auto i = 0; i < 2; ++i) {
+                output_index += assignTracerConcentration(well.isInjector(), isTemp, wname, tracers, smry, &xWell[output_index]);
             }
 
 
-            for (std::size_t tracer_index=0; tracer_index < tracers.size(); tracer_index++) {
-                const auto& tracer = tracers[tracer_index];
-                std::size_t output_index = Ix::TracerOffset + tracer_dims.water_tracers() + tracer_index;
-                if (well.isProducer()) {
-                    const auto& wtpr = smry.get_well_var(well.name(), fmt::format("WTPT{}", tracer.name), 0);
-                    xWell[output_index] = wtpr;
-                }
-            }
-
-            for (std::size_t tracer_index=0; tracer_index < tracers.size(); tracer_index++) {
-                const auto& tracer = tracers[tracer_index];
-                std::size_t output_index = Ix::TracerOffset + 2*tracer_dims.water_tracers() + tracer_index;
-                if (well.isInjector()) {
-                    const auto& wtir = smry.get_well_var(well.name(), fmt::format("WTIT{}", tracer.name), 0);
-                    xWell[output_index] = wtir;
-                }
-            }
-
-            for (std::size_t n=0; n < 2; n++) {
-                for (std::size_t tracer_index=0; tracer_index < tracers.size(); tracer_index++) {
-                    const auto& tracer = tracers[tracer_index];
-                    std::size_t output_index = Ix::TracerOffset + (3 + n)*tracer_dims.water_tracers() + tracer_index;
-                    const auto& wtic = smry.get_well_var(well.name(), fmt::format("WTIC{}", tracer.name), 0);
-                    const auto& wtpc = smry.get_well_var(well.name(), fmt::format("WTPC{}", tracer.name), 0);
-
-                    if (std::abs(wtic) > 0)
-                        xWell[output_index] = wtic;
-                    else
-                        xWell[output_index] = wtpc;
-                }
-            }
-
-            std::size_t output_index = Ix::TracerOffset + 5*tracer_dims.water_tracers();
-            xWell[output_index] = 0;
-            xWell[output_index + 1] = 0;
+            xWell[output_index++] = 0;
+            xWell[output_index++] = 0;
         }
 
         template <class XWellArray>
         void dynamicContrib(const ::Opm::Well&         well,
                             const Opm::TracerConfig&   tracers,
-                            const Opm::Tracers&        tracer_dims,
                             const ::Opm::SummaryState& smry,
+                            const bool                 isTemp,
                             XWellArray&                xWell)
         {
             if (well.isProducer()) {
@@ -1431,7 +1626,7 @@ namespace {
                 }
             }
             assignCumulatives(well.name(), smry, xWell);
-            assignTracerData(tracers, tracer_dims, smry, well, xWell);
+            assignTracerData(tracers, smry, well, xWell, isTemp);
         }
     } // XWell
 
@@ -1479,6 +1674,28 @@ namespace {
         }
 
     } // ZWell
+
+    namespace LGWell {
+        Opm::RestartIO::Helpers::WindowedArray<int>
+        allocate(const std::vector<int>& inteHead)
+        {
+            using WV = Opm::RestartIO::Helpers::WindowedArray<int>;
+
+            return WV {
+                WV::NumWindows{ numWells(inteHead) },
+                WV::WindowSize{ 1 }
+            };
+        }
+
+        template <class LGWellArray>
+        void staticContrib(const Opm::Well& well,
+                           LGWellArray&     lgWell)
+        {
+            using Ix = VI::LGWell::index;
+            lgWell[Ix::WellRef] = well.seqIndexAllLGR() + 1;
+        }
+    } // LGWell
+
 } // Anonymous
 
 // =====================================================================
@@ -1489,6 +1706,7 @@ AggregateWellData(const std::vector<int>& inteHead)
     , sWell_ (SWell::allocate(inteHead))
     , xWell_ (XWell::allocate(inteHead))
     , zWell_ (ZWell::allocate(inteHead))
+    , lgWell_(LGWell::allocate(inteHead))
     , nWGMax_(maxNumGroups(inteHead))
 {}
 
@@ -1564,6 +1782,156 @@ captureDeclaredWellData(const Schedule&             sched,
 
 void
 Opm::RestartIO::Helpers::AggregateWellData::
+captureDeclaredWellData(const Schedule&             sched,
+                        const EclipseGrid&          grid,
+                        const TracerConfig&         tracers,
+                        const std::size_t           sim_step,
+                        const ::Opm::Action::State& action_state,
+                        const Opm::WellTestState&   wtest_state,
+                        const ::Opm::SummaryState&  smry,
+                        const std::vector<int>&     inteHead)
+{
+    const auto& wells = sched.wellNames(sim_step);
+    const auto& step_glo = sched.glo(sim_step);
+
+    // Static contributions to IWEL array.
+    {
+        const auto groupMapNameIndex =
+            IWell::currentGroupMapNameIndex(sched, sim_step, inteHead);
+
+        auto msWellID = std::size_t{0};
+
+        wellLoop(wells, sched, sim_step,
+                 [&groupMapNameIndex, &msWellID,
+                  &step_glo, &wtest_state, &smry,
+                  &sched, &grid, &sim_step, this]
+                 (const Well& well, const std::size_t wellID) -> void
+        {
+            const auto& wtest_config = sched[sim_step].wtest_config();
+
+            msWellID += well.isMultiSegment();  // 1-based index.
+            auto iw   = this->iWell_[wellID];
+
+            IWell::staticContrib(well, step_glo, wtest_config, wtest_state,
+                                 smry, msWellID, groupMapNameIndex, iw, grid);
+        });
+    }
+
+    // Static contributions to SWEL array.
+    wellLoop(wells, sched, sim_step, [&step_glo, &sim_step, &sched,
+                                      &tracers, &wtest_state, &smry, this]
+             (const Well& well, const std::size_t wellID) -> void
+    {
+        auto sw = this->sWell_[wellID];
+
+        SWell::staticContrib(well, step_glo, sim_step, sched,
+                             tracers, wtest_state, smry, sw);
+    });
+
+    // Static contributions to XWEL array.
+    wellLoop(wells, sched, sim_step, [&sched, &smry, this]
+        (const Well& well, const std::size_t wellID) -> void
+    {
+        auto xw = this->xWell_[wellID];
+
+        XWell::staticContrib(well, smry,sched.getUnits(), xw);
+    });
+
+    // Static contributions to ZWEL array.
+    wellLoop(wells, sched, sim_step, [&sim_step, &action_state, &sched, this]
+             (const Well& well, const std::size_t wellID) -> void
+    {
+        auto zw = this->zWell_[wellID];
+
+        ZWell::staticContrib(well, sched[sim_step].actions(), action_state, zw);
+    });
+}
+
+// ---------------------------------------------------------------------
+
+void
+Opm::RestartIO::Helpers::AggregateWellData::
+captureDeclaredWellDataLGR(const Schedule&             sched,
+                           const EclipseGrid&          grid,
+                           const TracerConfig&         tracers,
+                           const std::size_t           sim_step,
+                           const ::Opm::Action::State& action_state,
+                           const Opm::WellTestState&   wtest_state,
+                           const ::Opm::SummaryState&  smry,
+                           const std::vector<int>&     inteHead,
+                           const std::string&          lgr_tag)
+{
+    const auto& wells = sched.wellNames(sim_step);
+    const auto& step_glo = sched.glo(sim_step);
+
+    // Static contributions to IWEL array.
+    {
+        const auto groupMapNameIndex =
+            IWell::currentGroupMapNameIndex(sched, sim_step, inteHead);
+
+        auto msWellID = std::size_t{0};
+
+        wellLoop(wells, sched,  sim_step, lgr_tag,
+                 [&groupMapNameIndex, &msWellID,
+                  &step_glo, &wtest_state, &smry,
+                  &sched, &grid, &sim_step, this]
+                 (const Well& well, const std::size_t wellID) -> void
+        {
+            const auto& wtest_config = sched[sim_step].wtest_config();
+
+            msWellID += well.isMultiSegment();  // 1-based index.
+            auto iw   = this->iWell_[wellID];
+
+            IWell::staticContrib(well, step_glo, wtest_config, wtest_state,
+                                 smry, msWellID, groupMapNameIndex, iw, grid, false);
+        });
+    }
+
+    // Static contributions to SWEL array.
+    wellLoop(wells, sched, sim_step, lgr_tag, [&step_glo, &sim_step, &sched,
+                                      &tracers, &wtest_state, &smry, this]
+             (const Well& well, const std::size_t wellID) -> void
+    {
+        auto sw = this->sWell_[wellID];
+
+        SWell::staticContrib(well, step_glo, sim_step, sched,
+                             tracers, wtest_state, smry, sw);
+    } );
+
+    // Static contributions to XWEL array.
+    wellLoop(wells, sched, sim_step, lgr_tag, [&sched, &smry, this]
+        (const Well& well, const std::size_t wellID) -> void
+    {
+        auto xw = this->xWell_[wellID];
+
+        XWell::staticContrib(well, smry,sched.getUnits(), xw);
+    });
+
+    // Static contributions to ZWEL array.
+    wellLoop(wells, sched, sim_step, lgr_tag, [&sim_step, &action_state, &sched, this]
+             (const Well& well, const std::size_t wellID) -> void
+    {
+        auto zw = this->zWell_[wellID];
+
+        ZWell::staticContrib(well, sched[sim_step].actions(), action_state, zw);
+    });
+
+    // Static contributions to LGWELS array.
+    wellLoop(wells, sched, sim_step, lgr_tag, [this]
+        (const Well& well, const std::size_t wellID) -> void
+    {
+        auto lgwell = this->lgWell_[wellID];
+
+        LGWell::staticContrib(well, lgwell);
+    });
+
+
+}
+
+// ---------------------------------------------------------------------
+
+void
+Opm::RestartIO::Helpers::AggregateWellData::
 captureDynamicWellData(const Opm::Schedule&       sched,
                        const TracerConfig&        tracers,
                        const std::size_t          sim_step,
@@ -1596,6 +1964,46 @@ captureDynamicWellData(const Opm::Schedule&       sched,
     {
         auto xwell = this->xWell_[wellID];
 
-        XWell::dynamicContrib(well, tracers, sched.runspec().tracers(), smry, xwell);
+        XWell::dynamicContrib(well, tracers, smry, sched.runspec().temp(), xwell);
+    });
+}
+
+
+void
+Opm::RestartIO::Helpers::AggregateWellData::
+captureDynamicWellDataLGR(const Opm::Schedule&       sched,
+                          const TracerConfig&        tracers,
+                          const std::size_t          sim_step,
+                          const Opm::data::Wells&    xw,
+                          const ::Opm::SummaryState& smry,
+                          const std::string&         lgr_tag)
+{
+    const auto& wells = sched.wellNames(sim_step);
+
+    // Dynamic contributions to IWEL array.
+    wellLoop(wells, sched, sim_step, lgr_tag,  [this, &xw]
+        (const Well& well, const std::size_t wellID) -> void
+    {
+        auto iWell = this->iWell_[wellID];
+
+        auto i = xw.find(well.name());
+        if ((i == std::end(xw)) || (i->second.dynamicStatus == Opm::Well::Status::SHUT)) {
+            IWell::dynamicContribShut(iWell);
+        }
+        else if (i->second.dynamicStatus == Opm::Well::Status::STOP) {
+            IWell::dynamicContribStop(i->second, iWell);
+        }
+        else {
+            IWell::dynamicContribOpen(well, i->second, iWell);
+        }
+    });
+
+    // Dynamic contributions to XWEL array.
+    wellLoop(wells, sched, sim_step, lgr_tag, [this, &sched, &tracers, &smry]
+        (const Well& well, const std::size_t wellID) -> void
+    {
+        auto xwell = this->xWell_[wellID];
+
+        XWell::dynamicContrib(well, tracers, smry, sched.runspec().temp(), xwell);
     });
 }

@@ -50,7 +50,6 @@ BrineH2Pvt(const std::vector<Scalar>& salinity,
     }
 }
 
-#if HAVE_ECL_INPUT
 template<class Scalar>
 void BrineH2Pvt<Scalar>::
 initFromState(const EclipseState& eclState, const Schedule&)
@@ -79,7 +78,7 @@ initFromState(const EclipseState& eclState, const Schedule&)
     }
     OpmLog::info("H2STORE/HSOL is enabled.");
     // enable h2 dissolution into brine for h2sol case with DISGASW
-    // or h2store case with DISGASW or DISGAS    
+    // or h2store case with DISGASW or DISGAS
     bool h2sol_dis = h2sol && eclState.getSimulationConfig().hasDISGASW();
     bool h2storage_dis = eclState.runspec().h2Storage() && (eclState.getSimulationConfig().hasDISGASW() || eclState.getSimulationConfig().hasDISGAS());
     setEnableDissolvedGas(h2sol_dis || h2storage_dis);
@@ -112,7 +111,6 @@ initFromState(const EclipseState& eclState, const Schedule&)
                              usys.from_si(Meas::pressure , P_ref), usys.name(Meas::pressure),
                              usys.from_si(Meas::temperature , T_ref), usys.name(Meas::temperature)));
 }
-#endif
 
 template<class Scalar>
 void BrineH2Pvt<Scalar>::

@@ -24,6 +24,7 @@
 #include <opm/input/eclipse/Schedule/Action/ActionResult.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <set>
 #include <string>
@@ -45,7 +46,7 @@ class ScheduleGrid;
 class ScheduleState;
 struct ScheduleStatic;
 struct SimulatorUpdate;
-enum class WellStatus;
+enum class WellStatus : std::uint8_t;
 class WelSegsSet;
 }
 
@@ -53,8 +54,21 @@ namespace Opm {
 class HandlerContext
 {
 public:
-    /// \param welsegs_wells All wells with a WELSEGS entry for checks.
-    /// \param compegs_wells All wells with a COMPSEGS entry for checks.
+    /// \param schedule Schedule to initialize
+    /// \param block_ Block in schedule to use
+    /// \param keyword_ Keyword to use
+    /// \param grid_ Grid schedule to use
+    /// \param currentStep_ Current report step
+    /// \param matches_ Matching entities
+    /// \param action_mode_ True if we are parsing an ACTION
+    /// \param parseContext_ Context for the parser
+    /// \param errors_ Error handler to use
+    /// \param sim_update_ Simulator update structure to use
+    /// \param target_wellpi_ Well production indices to target
+    /// \param wpimult_global_factor_ Global well production index multipliers
+    /// \param welsegs_wells_ All wells with a WELSEGS entry for checks.
+    /// \param compsegs_wells_ All wells with a COMPSEGS entry for checks.
+    /// \param comptraj_wells_ All wells with a COMPTRAJ entry for checks.
     HandlerContext(Schedule& schedule,
                    const ScheduleBlock& block_,
                    const DeckKeyword& keyword_,
@@ -68,7 +82,8 @@ public:
                    const std::unordered_map<std::string, double>* target_wellpi_,
                    std::unordered_map<std::string, double>& wpimult_global_factor_,
                    WelSegsSet* welsegs_wells_,
-                   std::set<std::string>* compsegs_wells_)
+                   std::set<std::string>* compsegs_wells_,
+                   std::set<std::string>* comptraj_wells_)
         : block(block_)
         , keyword(keyword_)
         , currentStep(currentStep_)
@@ -81,6 +96,7 @@ public:
         , target_wellpi(target_wellpi_)
         , welsegs_wells(welsegs_wells_)
         , compsegs_wells(compsegs_wells_)
+        , comptraj_wells(comptraj_wells_)
         , sim_update(sim_update_)
         , schedule_(schedule)
     {}
@@ -108,6 +124,9 @@ public:
 
     /// \brief Mark that the well occured in a COMPSEGS keyword.
     void compsegs_handled(const std::string& well_name);
+
+    /// \brief Mark that the well occured in a COMPTRAJ keyword.
+    void comptraj_handled(const std::string& well_name);
 
     //! \brief Set exit code.
     void setExitCode(int code);
@@ -151,6 +170,25 @@ public:
     //! \brief Obtain well group names from a pattern.
     std::vector<std::string> groupNames(const std::string& pattern) const;
 
+    //! \brief Whether or not any existing well matches a name pattern.
+    //!
+    //! If the pattern is a well list or a well list template, then the
+    //! predicate will check if any well lists matching the pattern exists
+    //! and, if so, whether the corresponding well list is non-empty.
+    //!
+    //! \param[in] pattern Well name, well name template, well list, or well
+    //! list template.
+    //!
+    //! \return Whether or not any existing well matches \p pattern.
+    bool hasWell(const std::string& pattern) const;
+
+    //! \brief Whether or not any existing group matches a name pattern.
+    //!
+    //! \param[in] pattern Group name or group name root.
+    //!
+    //! \return Whether or not any existing group matches \p pattern.
+    bool hasGroup(const std::string& pattern) const;
+
     //! \brief Obtain well names from a pattern.
     //! \details Throws if no wells match the pattern and pattern is not a WLIST.
     std::vector<std::string>
@@ -176,6 +214,7 @@ private:
     const std::unordered_map<std::string, double>* target_wellpi{nullptr};
     WelSegsSet* welsegs_wells{nullptr};
     std::set<std::string>* compsegs_wells{nullptr};
+    std::set<std::string>* comptraj_wells{nullptr};
     SimulatorUpdate* sim_update{nullptr};
     Schedule& schedule_;
 };

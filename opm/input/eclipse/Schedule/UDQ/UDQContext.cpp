@@ -227,10 +227,9 @@ namespace Opm {
         const auto& allGroups = this->group_order_.names();
 
         rgroups.reserve(allGroups.size());
-        std::copy_if(allGroups.begin(), allGroups.end(),
-                     std::back_inserter(rgroups),
-                     [](const std::string& gname)
-                     { return gname != "FIELD"; });
+        std::ranges::copy_if(allGroups, std::back_inserter(rgroups),
+                             [](const std::string& gname)
+                             { return gname != "FIELD"; });
 
         return rgroups;
     }

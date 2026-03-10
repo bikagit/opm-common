@@ -201,7 +201,7 @@ void check_axis(const std::vector<double>& axis) {
     if (axis.size() == 0)
         throw std::invalid_argument("Empty axis");
 
-    if (!std::is_sorted(axis.begin(), axis.end()))
+    if (!std::ranges::is_sorted(axis))
         throw std::invalid_argument("Axis is not sorted");
 }
 

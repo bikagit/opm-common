@@ -1,12 +1,39 @@
+/*
+  Copyright 2019-2025 Equinor ASA
+
+  This file is part of the Open Porous Media project (OPM).
+
+  OPM is free software: you can redistribute it and/or modify it under the
+  terms of the GNU General Public License as published by the Free Software
+  Foundation, either version 3 of the License, or (at your option) any later
+  version.
+
+  OPM is distributed in the hope that it will be useful, but WITHOUT ANY
+  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+  FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+  details.
+
+  You should have received a copy of the GNU General Public License along
+  with OPM.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include <config.h>
+
+#include <opm/common/OpmLog/OpmLog.hpp>
+
 #include <opm/io/eclipse/ERst.hpp>
 #include <opm/io/eclipse/EclFile.hpp>
 #include <opm/io/eclipse/EclOutput.hpp>
 
+#include <opm/output/eclipse/VectorItems/intehead.hpp>
+
 #include <cctype>
 #include <chrono>
+#include <ctime>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <string_view>
 #include <type_traits>
 
 #include <getopt.h>
@@ -121,6 +148,35 @@ void writeArrayList(std::vector<EclEntry>& arrayList, ERst file1, int reportStep
     }
 }
 
+void listReportSteps(const std::string& filename)
+{
+    using Ix = Opm::RestartIO::Helpers::VectorItems::intehead;
+
+    ERst rst1(filename);
+    rst1.loadData("INTEHEAD");
+
+    for (const auto& seqn : rst1.listOfReportStepNumbers()) {
+        const auto& inteh = rst1.getRestartData<int>("INTEHEAD", seqn, 0);
+
+        auto timepoint = std::tm{};
+
+        timepoint.tm_year = inteh[Ix::YEAR]  - 1900;
+        timepoint.tm_mon  = inteh[Ix::MONTH] -    1;
+        timepoint.tm_mday = inteh[Ix::DAY];
+
+        timepoint.tm_hour = inteh[Ix::IHOURZ];
+        timepoint.tm_min  = inteh[Ix::IMINTS];
+        timepoint.tm_sec  = inteh[Ix::ISECND] / (1000 * 1000);
+
+        std::cout << "Report step number: "
+                  << std::setfill(' ') << std::setw(4) << seqn
+                  << "   Date: "
+                  << std::put_time(&timepoint, "%d-%b-%Y %T") << '\n';
+    }
+
+    std::cout << std::endl;
+}
+
 void printHelp() {
 
     std::cout << "\nconvertECL needs one argument which is the input file to be converted. If this is a binary file the output file will be formatted. If the input file is formatted the output will be binary. \n"
@@ -131,6 +187,22 @@ void printHelp() {
               << "-o Specify output file name (only valid with grdecl option).\n"
               << "-i Enforce IX standard on output file.\n"
               << "-r Extract and convert a specific report time step number from a unified restart file. \n\n";
+}
+
+void logConvert(const bool stdoutIsTerminal,
+                std::string_view sourceFile,
+                std::string_view resultFile)
+{
+    const auto colourOn  = stdoutIsTerminal ? std::string_view { "\033[1;31m" } : std::string_view {};
+    const auto colourOff = stdoutIsTerminal ? std::string_view { "\033[0m"    } : std::string_view {};
+
+    std::cout << colourOn
+              << "\nconverting  "
+              << sourceFile << " -> " << resultFile
+              << colourOff
+              << "\n\n";
+
+    std::cout.flush();
 }
 
 struct GrdeclDataFormatParams
@@ -287,8 +359,8 @@ int main(int argc, char **argv)
     }
 
     // start reading
-    auto start = std::chrono::system_clock::now();
-    std::string filename = argv[argOffset];
+    const auto start = std::chrono::system_clock::now();
+    const auto filename = std::string { argv[argOffset] };
 
     EclFile file1(filename);
     bool formattedOutput = file1.formattedInput() ? false : true;
@@ -298,8 +370,8 @@ int main(int argc, char **argv)
 
     std::string rootN = filename.substr(0,p);
     std::string extension = filename.substr(p,l-p);
-    std::transform(extension.begin(), extension.end(), extension.begin(),
-                 [](unsigned char ckey){ return std::toupper(ckey);});  
+    std::ranges::transform(extension, extension.begin(),
+                           [](unsigned char ckey) { return std::toupper(ckey); });
     std::string resFile;
 
 
@@ -348,27 +420,12 @@ int main(int argc, char **argv)
     }
 
     if (listProperties) {
-        if (extension == ".UNRST") {
-            ERst rst1(filename);
-            rst1.loadData("INTEHEAD");
-
-            std::vector<int> reportStepList = rst1.listOfReportStepNumbers();
-
-            for (auto seqn : reportStepList) {
-                std::vector<int> inteh = rst1.getRestartData<int>("INTEHEAD", seqn, 0);
-
-                std::cout << "Report step number: "
-                          << std::setfill(' ') << std::setw(4) << seqn << "   Date: " << inteh[66] << "/"
-                          << std::setfill('0') << std::setw(2) << inteh[65] << "/"
-                          << std::setfill('0') << std::setw(2) << inteh[64] << std::endl;
-            }
-
-            std::cout << std::endl;
-        }
-        else {
-            std::cout << "\n!ERROR, option -l only only available for unified restart files (*.UNRST) " << std::endl;
+        if (extension != ".UNRST") {
+            std::cerr << "\n!ERROR, option -l available only for unified restart files (*.UNRST)" << std::endl;
             exit(1);
         }
+
+        listReportSteps(filename);
 
         return 0;
     }
@@ -406,7 +463,7 @@ int main(int argc, char **argv)
         }
     }
 
-    std::cout << "\033[1;31m" << "\nconverting  " << argv[argOffset] << " -> " << resFile << "\033[0m\n" << std::endl;
+    logConvert(Opm::OpmLog::stdoutIsTerminal(), argv[argOffset], resFile);
 
     EclOutput outFile(resFile, formattedOutput);
 

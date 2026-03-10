@@ -1,4 +1,4 @@
-These ML modules are extending the previous work done in Kerasify by Maevskikh and Rose licensed under the terms of the MIT 
+These ML modules are extending the previous work done in Kerasify by Maevskikh and Rose licensed under the terms of the MIT
 license (https://github.com/moof2k/kerasify/tree/77a0c42). Kerasify is a library for running trained Keras models from a C++ platform.
 Our implementation is also compliant with the automatic differentiation approach used in OPM.
 The implementation works with Python v.3.9.0 and above (up to <=3.12.0).
@@ -9,9 +9,9 @@ $ python3 generateunittests.py
 
 
 -To compile run the unit tests:
- 
-$ make ml_model_test
-$ ./bin/ml_model_test
+
+$ make test_ml_model
+$ ./bin/test_ml_model
 TEST tensor_test
 TEST dense_1x1
 TEST dense_10x1

@@ -117,9 +117,9 @@ namespace {
     bool allBlank(std::string_view s)
     {
         return s.empty() ||
-            std::all_of(s.begin(), s.end(),
-                        [](const unsigned char c)
-                        { return std::isspace(c); });
+            std::ranges::all_of(s,
+                                [](const unsigned char c)
+                                { return std::isspace(c); });
     }
 
     // Trim initial "FIP" prefix
@@ -216,11 +216,9 @@ Opm::DatumDepth::UserDefined::UserDefined(const SOLUTIONSection& soln)
     std::iota(this->rsetIndex_.begin(), this->rsetIndex_.end(),
               std::vector<double>::size_type{0});
 
-    std::sort(this->rsetIndex_.begin(), this->rsetIndex_.end(),
-              [this](const auto i1, const auto i2)
-              {
-                  return this->rsetNames_[i1] < this->rsetNames_[i2];
-              });
+    std::ranges::sort(this->rsetIndex_,
+                      [this](const auto i1, const auto i2)
+                      { return this->rsetNames_[i1] < this->rsetNames_[i2]; });
 }
 
 Opm::DatumDepth::UserDefined

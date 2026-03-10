@@ -30,10 +30,6 @@
 #include "config.h"
 #include <boost/test/tools/old/interface.hpp>
 
-#if !HAVE_ECL_INPUT
-#error "The test for the black oil fluid system classes requires ecl input support in opm-common"
-#endif
-
 #include <boost/mpl/list.hpp>
 
 #define BOOST_TEST_MODULE EclBlackOilFluidSystemNonStatic
@@ -648,7 +644,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(BlackOil, Evaluation, Types)
 
     const size_t numberOfRegions = FluidSystem::numRegions();
     for (size_t regionIndexToUse = 0; regionIndexToUse < numberOfRegions; ++regionIndexToUse) {
-        ParamCache paramCache(/*maxOilSat=*/0.5, regionIndexToUse);
+        ParamCache paramCache(regionIndexToUse);
 
         // create a parameter cache
         BOOST_CHECK_EQUAL(FluidSystem::reservoirTemperature(), fluidSystem.reservoirTemperature());

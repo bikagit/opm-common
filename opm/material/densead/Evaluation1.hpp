@@ -108,10 +108,8 @@ public:
         //checkDefined_();
     }
 
-    // create an evaluation which represents a constant function
-    //
-    // i.e., f(x) = c. this implies an evaluation with the given value and all
-    // derivatives being zero.
+    // create an evaluation representing a variable with the variable position of varPos
+    // The value is set to c, all derivatives are zero except for the one at varPos, which is set to 1.
     template <class RhsValueType>
     OPM_HOST_DEVICE Evaluation(const RhsValueType& c, int varPos)
     {
@@ -217,7 +215,7 @@ public:
     }
 
 
-    // add value and derivatives from other to this values and derivatives
+    // add value and derivatives from other to this value and derivatives
     OPM_HOST_DEVICE Evaluation& operator+=(const Evaluation& other)
     {
         assert(size() == other.size());

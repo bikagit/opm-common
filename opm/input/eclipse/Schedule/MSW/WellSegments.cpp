@@ -21,15 +21,20 @@
 
 #include <opm/common/OpmLog/OpmLog.hpp>
 
-#include <opm/input/eclipse/Schedule/MSW/Segment.hpp>
+#include <opm/input/eclipse/Schedule/MSW/AICD.hpp>
 #include <opm/input/eclipse/Schedule/MSW/SICD.hpp>
+#include <opm/input/eclipse/Schedule/MSW/Segment.hpp>
 #include <opm/input/eclipse/Schedule/MSW/Valve.hpp>
 #include <opm/input/eclipse/Schedule/Well/WellConnections.hpp>
+
 #include <opm/input/eclipse/Units/UnitSystem.hpp>
 
 #include <opm/input/eclipse/Deck/DeckItem.hpp>
 #include <opm/input/eclipse/Deck/DeckKeyword.hpp>
 #include <opm/input/eclipse/Deck/DeckRecord.hpp>
+
+#include <opm/input/eclipse/Parser/ErrorGuard.hpp>
+#include <opm/input/eclipse/Parser/ParseContext.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -41,6 +46,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -51,6 +57,39 @@
 #endif
 
 #include <fmt/format.h>
+
+namespace {
+    void handleMissingICDSegment(std::string_view            well_name,
+                                 const int                   segment_number,
+                                 const Opm::KeywordLocation& location,
+                                 const Opm::ParseContext&    parseContext,
+                                 Opm::ErrorGuard&            errors)
+    {
+        const auto msg_fmt = fmt::format(R"(Problem with keyword {{keyword}}
+In {{file}} line {{line}}
+Segment {} is not defined in WELSEGS for well {}.)", segment_number, well_name);
+
+        parseContext.handleError(Opm::ParseContext::SCHEDULE_ICD_MISSING_SEGMENT,
+                                 msg_fmt, location, errors);
+    }
+
+    void handleIncompatiblePDropModel(std::string_view                       well_name,
+                                      const Opm::WellSegmentCompPressureDrop pdrop_model,
+                                      std::string_view                       msg_header,
+                                      const Opm::KeywordLocation&            location,
+                                      const Opm::ParseContext&               parseContext,
+                                      Opm::ErrorGuard&                       errors)
+    {
+        const auto msg = fmt::format("{} incompatible with segment "
+                                     "pressure drop model '{}' defined in "
+                                     "keyword WELSEGS for well {}.", msg_header,
+                                     Opm::WellSegments::CompPressureDropToString(pdrop_model),
+                                     well_name);
+
+        parseContext.handleError(Opm::ParseContext::SCHEDULE_ICD_INCOMPATIBLE_PDROP_MODEL,
+                                 msg, location, errors);
+    }
+}
 
 namespace Opm {
 
@@ -123,14 +162,6 @@ namespace Opm {
         return m_comp_pressure_drop;
     }
 
-    const std::vector<Segment>::const_iterator WellSegments::begin() const {
-        return this->m_segments.begin();
-    }
-
-    const std::vector<Segment>::const_iterator WellSegments::end() const {
-        return this->m_segments.end();
-    }
-
     const Segment& WellSegments::operator[](size_t idx) const {
         return m_segments[idx];
     }
@@ -164,8 +195,8 @@ namespace Opm {
     void WellSegments::addSegment(const int segment_number,
                                   const int branch,
                                   const int outlet_segment,
-                                  const double length,
                                   const double depth,
+                                  const double length,
                                   const double internal_diameter,
                                   const double roughness,
                                   const double cross_area,
@@ -176,12 +207,47 @@ namespace Opm {
     {
         const auto segment = Segment {
             segment_number, branch, outlet_segment,
-            length, depth, internal_diameter, roughness,
+            depth, length, internal_diameter, roughness,
             cross_area, volume,
             data_ready, node_x, node_y
         };
 
         this->addSegment(segment);
+    }
+
+
+    void WellSegments::addWellSegmentsFromLengthsAndDepths(const std::string &wname,
+                                                           const std::vector<std::pair<double, double>>& lengths_and_depths,
+                                                           double diameter, const UnitSystem& unit_system)
+    {
+        const int branchID = 1;  // Only main branch for now.
+
+        const double roughness = 0.0;  // Defaulted: ROUGHNESS in WELSEGS.
+        const double area = M_PI * diameter * diameter / 4.0;
+        const double volume = Segment::invalidValue();
+
+        // Add segments:
+        int segmentID = 2;
+        for (auto [length, depth]: lengths_and_depths) {
+            this->addSegment(
+                segmentID, branchID, segmentID - 1, depth, length, diameter,
+                roughness, area, volume, true, 0.0, 0.0
+            );
+            segmentID += 1;
+        }
+
+        // Fix inlets:
+        for (const auto& segment : this->m_segments) {
+            const int outlet_segment = segment.outletSegment();
+            if (outlet_segment <= 0) { // no outlet segment
+                continue;
+            }
+
+            const int outlet_segment_index = segment_number_to_index[outlet_segment];
+            m_segments[outlet_segment_index].addInletSegment(segment.segmentNumber());
+        }
+
+        this->process(wname, unit_system, WellSegments::LengthDepth::ABS, this->depthTopSegment(), this->lengthTopSegment());
     }
 
 
@@ -217,7 +283,7 @@ namespace Opm {
             const auto cross_area = invalid_value;
             const auto data_ready = false;
 
-            this->addSegment(segmentID, branchID, outletSegment, length, depth,
+            this->addSegment(segmentID, branchID, outletSegment, depth, length,
                              internal_diameter, roughness, cross_area,
                              volume_top, data_ready, nodeX_top, nodeY_top);
         }
@@ -231,7 +297,7 @@ namespace Opm {
             const auto data_ready = true;
 
             this->addSegment(segmentID, branchID, outletSegment,
-                             length_top, depth_top,
+                             depth_top, length_top,
                              internal_diameter, roughness, cross_area,
                              volume_top, data_ready, nodeX_top, nodeY_top);
         }
@@ -254,13 +320,6 @@ namespace Opm {
                     fmt::format("Illegal segment 2 number in WELSEGS\n"
                                 "Expected {}..NSEGMX, but got {}",
                                 segment1, segment2)
-                };
-            }
-
-            if ((segment1 != segment2) && (length_depth_type == LengthDepth::ABS)) {
-                throw std::logic_error{
-                    fmt::format("In WELSEGS, it is not supported to enter multiple segments in one record "
-                                     "with ABS type of tubing length and depth information")
                 };
             }
 
@@ -301,10 +360,14 @@ namespace Opm {
             }
 
             const double input_roughness = record.getItem("ROUGHNESS").getSIDouble(0);
-            const double roughness = diameter * std::min(Segment::MAX_REL_ROUGHNESS, input_roughness/diameter);
-            if (input_roughness > roughness) {
-                OpmLog::warning(fmt::format("Well {} WELSEGS segment {} to {}: Too high roughness {:.3e} is limited to {:.3e} to avoid singularity in friction factor calculation.",
-                                            wname, segment1, segment2, input_roughness, roughness));
+            const double safe_roughness = Segment::MAX_REL_ROUGHNESS * diameter;
+            const bool too_high_roughness = input_roughness > safe_roughness;
+            const double roughness = too_high_roughness ? safe_roughness : input_roughness;
+            if (too_high_roughness) {
+                const auto& location = welsegsKeyword.location();
+                OpmLog::warning(fmt::format("Well {} WELSEGS segment {} to {}: Too high roughness {:.3e} is found at line {} in file {}, \n"
+                                            "the value is limited to {:.3e} to avoid singularity in friction factor calculation.",
+                                            wname, segment1, segment2, input_roughness, location.lineno, location.filename, roughness));
             }
 
             const auto node_X = record.getItem("LENGTH_X").getSIDouble(0);
@@ -323,7 +386,7 @@ namespace Opm {
                     && (segment_number == segment2);
 
                 this->addSegment(segment_number, branch, outlet_segment,
-                                 length, depth, diameter,
+                                 depth, length, diameter,
                                  roughness, area, volume, data_ready,
                                  node_X, node_Y);
             }
@@ -581,12 +644,8 @@ namespace Opm {
         return this->m_comp_pressure_drop == rhs.m_comp_pressure_drop
             && this->m_segments.size() == rhs.m_segments.size()
             && this->segment_number_to_index.size() == rhs.segment_number_to_index.size()
-            && std::equal( this->m_segments.begin(),
-                           this->m_segments.end(),
-                           rhs.m_segments.begin() )
-            && std::equal( this->segment_number_to_index.begin(),
-                           this->segment_number_to_index.end(),
-                           rhs.segment_number_to_index.begin() );
+            && std::ranges::equal(this->m_segments, rhs.m_segments)
+            && std::ranges::equal(this->segment_number_to_index, rhs.segment_number_to_index);
     }
 
     double WellSegments::segmentLength(const int segment_number) const {
@@ -642,13 +701,27 @@ namespace Opm {
         }
     }
 
+    bool WellSegments::updateICDScalingFactors(const WellConnections& connections)
+    {
+        bool update = false;
+        for (auto& segment : this->m_segments) {
+            if (segment.isSpiralICD() || segment.isAICD()) {
+                const int segment_number = segment.segmentNumber();
+                const auto outlet_segment = this->getFromSegmentNumber(segment_number).outletSegment();
+                const auto outlet_segment_length = this->segmentLength(outlet_segment);
+                const auto completion_length = connections.segment_perf_length(segment_number);
+                update |= segment.updateICDScalingFactor(outlet_segment_length, completion_length);
+            }
+        }
+        return update;
+    }
+
     std::set<int> WellSegments::branches() const {
         std::set<int> bset;
         for (const auto& segment : this->m_segments)
             bset.insert( segment.branchNumber() );
         return bset;
     }
-
 
     std::vector<Segment> WellSegments::branchSegments(int branch) const {
         std::vector<Segment> segments;
@@ -666,7 +739,8 @@ namespace Opm {
             const auto& head_segment = segments[head_index];
             if (segment_set.count(head_segment.outletSegment()) != 0) {
                 auto head_iter = std::find_if(std::next(segments.begin(), head_index), segments.end(),
-                                              [&segment_set] (const Segment& segment) { return (segment_set.count(segment.outletSegment()) == 0); });
+                                              [&segment_set] (const Segment& segment)
+                                              { return (segment_set.count(segment.outletSegment()) == 0); });
 
                 if (head_iter == segments.end())
                     throw std::logic_error("Loop detected in branch/segment structure");
@@ -679,68 +753,109 @@ namespace Opm {
         return segments;
     }
 
-    bool WellSegments::updateWSEGSICD(const std::vector<std::pair<int, SICD> >& sicd_pairs) {
-        if (m_comp_pressure_drop == CompPressureDrop::H__) {
-            const std::string msg = "to use spiral ICD segment you have to activate the frictional pressure drop calculation";
-            throw std::runtime_error(msg);
+    bool WellSegments::updateWSEGAICD(std::string_view                            well_name,
+                                      const std::vector<std::pair<int, AutoICD>>& aicd_pairs,
+                                      const KeywordLocation&                      location,
+                                      const ParseContext&                         parseContext,
+                                      ErrorGuard&                                 errors)
+    {
+        if (aicd_pairs.empty()) {
+            return false;
         }
 
-        for (const auto& pair_elem : sicd_pairs) {
-            const int segment_number = pair_elem.first;
-            const SICD& spiral_icd = pair_elem.second;
-            Segment segment = this->getFromSegmentNumber(segment_number);
-            segment.updateSpiralICD(spiral_icd);
-            this->addSegment(segment);
+        if (m_comp_pressure_drop == CompPressureDrop::H__) {
+            handleIncompatiblePDropModel(well_name,
+                                         this->m_comp_pressure_drop,
+                                         "Autonomous ICDs are",
+                                         location, parseContext, errors);
+        }
+
+        for (const auto& [segment_number, auto_icd] : aicd_pairs) {
+            const auto seg_idx = this->segmentNumberToIndex(segment_number);
+
+            if (seg_idx < 0) {
+                handleMissingICDSegment(well_name, segment_number,
+                                        location, parseContext, errors);
+                continue;
+            }
+
+            this->m_segments[seg_idx].updateAutoICD(auto_icd);
         }
 
         return true;
     }
 
-    bool WellSegments::updateWSEGVALV(const std::vector<std::pair<int, Valve> >& valve_pairs) {
-
-        if (m_comp_pressure_drop == CompPressureDrop::H__) {
-            const std::string msg = "to use WSEGVALV segment you have to activate the frictional pressure drop calculation";
-            throw std::runtime_error(msg);
+    bool WellSegments::updateWSEGSICD(std::string_view                         well_name,
+                                      const std::vector<std::pair<int, SICD>>& sicd_pairs,
+                                      const KeywordLocation&                   location,
+                                      const ParseContext&                      parseContext,
+                                      ErrorGuard&                              errors)
+    {
+        if (sicd_pairs.empty()) {
+            return false;
         }
 
-        for (const auto& pair : valve_pairs) {
-            const int segment_number = pair.first;
-            const Valve& valve = pair.second;
-            Segment segment = this->getFromSegmentNumber(segment_number);
+        if (m_comp_pressure_drop == CompPressureDrop::H__) {
+            handleIncompatiblePDropModel(well_name,
+                                         this->m_comp_pressure_drop,
+                                         "Spiral ICDs are",
+                                         location, parseContext, errors);
+        }
+
+        for (const auto& [segment_number, spiral_icd] : sicd_pairs) {
+            const auto seg_idx = this->segmentNumberToIndex(segment_number);
+
+            if (seg_idx < 0) {
+                handleMissingICDSegment(well_name, segment_number,
+                                        location, parseContext, errors);
+                continue;
+            }
+
+            this->m_segments[seg_idx].updateSpiralICD(spiral_icd);
+        }
+
+        return true;
+    }
+
+    bool WellSegments::updateWSEGVALV(std::string_view                          well_name,
+                                      const std::vector<std::pair<int, Valve>>& valve_pairs,
+                                      const KeywordLocation&                    location,
+                                      const ParseContext&                       parseContext,
+                                      ErrorGuard&                               errors)
+    {
+        if (valve_pairs.empty()) {
+            return false;
+        }
+
+        if (m_comp_pressure_drop == CompPressureDrop::H__) {
+            handleIncompatiblePDropModel(well_name,
+                                         this->m_comp_pressure_drop,
+                                         "Valves are",
+                                         location, parseContext, errors);
+        }
+
+        for (const auto& [segment_number, valve] : valve_pairs) {
+            const auto seg_idx = this->segmentNumberToIndex(segment_number);
+
+            if (seg_idx < 0) {
+                handleMissingICDSegment(well_name, segment_number,
+                                        location, parseContext, errors);
+                continue;
+            }
+
             const double segment_length = this->segmentLength(segment_number);
+
             // this function can return bool
-            segment.updateValve(valve, segment_length);
-            this->addSegment(segment);
+            this->m_segments[seg_idx].updateValve(valve, segment_length);
         }
 
         return true;
     }
 
-    bool WellSegments::updateWSEGAICD(const std::vector<std::pair<int, AutoICD> >& aicd_pairs, const KeywordLocation& location) {
-        if (m_comp_pressure_drop == CompPressureDrop::H__) {
-            const std::string msg = fmt::format("to use Autonomous ICD segment with keyword {} "
-                                                "at line {} in file {},\n"
-                                                "you have to activate frictional pressure drop calculation in WELSEGS",
-                                                location.keyword, location.lineno, location.filename);
-            throw std::runtime_error(msg);
-        }
-
-        for (const auto& pair_elem : aicd_pairs) {
-            const int segment_number = pair_elem.first;
-            const AutoICD& auto_icd = pair_elem.second;
-            Segment segment = this->getFromSegmentNumber(segment_number);
-            segment.updateAutoICD(auto_icd);
-            this->addSegment(segment);
-        }
-
-        return true;
+    bool WellSegments::operator!=(const WellSegments& rhs) const
+    {
+        return ! (*this == rhs);
     }
-
-
-    bool WellSegments::operator!=( const WellSegments& rhs ) const {
-        return !( *this == rhs );
-    }
-
 
 const std::string WellSegments::LengthDepthToString(LengthDepth enumValue) {
     switch (enumValue) {
@@ -810,14 +925,6 @@ WellSegments::MultiPhaseModel WellSegments::MultiPhaseModelFromString(const std:
         return MultiPhaseModel::DF;
     } else {
         throw std::invalid_argument("Unknown enum string_value: " + string_value + " for MultiPhaseModel");
-    }
-}
-
-
-void WellSegments::updatePerfLength(const WellConnections& connections) {
-    for (auto& segment : this->m_segments) {
-        auto perf_length = connections.segment_perf_length( segment.segmentNumber() );
-        segment.updatePerfLength(perf_length);
     }
 }
 

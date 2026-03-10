@@ -173,8 +173,8 @@ public:
         SwPcwnSamples_.resize(n);
         pcwnSamples_.resize(n);
 
-        std::copy(SwValues.begin(), SwValues.end(), SwPcwnSamples_.begin());
-        std::copy(values.begin(), values.end(), pcwnSamples_.begin());
+        std::ranges::copy(SwValues, SwPcwnSamples_.begin());
+        std::ranges::copy(values, pcwnSamples_.begin());
     }
 
     /*!
@@ -204,8 +204,8 @@ public:
         SwKrwSamples_.resize(n);
         krwSamples_.resize(n);
 
-        std::copy(SwValues.begin(), SwValues.end(), SwKrwSamples_.begin());
-        std::copy(values.begin(), values.end(), krwSamples_.begin());
+        std::ranges::copy(SwValues, SwKrwSamples_.begin());
+        std::ranges::copy(values, krwSamples_.begin());
     }
 
     /*!
@@ -235,8 +235,8 @@ public:
         SwKrnSamples_.resize(n);
         krnSamples_.resize(n);
 
-        std::copy(SwValues.begin(), SwValues.end(), SwKrnSamples_.begin());
-        std::copy(values.begin(), values.end(), krnSamples_.begin());
+        std::ranges::copy(SwValues, SwKrnSamples_.begin());
+        std::ranges::copy(values, krnSamples_.begin());
     }
 
 private:

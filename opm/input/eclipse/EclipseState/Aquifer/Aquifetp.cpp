@@ -216,10 +216,11 @@ std::vector<Aquifetp::AQUFETP_data>::const_iterator Aquifetp::end() const {
     return this->m_aqufetp.end();
 }
 
-bool Aquifetp::hasAquifer(const int aquID) const {
-    return std::any_of(this->m_aqufetp.begin(), this->m_aqufetp.end(),
-                       [&aquID](const auto& aqu) { return aqu.aquiferID == aquID; });
-
+bool Aquifetp::hasAquifer(const int aquID) const
+{
+    return std::ranges::any_of(this->m_aqufetp,
+                               [&aquID](const auto& aqu)
+                               { return aqu.aquiferID == aquID; });
 }
 
 }

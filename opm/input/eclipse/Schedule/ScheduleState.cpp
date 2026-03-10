@@ -25,8 +25,9 @@
 #include <opm/input/eclipse/Schedule/GasLiftOpt.hpp>
 #include <opm/input/eclipse/Schedule/Group/GConSale.hpp>
 #include <opm/input/eclipse/Schedule/Group/GConSump.hpp>
-#include <opm/input/eclipse/Schedule/Group/GSatProd.hpp>
 #include <opm/input/eclipse/Schedule/Group/GroupEconProductionLimits.hpp>
+#include <opm/input/eclipse/Schedule/Group/GroupSatelliteInjection.hpp>
+#include <opm/input/eclipse/Schedule/Group/GSatProd.hpp>
 #include <opm/input/eclipse/Schedule/Group/GuideRateConfig.hpp>
 #include <opm/input/eclipse/Schedule/Network/Balance.hpp>
 #include <opm/input/eclipse/Schedule/Network/ExtNetwork.hpp>
@@ -70,6 +71,28 @@ namespace {
 } // Anonymous namespace
 
 namespace Opm {
+
+void
+ScheduleState::WellListChangeTracker::prepareNextReportStep()
+{
+    this->listsChanged_[this->index(Ix::Static)] =
+        this->listsChanged_[this->index(Ix::Action)];
+
+    this->listsChanged_[this->index(Ix::Action)] = false;
+}
+
+ScheduleState::WellListChangeTracker
+ScheduleState::WellListChangeTracker::serializationTestObject()
+{
+    auto tracker = WellListChangeTracker{};
+
+    tracker.recordStaticChangedLists();
+    tracker.recordActionChangedLists();
+
+    return tracker;
+}
+
+// ---------------------------------------------------------------------------
 
 void ScheduleState::updateSAVE(bool save) {
     this->m_save_step = save;
@@ -152,10 +175,23 @@ ScheduleState::ScheduleState(const ScheduleState& src, const time_point& start_t
     {
         auto new_udq = this->udq();
 
-        if (new_udq.clear_pending_assignments()) {
-            // New report step.  All ASSIGNments from previous report steps
-            // have been performed.
+        const auto pending_chng = new_udq.clear_pending_assignments();
+        const auto next_chng = new_udq.clear_update_next_for_new_report_step();
+
+        if (pending_chng || next_chng) {
+            // New report step.  All ASSIGNments and all NEXT updates from
+            // previous report steps have been performed.
             this->udq.update(std::move(new_udq));
+        }
+    }
+
+    {
+        auto tracker = this->wlist_tracker();
+
+        tracker.prepareNextReportStep();
+
+        if (tracker.changedLists() != src.wlist_tracker().changedLists()) {
+            this->wlist_tracker.update(std::move(tracker));
         }
     }
 }
@@ -196,6 +232,61 @@ bool ScheduleState::first_in_year() const {
     return this->m_first_in_year;
 }
 
+bool ScheduleState::well_group_contains_lgr(const Group& grp, const std::string& lgr_tag) const
+{
+    if (! grp.wellgroup()) {
+        return false;
+    }
+
+    const auto& gwells = grp.wells();
+
+    return std::ranges::any_of(gwells,
+                               [&lgr_tag, this](const std::string& wname)
+                               { return this->wells(wname).get_lgr_well_tag().value_or("") == lgr_tag; });
+}
+
+bool ScheduleState::group_contains_lgr(const Group& grp, const std::string& lgr_tag) const
+{
+    if (grp.wellgroup()) {
+        return this->well_group_contains_lgr(grp, lgr_tag);
+    }
+
+    const auto& children = grp.groups();
+
+    return std::ranges::any_of(children,
+                               [&lgr_tag, this](const std::string& child_group_name)
+                               {
+                                   const auto& child_group = this->groups.get(child_group_name);
+                                   return this->group_contains_lgr(child_group, lgr_tag);
+                               });
+}
+
+std::size_t ScheduleState::num_lgr_well_in_group(const Group& grp, const std::string& lgr_tag) const
+{
+    if (! grp.wellgroup()) {
+        return 0;
+    }
+
+    const auto& lwells = grp.wells();
+
+    return std::ranges::count_if(lwells,
+                                 [&lgr_tag, this](const std::string& wname)
+                                 { return this->wells(wname).get_lgr_well_tag().value_or("") == lgr_tag; });
+}
+
+std::size_t ScheduleState::num_lgr_groups_in_group(const Group& grp, const std::string& lgr_tag) const
+{
+    if (grp.wellgroup()) {
+        return 0;
+    }
+
+    const auto& children = grp.groups();
+
+    return std::ranges::count_if(children,
+                                 [&lgr_tag, this](const std::string& child)
+                                 { return this->group_contains_lgr(this->groups(child), lgr_tag); });
+}
+
 void ScheduleState::init_nupcol(Nupcol nupcol) {
     this->m_nupcol = std::move(nupcol);
 }
@@ -206,18 +297,6 @@ void ScheduleState::update_nupcol(int nupcol) {
 
 int ScheduleState::nupcol() const {
     return this->m_nupcol.value();
-}
-
-void ScheduleState::update_oilvap(OilVaporizationProperties oilvap) {
-    this->m_oilvap = std::move(oilvap);
-}
-
-const OilVaporizationProperties& ScheduleState::oilvap() const {
-    return this->m_oilvap;
-}
-
-OilVaporizationProperties& ScheduleState::oilvap() {
-    return this->m_oilvap;
 }
 
 void ScheduleState::update_geo_keywords(std::vector<DeckKeyword> geo_keywords) {
@@ -276,7 +355,6 @@ void ScheduleState::rptonly(const bool only)
 bool ScheduleState::operator==(const ScheduleState& other) const {
 
     return this->m_start_time == other.m_start_time
-        && this->m_oilvap == other.m_oilvap
         && this->m_sim_step == other.m_sim_step
         && this->m_month_num == other.m_month_num
         && this->m_save_step == other.m_save_step
@@ -285,6 +363,7 @@ bool ScheduleState::operator==(const ScheduleState& other) const {
         && this->m_year_num == other.m_year_num
         && this->target_wellpi == other.target_wellpi
         && this->m_tuning == other.m_tuning
+        && this->m_tuning_dp == other.m_tuning_dp
         && this->m_end_time == other.m_end_time
         && this->m_events == other.m_events
         && this->m_wellgroup_events == other.m_wellgroup_events
@@ -308,9 +387,13 @@ bool ScheduleState::operator==(const ScheduleState& other) const {
         && this->guide_rate.get() == other.guide_rate.get()
         && this->rft_config.get() == other.rft_config.get()
         && this->udq.get() == other.udq.get()
+        && this->oilvap() == other.oilvap()
         && this->bhp_defaults.get() == other.bhp_defaults.get()
         && this->source.get() == other.source.get()
+        && this->wcycle() == other.wcycle()
+        && this->wlist_tracker() == other.wlist_tracker()
         && this->wells == other.wells
+        && this->satelliteInjection == other.satelliteInjection
         && this->inj_streams == other.inj_streams
         && this->groups == other.groups
         && this->vfpprod == other.vfpprod
@@ -335,7 +418,6 @@ ScheduleState ScheduleState::serializationTestObject() {
     ts.groups = map_member<std::string, Group>::serializationTestObject();
     ts.m_events = Events::serializationTestObject();
     ts.m_nupcol = Nupcol::serializationTestObject();
-    ts.update_oilvap( Opm::OilVaporizationProperties::serializationTestObject() );
     ts.m_message_limits = MessageLimits::serializationTestObject();
     ts.m_whistctl_mode = Well::ProducerCMode::THP;
     ts.target_wellpi = {{"WELL1", 1000}, {"WELL2", 2000}};
@@ -364,11 +446,15 @@ ScheduleState ScheduleState::serializationTestObject() {
     ts.glo.update( GasLiftOpt::serializationTestObject() );
     ts.rft_config.update( RFTConfig::serializationTestObject() );
     ts.rst_config.update( RSTConfig::serializationTestObject() );
+    ts.oilvap.update(OilVaporizationProperties::serializationTestObject());
     ts.source.update( Source::serializationTestObject() );
+    ts.wcycle.update(WCYCLE::serializationTestObject());
+    ts.wlist_tracker.update(WellListChangeTracker::serializationTestObject());
 
     return ts;
 }
 
+// ---- TUNING ----
 void ScheduleState::update_tuning(Tuning tuning) {
     this->m_tuning = std::move(tuning);
 }
@@ -387,6 +473,21 @@ double ScheduleState::max_next_tstep(const bool enableTUNING) const {
     double next_value = this->next_tstep.has_value() ? this->next_tstep->value() : -1.0;
     return std::max(next_value, tuning_value);
 }
+// ---------
+
+// ---- TUNINGDP ----
+void ScheduleState::update_tuning_dp(TuningDp tuning_dp) {
+    this->m_tuning_dp = std::move(tuning_dp);
+}
+
+const TuningDp& ScheduleState::tuning_dp() const {
+    return this->m_tuning_dp;
+}
+
+TuningDp& ScheduleState::tuning_dp() {
+    return this->m_tuning_dp;
+}
+// ---------
 
 void ScheduleState::update_events(Events events) {
     this->m_events = events;
@@ -459,9 +560,9 @@ bool ScheduleState::rst_file(const RSTConfig&  rst,
 
 bool ScheduleState::has_gpmaint() const
 {
-    return std::any_of(this->groups.begin(), this->groups.end(), [](const auto& name_group) {
-            return name_group.second->gpmaint().has_value();
-    });
+    return std::ranges::any_of(this->groups,
+                               [](const auto& name_group)
+                               { return name_group.second->gpmaint().has_value(); });
 }
 
 

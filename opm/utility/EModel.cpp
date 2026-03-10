@@ -222,7 +222,7 @@ std::vector<ParamEntry> EModel::getListOfParameters() const
 
 int EModel::getNumberOfActiveCells()
 {
-    return std::count(ActFilter.begin(), ActFilter.end(), true);
+    return std::ranges::count(ActFilter, true);
 }
 
 bool EModel::hasInitParameter(const std::string &name) const
@@ -254,7 +254,7 @@ bool EModel::hasReportStep(int rstep)
 
 void EModel::resetFilter()
 {
-    activeFilter=false;
+    activeFilter = false;
     std::fill(ActFilter.begin(), ActFilter.end(), true);
 }
 

@@ -60,15 +60,15 @@ py::list SI_data_to_pylist( const DeckItem& item) {
 
 bool is_int(const std::string& s)
 {
-    return !s.empty() && std::find_if(s.begin(),
-        s.end(), [](char c) { return !std::isdigit(c); }) == s.end();
+    return !s.empty()
+        && std::ranges::find_if(s, [](char c) { return !std::isdigit(c); }) == s.end();
 }
 
 
 void push_string_as_deck_value(
     const ParserItem& parser_item,
     std::vector<DeckValue>& record,
-    const std::string str)
+    const std::string& str)
 {
 
     std::size_t star_pos = str.find('*');

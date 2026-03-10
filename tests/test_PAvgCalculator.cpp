@@ -174,7 +174,7 @@ namespace {
     template <typename T>
     std::vector<T> sort(std::vector<T> v)
     {
-        std::sort(v.begin(), v.end());
+        std::ranges::sort(v);
         return v;
     }
 
@@ -186,8 +186,7 @@ namespace {
         isActive.reserve(v.size());
 
         for (const auto& elm : v) {
-            isActive.push_back(std::binary_search(activeElements.begin(),
-                                                  activeElements.end(), elm));
+            isActive.push_back(std::ranges::binary_search(activeElements, elm));
         }
 
         return isActive;

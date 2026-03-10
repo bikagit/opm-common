@@ -239,7 +239,7 @@ GRID
 
 NNC
    7 1 1 3 1 1 0.1 /
-   3 1 1 5 1 1 0.1 / 
+   3 1 1 5 1 1 0.1 /
 /
 
 
@@ -284,15 +284,15 @@ EDITNNCR
 )";
 
 
-std::optional<NNCdata> find_nnc(const std::vector<NNCdata>& v, std::size_t c1, std::size_t c2) {
+std::optional<NNCdata> find_nnc(const std::vector<NNCdata>& v, std::size_t c1, std::size_t c2)
+{
     if (c1 > c2)
         return find_nnc(v, c2, c1);
 
-    auto iter = std::find_if(v.begin(), v.end(), [c1,c2](const NNCdata& nnc) { return nnc.cell1 == c1 && nnc.cell2 == c2; });
-    if (iter != v.end())
-        return *iter;
-
-    return {};
+    const auto iter = std::ranges::find_if(v,
+                                           [c1,c2](const NNCdata& nnc)
+                                           { return nnc.cell1 == c1 && nnc.cell2 == c2; });
+    return iter == v.end() ? std::nullopt : std::optional{*iter};
 }
 
 void check_edit_nnc(const std::vector<NNCdata>& v, std::size_t c1, std::size_t c2, double t) {

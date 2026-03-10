@@ -46,7 +46,6 @@ H2GasPvt(const std::vector<Scalar>& salinity,
     }
 }
 
-#if HAVE_ECL_INPUT
 template<class Scalar>
 void H2GasPvt<Scalar>::
 initFromState(const EclipseState& eclState, const Schedule&)
@@ -64,7 +63,7 @@ initFromState(const EclipseState& eclState, const Schedule&)
                         "and PVDG/PVTG input is ignored.");
     }
     // Enable vaporization of water if needed
-    setEnableVaporizationWater(eclState.getSimulationConfig().hasVAPOIL() || 
+    setEnableVaporizationWater(eclState.getSimulationConfig().hasVAPOIL() ||
                                eclState.getSimulationConfig().hasVAPWAT());
 
     // We only supported single pvt region for the H2-brine module
@@ -77,7 +76,6 @@ initFromState(const EclipseState& eclState, const Schedule&)
     brineReferenceDensity_[regionIdx] = Brine::liquidDensity(T_ref, P_ref, salinity_[regionIdx], extrapolate);
     initEnd();
 }
-#endif
 
 template<class Scalar>
 void H2GasPvt<Scalar>::

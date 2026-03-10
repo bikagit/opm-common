@@ -89,11 +89,9 @@ bool Opm::EclIO::fileExists(const std::string& filename){
 
 bool Opm::EclIO::is_number(const std::string& numstr)
 {
-    return std::all_of(numstr.begin(), numstr.end(),
-                       [](const auto& c)
-                       {
-                           return std::isdigit(c) != 0;
-                       });
+    return std::ranges::all_of(numstr,
+                               [](const auto& c)
+                               { return std::isdigit(c) != 0; });
 }
 
 
@@ -709,4 +707,3 @@ std::vector<double> Opm::EclIO::readFormattedDoubArray(const std::string& file_s
 
     return readFormattedArray<double>(file_str, size, fromPos, f);
 }
-

@@ -115,8 +115,8 @@ Node::next_branch()
     std::shared_ptr<Node> p1 = m_outlet;
 
     while (p1 != nullptr) {
-        if (std::any_of(p1->m_inlet_list.begin(), p1->m_inlet_list.end(),
-                        [](const auto& inlet) { return inlet->m_xpos == -1 ;}))
+        if (std::ranges::any_of(p1->m_inlet_list,
+                                [](const auto& inlet) { return inlet->m_xpos == -1 ;}))
         {
             return p1;
         }
@@ -129,8 +129,9 @@ Node::next_branch()
 bool
 Node::delete_from_inlet_list(const std::string& name)
 {
-    const auto it = std::find_if(m_inlet_list.begin(), m_inlet_list.end(),
-                                 [&name](const auto& inlet) { return inlet->name() == name; });
+    const auto it = std::ranges::find_if(m_inlet_list,
+                                        [&name](const auto& inlet)
+                                         { return inlet->name() == name; });
 
     if (it == m_inlet_list.end()) {
         return false;
@@ -202,8 +203,9 @@ Node::add_inlet_node(std::shared_ptr<Node> node)
 {
     std::vector<std::shared_ptr<Node>>::iterator exist;
 
-    exist = std::find_if(m_inlet_list.begin(), m_inlet_list.end(),
-                         [&](const auto& val) { return val->name() == node->name(); });
+    exist = std::ranges::find_if(m_inlet_list,
+                                 [&node](const auto& val)
+                                 { return val->name() == node->name(); });
 
     if (exist != m_inlet_list.end()) {
         m_inlet_list.erase(exist);
@@ -314,7 +316,7 @@ NetWork::parse_data_deck(const std::filesystem::path& inputFileName)
     bool restart = false;
     bool skiprest = false;
 
-    time_t last_time;
+    time_t last_time{};
 
     auto network_keyw = deck_schecule["NETWORK"];
 
@@ -436,9 +438,8 @@ NetWork::parse_unrst(const std::filesystem::path& inputFileName)
 
     std::vector<int> rstep_vect;
 
-    std::copy_if(all_reports.begin(), all_reports.end(),
-                 std::back_inserter(rstep_vect),
-                 [](const auto r) { return r > 0; });
+    std::ranges::copy_if(all_reports, std::back_inserter(rstep_vect),
+                         [](const auto r) { return r > 0; });
 
     m_node_input_list.push_back({});
     m_bran_input_list.push_back({});
@@ -483,8 +484,8 @@ NetWork::time_str(time_t t1)
 bool
 NetWork::node_exist(const std::string& name)
 {
-    return std::any_of(m_node_list.begin(), m_node_list.end(),
-                       [&name](const auto& node) { return node->name() == name; });
+    return std::ranges::any_of(m_node_list,
+                               [&name](const auto& node) { return node->name() == name; });
 }
 
 void
@@ -543,11 +544,13 @@ NetWork::add_branch(const std::string& downtree, const std::string& uptree, int 
 void
 NetWork::delete_branch(const std::string& downtree, const std::string& uptree)
 {
-    auto up_it = std::find_if(m_node_list.begin(), m_node_list.end(),
-                           [&uptree](const auto& node) { return node->name() == uptree;});
+    const auto up_it = std::ranges::find_if(m_node_list,
+                                            [&uptree](const auto& node)
+                                            { return node->name() == uptree;});
 
-    auto down_it = std::find_if(m_node_list.begin(), m_node_list.end(),
-                                [&downtree](const auto& node) { return node->name() == downtree;});
+    const auto down_it = std::ranges::find_if(m_node_list,
+                                              [&downtree](const auto& node)
+                                              { return node->name() == downtree;});
 
     if (up_it == m_node_list.end() || down_it == m_node_list.end()) {
         std::cout << "\n!Error, pointer to downtree and/or uptree not found \n\n";
@@ -561,8 +564,9 @@ NetWork::delete_branch(const std::string& downtree, const std::string& uptree)
 
     (*down_it)->reset_outlet();
 
-    const auto top_it = std::find_if(m_top_node_list.begin(), m_top_node_list.end(),
-                                     [&downtree](const auto& node) { return node->name() == downtree; });
+    const auto top_it = std::ranges::find_if(m_top_node_list,
+                                             [&downtree](const auto& node)
+                                             { return node->name() == downtree; });
 
     if (top_it == m_top_node_list.end()) {
         m_top_node_list.push_back(*up_it);

@@ -236,10 +236,8 @@ namespace { namespace SatFunc {
                            OutIt        dest)
         {
             std::transform(begin, end, dest,
-                [tolcrit](const double kr) -> double
-            {
-                return (kr > tolcrit) ? kr : 0.0;
-            });
+                           [tolcrit](const double kr) -> double
+                           { return (kr > tolcrit) ? kr : 0.0; });
         }
 
         /// Normalise and output relative permeability values to destination range
@@ -782,8 +780,7 @@ namespace { namespace SatFunc {
                         const auto& Sg = t.getSgColumn();
 
                         numActRows = Sg.size();
-                        std::copy(std::begin(Sg), std::end(Sg),
-                                  linTable.column(tableID, primID, 0));
+                        std::ranges::copy(Sg, linTable.column(tableID, primID, 0));
                     }
 
                     // Krg(Sg)
@@ -795,12 +792,9 @@ namespace { namespace SatFunc {
                         constexpr auto uPress = ::Opm::UnitSystem::measure::pressure;
 
                         const auto& pc = t.getPcogColumn();
-                        std::transform(std::begin(pc), std::end(pc),
-                                       linTable.column(tableID, primID, 2),
-                                       [&units](const double Pc) -> double
-                                       {
-                                           return units.from_si(uPress, Pc);
-                                       });
+                        std::ranges::transform(pc, linTable.column(tableID, primID, 2),
+                                               [&units](const double Pc) -> double
+                                               { return units.from_si(uPress, Pc); });
                     }
 
                     // Inform createSatfuncTable() of number of active rows
@@ -865,8 +859,7 @@ namespace { namespace SatFunc {
                         const auto& Sg = t.getSgColumn();
 
                         numActRows = Sg.size();
-                        std::copy(std::begin(Sg), std::end(Sg),
-                                  linTable.column(tableID, primID, 0));
+                        std::ranges::copy(Sg, linTable.column(tableID, primID, 0));
                     }
 
                     // Krg(Sg)
@@ -878,12 +871,9 @@ namespace { namespace SatFunc {
                         constexpr auto uPress = ::Opm::UnitSystem::measure::pressure;
 
                         const auto& pc = t.getPcgwColumn();
-                        std::transform(std::begin(pc), std::end(pc),
-                                       linTable.column(tableID, primID, 2),
-                                       [&units](const double Pc) -> double
-                                       {
-                                           return units.from_si(uPress, Pc);
-                                       });
+                        std::ranges::transform(pc, linTable.column(tableID, primID, 2),
+                                               [&units](const double Pc) -> double
+                                               { return units.from_si(uPress, Pc); });
                     }
 
                     // Inform createSatfuncTable() of number of active rows
@@ -986,8 +976,7 @@ namespace { namespace SatFunc {
                         const auto& Sg = t.getSgColumn();
 
                         numActRows = Sg.size();
-                        std::copy(std::begin(Sg), std::end(Sg),
-                                  linTable.column(tableID, primID, 0));
+                        std::ranges::copy(Sg, linTable.column(tableID, primID, 0));
                     }
 
                     // Krg(Sg)
@@ -999,12 +988,9 @@ namespace { namespace SatFunc {
                         constexpr auto uPress = ::Opm::UnitSystem::measure::pressure;
 
                         const auto& pc = t.getPcogColumn();
-                        std::transform(std::begin(pc), std::end(pc),
-                                       linTable.column(tableID, primID, 2),
-                                       [&units](const double Pc) -> double
-                                       {
-                                           return units.from_si(uPress, Pc);
-                                       });
+                        std::ranges::transform(pc, linTable.column(tableID, primID, 2),
+                                               [&units](const double Pc) -> double
+                                               { return units.from_si(uPress, Pc); });
                     }
 
                     // Inform createSatfuncTable() of number of active rows
@@ -1071,10 +1057,9 @@ namespace { namespace SatFunc {
 
                         numActRows = Sl.size();
                         std::vector<double> Sg(std::rbegin(Sl), std::rend(Sl));
-                        std::transform(Sg.begin(), Sg.end(), Sg.begin(),
-                                       [](double x){ return (1.0 - x); });
-                        std::copy(std::begin(Sg), std::end(Sg),
-                                  linTable.column(tableID, primID, 0));
+                        std::ranges::transform(Sg, Sg.begin(),
+                                               [](double x){ return (1.0 - x); });
+                        std::ranges::copy(Sg, linTable.column(tableID, primID, 0));
                     }
 
                     // Krg(Sg)
@@ -1091,9 +1076,7 @@ namespace { namespace SatFunc {
                         std::transform(std::rbegin(pc), std::rend(pc),
                                        linTable.column(tableID, primID, 2),
                                        [&units](const double Pc) -> double
-                                       {
-                                           return units.from_si(uPress, Pc);
-                                       });
+                                       { return units.from_si(uPress, Pc); });
                     }
 
                     // Inform createSatfuncTable() of number of active rows
@@ -1153,11 +1136,9 @@ namespace { namespace SatFunc {
             {
                 auto connsat = std::vector<double>(ntab, 0.0);
 
-                std::transform(swofLET.begin(),
-                               swofLET.end(),
-                               connsat.begin(),
-                               [](const auto& letRecord)
-                               { return letRecord.s1_residual; });
+                std::ranges::transform(swofLET, connsat.begin(),
+                                       [](const auto& letRecord)
+                                       { return letRecord.s1_residual; });
 
                 return connsat;
             }();
@@ -1222,8 +1203,7 @@ namespace { namespace SatFunc {
                         const auto& Sg = t.getSgColumn();
 
                         numActRows = Sg.size();
-                        std::copy(std::begin(Sg), std::end(Sg),
-                                  linTable.column(tableID, primID, 0));
+                        std::ranges::copy(Sg, linTable.column(tableID, primID, 0));
                     }
 
                     // Krg(Sg)
@@ -1235,12 +1215,9 @@ namespace { namespace SatFunc {
                         constexpr auto uPress = ::Opm::UnitSystem::measure::pressure;
 
                         const auto& pc = t.getPcgwColumn();
-                        std::transform(std::begin(pc), std::end(pc),
-                                       linTable.column(tableID, primID, 2),
-                                       [&units](const double Pc) -> double
-                                       {
-                                           return units.from_si(uPress, Pc);
-                                       });
+                        std::ranges::transform(pc, linTable.column(tableID, primID, 2),
+                                               [&units](const double Pc) -> double
+                                               { return units.from_si(uPress, Pc); });
                     }
 
                     // Inform createSatfuncTable() of number of active rows
@@ -1349,8 +1326,7 @@ namespace { namespace SatFunc {
                             const auto& So = t.getSoColumn();
 
                             numActRows = So.size();
-                            std::copy(std::begin(So), std::end(So),
-                                      linTable.column(tableID, primID, 0));
+                            std::ranges::copy(So, linTable.column(tableID, primID, 0));
                         }
 
                         // Kro(So)
@@ -1420,12 +1396,9 @@ namespace { namespace SatFunc {
                             So.reserve(numActRows);
 
                             // Two-phase system => So = 1-Sg
-                            std::transform(std::begin(Sg), std::end(Sg),
-                                           std::back_inserter(So),
-                                           [](const double sg) -> double
-                                           {
-                                               return 1.0 - sg;
-                                           });
+                            std::ranges::transform(Sg, std::back_inserter(So),
+                                                   [](const double sg) -> double
+                                                   { return 1.0 - sg; });
 
                             std::copy(So.rbegin(), So.rend(),
                                       linTable.column(tableID, primID, 0));
@@ -1502,7 +1475,7 @@ namespace { namespace SatFunc {
                         {
                             const auto& Sl = t.getSlColumn();
                             numActRows = Sl.size();
-                            std::copy(Sl.begin(), Sl.end(), linTable.column(tableID, primID, 0));
+                            std::ranges::copy(Sl, linTable.column(tableID, primID, 0));
                         }
 
                         // Kro(So)
@@ -1625,12 +1598,9 @@ namespace { namespace SatFunc {
                             So.reserve(numActRows);
 
                             // Two-phase system => So = 1-Sw
-                            std::transform(std::begin(Sw), std::end(Sw),
-                                           std::back_inserter(So),
-                                           [](const double sw)
-                                           {
-                                               return 1.0 - sw;
-                                           });
+                            std::ranges::transform(Sw, std::back_inserter(So),
+                                                   [](const double sw)
+                                                   { return 1.0 - sw; });
 
                             std::copy(So.rbegin(), So.rend(),
                                       linTable.column(tableID, primID, 0));
@@ -1872,7 +1842,7 @@ namespace { namespace SatFunc {
             }
 
             // Join derived KrO functions on common saturation values for
-            // oil.  Heavy lifting by std::set_union() to avoid outputting
+            // oil.  Heavy lifting by std::ranges::set_union() to avoid outputting
             // common oil saturation values more than once.  Relies on input
             // tables having sorted phase saturation values (required by ECL
             // format).
@@ -1886,15 +1856,13 @@ namespace { namespace SatFunc {
 
                 ret.reserve(t0.size() + t1.size());
 
-                std::set_union(std::begin(t0), std::end(t0),
-                               std::begin(t1), std::end(t1),
-                               std::back_inserter(ret),
-                    [&t,tolerance](const TableElement& e1, const TableElement& e2)
-                {
-                    const double val1 = t[e1.function].So(e1.index);
-                    const double val2 = t[e2.function].So(e2.index);
-                    return ( (val1 + tolerance) < val2);
-                });
+                std::ranges::set_union(t0, t1, std::back_inserter(ret),
+                                       [&t,tolerance](const TableElement& e1, const TableElement& e2)
+                                       {
+                                           const double val1 = t[e1.function].So(e1.index);
+                                           const double val2 = t[e2.function].So(e2.index);
+                                           return ( (val1 + tolerance) < val2);
+                                       });
 
                 return ret;
             }
@@ -1999,8 +1967,8 @@ namespace { namespace SatFunc {
 
                     // Sg = 1.0 - Sl;
                     std::vector<double> sg( Sl.rbegin(), Sl.rend() );
-                    std::transform(sg.begin(), sg.end(), sg.begin(),
-                                   [](double x){ return (1.0 - x); });
+                    std::ranges::transform(sg, sg.begin(),
+                                           [](double x){ return (1.0 - x); });
 
                     std::vector<double> krog ( Krog.rbegin(), Krog.rend() );
                     tbl.emplace_back(sg, krog, So_off);
@@ -2094,8 +2062,7 @@ namespace { namespace SatFunc {
                             const auto& So = sof3[0];
 
                             numActRows = So.size();
-                            std::copy(std::begin(So), std::end(So),
-                                      linTable.column(tableID, primID, 0));
+                            std::ranges::copy(So, linTable.column(tableID, primID, 0));
                         }
 
                         // Krow(So)
@@ -2180,8 +2147,7 @@ namespace { namespace SatFunc {
                             const auto& So = sof3[0];
 
                             numActRows = So.size();
-                            std::copy(std::begin(So), std::end(So),
-                                      linTable.column(tableID, primID, 0));
+                            std::ranges::copy(So, linTable.column(tableID, primID, 0));
                         }
 
                         // Krow(So)
@@ -2305,8 +2271,7 @@ namespace { namespace SatFunc {
                             const auto& So = t.getSoColumn();
 
                             numActRows = So.size();
-                            std::copy(std::begin(So), std::end(So),
-                                      linTable.column(tableID, primID, 0));
+                            std::ranges::copy(So, linTable.column(tableID, primID, 0));
                         }
 
                         // Krow(So)
@@ -2460,8 +2425,7 @@ namespace { namespace SatFunc {
                         const auto& Sw = t.getSwColumn();
 
                         numActRows = Sw.size();
-                        std::copy(std::begin(Sw), std::end(Sw),
-                                  linTable.column(tableID, primID, 0));
+                        std::ranges::copy(Sw, linTable.column(tableID, primID, 0));
                     }
 
                     // Krw(Sw)
@@ -2473,12 +2437,9 @@ namespace { namespace SatFunc {
                         constexpr auto uPress = ::Opm::UnitSystem::measure::pressure;
 
                         const auto& pc = t.getPcowColumn();
-                        std::transform(std::begin(pc), std::end(pc),
-                                       linTable.column(tableID, primID, 2),
-                                       [&units](const double Pc) -> double
-                                       {
-                                           return units.from_si(uPress, Pc);
-                                       });
+                        std::ranges::transform(pc, linTable.column(tableID, primID, 2),
+                                               [&units](const double Pc) -> double
+                                               { return units.from_si(uPress, Pc); });
                     }
 
                     // Inform createSatfuncTable() of number of active rows
@@ -2542,9 +2503,8 @@ namespace { namespace SatFunc {
                         auto Sw = std::vector<double>{};
                         Sw.reserve(numActRows);
 
-                        std::transform(std::begin(Sg), std::end(Sg),
-                                       std::back_inserter(Sw),
-                                       [](const auto sg) { return 1.0 - sg; });
+                        std::ranges::transform(Sg, std::back_inserter(Sw),
+                                               [](const auto sg) { return 1.0 - sg; });
 
                         std::copy(Sw.rbegin(), Sw.rend(),
                                   linTable.column(tableID, primID, 0));
@@ -2566,12 +2526,9 @@ namespace { namespace SatFunc {
                     {
                         const auto& pc = t.getPcgwColumn();
 
-                        std::transform(std::begin(pc), std::end(pc),
-                                       linTable.column(tableID, primID, 2),
-                                       [](const double) -> double
-                                       {
-                                           return 0.0;
-                                       });
+                        std::ranges::transform(pc, linTable.column(tableID, primID, 2),
+                                               [](const double) -> double
+                                               { return 0.0; });
                     }
 
                     // Inform createSatfuncTable() of number of active rows
@@ -2675,8 +2632,7 @@ namespace { namespace SatFunc {
                         const auto& Sw = t.getSwColumn();
 
                         numActRows = Sw.size();
-                        std::copy(std::begin(Sw), std::end(Sw),
-                                  linTable.column(tableID, primID, 0));
+                        std::ranges::copy(Sw, linTable.column(tableID, primID, 0));
                     }
 
                     // Krw(Sw)
@@ -2688,12 +2644,9 @@ namespace { namespace SatFunc {
                         constexpr auto uPress = ::Opm::UnitSystem::measure::pressure;
 
                         const auto& pc = t.getPcowColumn();
-                        std::transform(std::begin(pc), std::end(pc),
-                                       linTable.column(tableID, primID, 2),
-                                       [&units](const double Pc) -> double
-                                       {
-                                           return units.from_si(uPress, Pc);
-                                       });
+                        std::ranges::transform(pc, linTable.column(tableID, primID, 2),
+                                               [&units](const double Pc) -> double
+                                               { return units.from_si(uPress, Pc); });
                     }
 
                     // Inform createSatfuncTable() of number of active rows
@@ -2801,8 +2754,7 @@ namespace { namespace SatFunc {
                         const auto& Sw = t.getSwColumn();
 
                         numActRows = Sw.size();
-                        std::copy(std::begin(Sw), std::end(Sw),
-                                  linTable.column(tableID, primID, 0));
+                        std::ranges::copy(Sw, linTable.column(tableID, primID, 0));
                     }
 
                     // Krw(Sw)
@@ -2812,9 +2764,8 @@ namespace { namespace SatFunc {
                     // Pcow = zero
                     {
                         const auto& krw = t.getKrwColumn();
-                        std::transform(std::begin(krw), std::end(krw),
-                                       linTable.column(tableID, primID, 2),
-                                       [](const double) { return 0.0; });
+                        std::ranges::transform(krw, linTable.column(tableID, primID, 2),
+                                               [](const double) { return 0.0; });
                     }
 
                     // Inform createSatfuncTable() of number of active rows
@@ -2930,12 +2881,9 @@ namespace { namespace PVTFunc {
 
                     numActRows = Pg.size();
 
-                    std::transform(std::begin(Pg), std::end(Pg),
-                                   linTable.column(tableID, primID, 0),
-                        [&units](const double p) -> double
-                    {
-                        return units.from_si(uPress, p);
-                    });
+                    std::ranges::transform(Pg, linTable.column(tableID, primID, 0),
+                                           [&units](const double p) -> double
+                                           { return units.from_si(uPress, p); });
                 }
 
                 // Column 1: 1/Bg
@@ -2944,12 +2892,9 @@ namespace { namespace PVTFunc {
                         gas_inverse_formation_volume_factor;
 
                     const auto& Bg = t.getFormationFactorColumn();
-                    std::transform(std::begin(Bg), std::end(Bg),
-                                   linTable.column(tableID, primID, 1),
-                        [&units](const double B) -> double
-                    {
-                        return units.from_si(uRecipFVF, 1.0 / B);
-                    });
+                    std::ranges::transform(Bg, linTable.column(tableID, primID, 1),
+                                           [&units](const double B) -> double
+                                           { return units.from_si(uRecipFVF, 1.0 / B); });
                 }
 
                 // Column 2: 1/(Bg*mu_g)
@@ -2962,14 +2907,12 @@ namespace { namespace PVTFunc {
                     const auto& Bg   = t.getFormationFactorColumn();
                     const auto& mu_g = t.getViscosityColumn();
 
-                    std::transform(std::begin(Bg), std::end(Bg),
-                                   std::begin(mu_g),
-                                   linTable.column(tableID, primID, 2),
-                        [&units](const double B, const double mu) -> double
-                    {
-                        return units.from_si(uRecipFVF, 1.0 / B)
-                            /  units.from_si(uVisc    , mu);
-                    });
+                    std::ranges::transform(Bg, mu_g, linTable.column(tableID, primID, 2),
+                                           [&units](const double B, const double mu) -> double
+                                           {
+                                               return units.from_si(uRecipFVF, 1.0 / B)
+                                                   /  units.from_si(uVisc    , mu);
+                                           });
                 }
 
                 // Inform createPropfuncTable() of number of active rows in
@@ -3043,12 +2986,9 @@ namespace { namespace PVTFunc {
 
                     numActRows = Rv.size();
 
-                    std::transform(std::begin(Rv), std::end(Rv),
-                                   linTable.column(tableID, primID, 0),
-                        [&units](const double rv) -> double
-                    {
-                        return units.from_si(uRv, rv);
-                    });
+                    std::ranges::transform(Rv, linTable.column(tableID, primID, 0),
+                                           [&units](const double rv) -> double
+                                           { return units.from_si(uRv, rv); });
                 }
 
                 // Column 1: 1/Bg
@@ -3058,12 +2998,9 @@ namespace { namespace PVTFunc {
 
                     const auto& Bg = t.getColumn(1);
 
-                    std::transform(std::begin(Bg), std::end(Bg),
-                                   linTable.column(tableID, primID, 1),
-                        [&units](const double B) -> double
-                    {
-                        return units.from_si(uRecipFVF, 1.0 / B);
-                    });
+                    std::ranges::transform(Bg, linTable.column(tableID, primID, 1),
+                                           [&units](const double B) -> double
+                                           { return units.from_si(uRecipFVF, 1.0 / B); });
                 }
 
                 // Column 2: 1/(Bg*mu_g)
@@ -3076,14 +3013,12 @@ namespace { namespace PVTFunc {
                     const auto& Bg   = t.getColumn(1);
                     const auto& mu_g = t.getColumn(2);
 
-                    std::transform(std::begin(Bg), std::end(Bg),
-                                   std::begin(mu_g),
-                                   linTable.column(tableID, primID, 2),
-                        [&units](const double B, const double mu) -> double
-                    {
-                        return units.from_si(uRecipFVF, 1.0 / B)
-                            /  units.from_si(uVisc    , mu);
-                    });
+                    std::ranges::transform(Bg, mu_g, linTable.column(tableID, primID, 2),
+                                           [&units](const double B, const double mu) -> double
+                                           {
+                                               return units.from_si(uRecipFVF, 1.0 / B)
+                                                   /  units.from_si(uVisc    , mu);
+                                           });
                 }
 
                 // Inform createPropfuncTable() of number of active rows in
@@ -3143,12 +3078,9 @@ namespace { namespace PVTFunc {
 
                 const auto numActRows = Pg.size();
 
-                std::transform(std::begin(Pg), std::end(Pg),
-                               linTable.column(tableID, primID, 0),
-                    [&units](const double p) -> double
-                {
-                    return units.from_si(uPress, p);
-                });
+                std::ranges::transform(Pg, linTable.column(tableID, primID, 0),
+                                       [&units](const double p) -> double
+                                       { return units.from_si(uPress, p); });
 
                 return numActRows;
             });
@@ -3365,12 +3297,9 @@ namespace { namespace PVTFunc {
 
                     numActRows = Po.size();
 
-                    std::transform(std::begin(Po), std::end(Po),
-                                   linTable.column(tableID, primID, 0),
-                        [&units](const double p) -> double
-                    {
-                        return units.from_si(uPress, p);
-                    });
+                    std::ranges::transform(Po, linTable.column(tableID, primID, 0),
+                                           [&units](const double p) -> double
+                                           { return units.from_si(uPress, p); });
                 }
 
                 // Column 1: 1/Bo
@@ -3379,12 +3308,9 @@ namespace { namespace PVTFunc {
                         oil_inverse_formation_volume_factor;
 
                     const auto& Bo = t.getFormationFactorColumn();
-                    std::transform(std::begin(Bo), std::end(Bo),
-                                   linTable.column(tableID, primID, 1),
-                        [&units](const double B) -> double
-                    {
-                        return units.from_si(uRecipFVF, 1.0 / B);
-                    });
+                    std::ranges::transform(Bo, linTable.column(tableID, primID, 1),
+                                           [&units](const double B) -> double
+                                           { return units.from_si(uRecipFVF, 1.0 / B); });
                 }
 
                 // Column 2: 1/(Bo*mu_o)
@@ -3397,14 +3323,12 @@ namespace { namespace PVTFunc {
                     const auto& Bo   = t.getFormationFactorColumn();
                     const auto& mu_o = t.getViscosityColumn();
 
-                    std::transform(std::begin(Bo), std::end(Bo),
-                                   std::begin(mu_o),
-                                   linTable.column(tableID, primID, 2),
-                        [&units](const double B, const double mu) -> double
-                    {
-                        return units.from_si(uRecipFVF, 1.0 / B)
-                            /  units.from_si(uVisc    , mu);
-                    });
+                    std::ranges::transform(Bo, mu_o, linTable.column(tableID, primID, 2),
+                                           [&units](const double B, const double mu) -> double
+                                           {
+                                               return units.from_si(uRecipFVF, 1.0 / B)
+                                                   /  units.from_si(uVisc    , mu);
+                                           });
                 }
 
                 // Inform createPropfuncTable() of number of active rows in
@@ -3479,12 +3403,9 @@ namespace { namespace PVTFunc {
 
                     numActRows = Po.size();
 
-                    std::transform(std::begin(Po), std::end(Po),
-                                   linTable.column(tableID, primID, 0),
-                        [&units](const double po) -> double
-                    {
-                        return units.from_si(uPo, po);
-                    });
+                    std::ranges::transform(Po, linTable.column(tableID, primID, 0),
+                                           [&units](const double po) -> double
+                                           { return units.from_si(uPo, po); });
                 }
 
                 // Column 1: 1/Bo
@@ -3494,12 +3415,9 @@ namespace { namespace PVTFunc {
 
                     const auto& Bo = t.getColumn(1);
 
-                    std::transform(std::begin(Bo), std::end(Bo),
-                                   linTable.column(tableID, primID, 1),
-                        [&units](const double B) -> double
-                    {
-                        return units.from_si(uRecipFVF, 1.0 / B);
-                    });
+                    std::ranges::transform(Bo, linTable.column(tableID, primID, 1),
+                                           [&units](const double B) -> double
+                                           { return units.from_si(uRecipFVF, 1.0 / B); });
                 }
 
                 // Column 2: 1/(Bo*mu_o)
@@ -3512,14 +3430,12 @@ namespace { namespace PVTFunc {
                     const auto& Bo   = t.getColumn(1);
                     const auto& mu_o = t.getColumn(2);
 
-                    std::transform(std::begin(Bo), std::end(Bo),
-                                   std::begin(mu_o),
-                                   linTable.column(tableID, primID, 2),
-                        [&units](const double B, const double mu) -> double
-                    {
-                        return units.from_si(uRecipFVF, 1.0 / B)
-                            /  units.from_si(uVisc    , mu);
-                    });
+                    std::ranges::transform(Bo, mu_o, linTable.column(tableID, primID, 2),
+                                           [&units](const double B, const double mu) -> double
+                                           {
+                                               return units.from_si(uRecipFVF, 1.0 / B)
+                                                   /  units.from_si(uVisc    , mu);
+                                           });
                 }
 
                 // Inform createPropfuncTable() of number of active rows in
@@ -3578,12 +3494,9 @@ namespace { namespace PVTFunc {
 
                 const auto numActRows = Rs.size();
 
-                std::transform(std::begin(Rs), std::end(Rs),
-                               linTable.column(tableID, primID, 0),
-                    [&units](const double rs) -> double
-                {
-                    return units.from_si(uRs, rs);
-                });
+                std::ranges::transform(Rs, linTable.column(tableID, primID, 0),
+                                       [&units](const double rs) -> double
+                                       { return units.from_si(uRs, rs); });
 
                 return numActRows;
             });

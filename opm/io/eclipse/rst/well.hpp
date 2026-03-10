@@ -74,7 +74,6 @@ struct RstWell
     int active_control;
     int vfp_table;
     int econ_workover_procedure;
-    int preferred_phase;
     bool allow_xflow;
     int group_controllable_flag;
     int econ_limit_end_run;
@@ -129,6 +128,7 @@ struct RstWell
     float dfac_corr_coeff_a{};
     float dfac_corr_exponent_b{};
     float dfac_corr_exponent_c{};
+    float inj_temperature{UNDEFINED_VALUE};
     std::vector<float> tracer_concentration_injection;
 
     double oil_rate;

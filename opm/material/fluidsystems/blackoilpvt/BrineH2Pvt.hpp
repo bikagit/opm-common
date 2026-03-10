@@ -35,16 +35,15 @@ copyright holders.
 #include <opm/material/components/H2.hpp>
 #include <opm/material/common/UniformTabulated2DFunction.hpp>
 #include <opm/material/common/Valgrind.hpp>
+#include <opm/material/fluidsystems/BlackOilFunctions.hpp>
 
 #include <cstddef>
 #include <vector>
 
 namespace Opm {
 
-#if HAVE_ECL_INPUT
 class EclipseState;
 class Schedule;
-#endif
 
 /*!
 * \brief This class represents the Pressure-Volume-Temperature relations of the liquid phase for a H2-Brine system
@@ -67,13 +66,11 @@ public:
                         Scalar T_ref = 288.71, //(273.15 + 15.56)
                         Scalar P_ref = 101325);
 
-#if HAVE_ECL_INPUT
     /*!
      * \brief Initialize the parameters for Brine-H2 system using an ECL deck.
      *
      */
     void initFromState(const EclipseState& eclState, const Schedule&);
-#endif
 
     void setNumRegions(std::size_t numRegions);
 
@@ -259,6 +256,27 @@ public:
         return (1.0 - convertRsToXoG_(Rs, regionIdx))
              * density_(regionIdx, temperature, pressure, Rs, Evaluation(salinity_[regionIdx]))
              / brineReferenceDensity_[regionIdx];
+    }
+
+    /*!
+     * \brief Returns the formation volume factor [-] and viscosity [Pa s] of the fluid phase.
+     */
+    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    std::pair<LhsEval, LhsEval>
+    inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState, unsigned regionIdx)
+    {
+        // Deal with the possibility that we are in a two-phase H2STORE with OIL and GAS as phases.
+        const bool waterIsActive = fluidState.phaseIsActive(FluidState::waterPhaseIdx);
+        const int myPhaseIdx = waterIsActive ? FluidState::waterPhaseIdx : FluidState::oilPhaseIdx;
+        const LhsEval& Rsw = waterIsActive ? decay<LhsEval>(fluidState.Rsw()) : decay<LhsEval>(fluidState.Rs());
+
+        const LhsEval& T = decay<LhsEval>(fluidState.temperature(myPhaseIdx));
+        const LhsEval& p = decay<LhsEval>(fluidState.pressure(myPhaseIdx));
+        const LhsEval& saltConcentration
+            = BlackOil::template getSaltConcentration_<FluidState, LhsEval>(fluidState, regionIdx);
+        // TODO: The viscosity does not yet depend on the composition
+        return { this->inverseFormationVolumeFactor(regionIdx, T, p, Rsw, saltConcentration) ,
+                this->saturatedViscosity(regionIdx, T, p, saltConcentration) };
     }
 
     /*!
@@ -459,8 +477,8 @@ private:
         }
 
         // calculate individual contribution to density
-        const LhsEval& rho_brine = Brine::liquidDensity(T, pl, salinity, extrapolate);
         const LhsEval& rho_pure = H2O::liquidDensity(T, pl, extrapolate);
+        const LhsEval& rho_brine = Brine::liquidDensity(T, pl, salinity, rho_pure);
         const LhsEval& rho_lH2 = liquidDensityWaterH2_(T, pl, xlH2);
         const LhsEval& contribH2 = rho_lH2 - rho_pure;
 

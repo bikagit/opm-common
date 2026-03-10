@@ -74,10 +74,10 @@ namespace Opm {
     class TracerConfig;
     class UDQConfig;
     class Well;
-    enum class WellGasInflowEquation;
+    enum class WellGasInflowEquation : std::uint8_t;
     class WellMatcher;
-    enum class WellProducerCMode;
-    enum class WellStatus;
+    enum class WellProducerCMode : std::uint16_t;
+    enum class WellStatus : std::uint8_t;
     class WelSegsSet;
     class WellTestConfig;
 } // namespace Opm
@@ -106,7 +106,9 @@ namespace Opm {
 
         /*! \brief Construct a Schedule object from a deck.
          *  \param deck Deck to construct Schedule from
+         *  \param grid Eclipse grid description
          *  \param fp Field property manager
+         *  \param numAquifers Numerical aquifers to use
          *  \param runspec Run specification parameters to use
          *  \param parseContext Parsing context
          *  \param errors Error configuration
@@ -122,7 +124,7 @@ namespace Opm {
                  const EclipseGrid& grid,
                  const FieldPropsManager& fp,
                  const NumericalAquifers& numAquifers,
-                 const Runspec &runspec,
+                 const Runspec& runspec,
                  const ParseContext& parseContext,
                  ErrorGuard& errors,
                  std::shared_ptr<const Python> python,
@@ -288,9 +290,45 @@ namespace Opm {
         /// \param[in] timeStep Zero-based report step index.
         std::vector<const Group*> restart_groups(std::size_t timeStep) const;
 
+        /// List of wells with structural changes since previous report step.
+        ///
+        /// Structural changes in this context include
+        ///
+        ///   -# number/location of reservoir connections
+        ///   -# number/topology of well segments/branches
+        ///   -# parent groups.
+        ///
+        /// \param[in] reportStep Zero-based report step index.
+        ///
+        /// \param[in] initialStep Zero-based report step index of the run's
+        /// first report step.  Typically zero for a base run, and the run's
+        /// restart step in a restarted simulation run.
+        ///
+        /// \return List of wells at time \p reportStep with structural
+        /// changes since the previous report step.
         std::vector<std::string>
         changed_wells(std::size_t reportStep,
                       std::size_t initialStep = 0) const;
+
+        /// Well lists change predicate
+        ///
+        /// Queries whether or not any structural well list changes have
+        /// happened at a particular report step.  Structural changes in
+        /// this context include
+        ///
+        ///   -# creation of a new well list
+        ///   -# wells being added to/removed from one or more well lists
+        ///
+        /// \param[in] reportStep Zero-based report step index.
+        ///
+        /// \param[in] initialStep Zero-based report step index of the run's
+        /// first report step.  Typically zero for a base run, and the run's
+        /// restart step in a restarted simulation run.
+        ///
+        /// \return Whether or not any of the run's well lists had
+        /// structural changes since the previous report step.
+        bool changedWellLists(std::size_t reportStep,
+                              std::size_t initialStep = 0) const;
 
         const Well& getWell(std::size_t well_index, std::size_t timeStep) const;
         const Well& getWell(const std::string& wellName, std::size_t timeStep) const;
@@ -331,11 +369,6 @@ namespace Opm {
         const Group& getGroup(const std::string& groupName, std::size_t timeStep) const;
 
         std::optional<std::size_t> first_RFT() const;
-        /*
-          Will remove all completions which are connected to cell which is not
-          active. Will scan through all wells and all timesteps.
-        */
-        void filterConnections(const ActiveGridCells& grid);
         std::size_t size() const;
 
         bool write_rst_file(std::size_t report_step) const;
@@ -349,12 +382,14 @@ namespace Opm {
         SimulatorUpdate applyAction(std::size_t reportStep,
                                     const Action::ActionX& action,
                                     const Action::Result::MatchingEntities& matches,
-                                    const std::unordered_map<std::string, double>& wellpi);
+                                    const std::unordered_map<std::string, double>& wellpi,
+                                    const bool iterateSchedule);
 
         SimulatorUpdate applyAction(std::size_t reportStep,
                                     const Action::ActionX& action,
                                     const Action::Result::MatchingEntities& matches,
-                                    const std::unordered_map<std::string, float>& wellpi);
+                                    const std::unordered_map<std::string, float>& wellpi,
+                                    const bool iterateSchedule);
         /*
           The runPyAction() will run the Python script in a PYACTION keyword. In
           the case of Schedule updates the recommended way of doing that from
@@ -390,6 +425,13 @@ namespace Opm {
         bool operator==(const Schedule& data) const;
         std::shared_ptr<const Python> python() const;
 
+        /// Retrieve initial report configuration object
+        ///
+        /// Populated by RPTSOL keyword in the SOLUTION section.
+        ///
+        /// \return Initial configuration object.  Nullopt if there is no
+        /// RPTSOL information in the SOLUTION section.
+        const std::optional<RPTConfig>& initialReportConfiguration() const;
 
         const ScheduleState& back() const;
         const ScheduleState& operator[](std::size_t index) const;
@@ -492,7 +534,7 @@ namespace Opm {
 
         // The current_report_step is set to the current report step when a PYACTION call is executed.
         // This is needed since the Schedule object does not know the current report step of the simulator and
-        // we only allow PYACTIONS for the current and future report steps. 
+        // we only allow PYACTIONS for the current and future report steps.
         std::size_t current_report_step = 0;
         // The simUpdateFromPython points to a SimulatorUpdate collecting all updates from one PYACTION call.
         // The SimulatorUpdate is reset before a new PYACTION call is executed.
@@ -543,7 +585,7 @@ namespace Opm {
         void addGroup(const RestartIO::RstGroup& rst_group, std::size_t timeStep);
         void addWell(const std::string& wellName, const DeckRecord& record,
                     std::size_t timeStep, ConnectionOrder connection_order);
-        void checkIfAllConnectionsIsShut(std::size_t currentStep);
+        void checkIfAllConnectionsIsShut(std::size_t reportStep);
         void end_report(std::size_t report_step);
         /// \param welsegs_wells All wells with a WELSEGS entry for checks.
         /// \param compegs_wells All wells with a COMPSEGS entry for checks.
@@ -559,7 +601,8 @@ namespace Opm {
                            const std::unordered_map<std::string, double>* target_wellpi,
                            std::unordered_map<std::string, double>& wpimult_global_factor,
                            WelSegsSet* welsegs_wells = nullptr,
-                           std::set<std::string>* compsegs_wells = nullptr);
+                           std::set<std::string>* compsegs_wells = nullptr,
+                           std::set<std::string>* comptraj_wells = nullptr);
 
         void internalWELLSTATUSACTIONXFromPYACTION(const std::string& well_name, std::size_t report_step, const std::string& wellStatus);
         void prefetchPossibleFutureConnections(const ScheduleGrid& grid, const DeckKeyword& keyword,
@@ -570,6 +613,7 @@ namespace Opm {
                                            bool allowEmpty = false);
         static std::string formatDate(std::time_t t);
         void applyGlobalWPIMULT( const std::unordered_map<std::string, double>& wpimult_global_factor);
+        void updateICDScalingFactors();
 
         bool must_write_rst_file(std::size_t report_step) const;
 

@@ -58,10 +58,11 @@ template <typename T>
 std::optional<int> findInVector(const std::vector<T>  & vecOfElements, const T  & element)
 {
     // Find given element in vector
-    auto it = std::find(vecOfElements.begin(), vecOfElements.end(), element);
+    const auto it = std::ranges::find(vecOfElements, element);
 
-    return (it != vecOfElements.end()) ? std::optional<int> {std::distance(vecOfElements.begin(), it)} :
-           std::nullopt;
+    return (it != vecOfElements.end())
+        ? std::optional<int> {std::distance(vecOfElements.begin(), it)}
+        : std::nullopt;
 }
 
 std::vector<std::vector<std::size_t>> wellOrderInWList(const Opm::Schedule&   sched,
@@ -98,7 +99,7 @@ std::vector<std::vector<std::size_t>> wellOrderInWList(const Opm::Schedule&   sc
         }
         //store vector in map - and reset vector values to zero
         curWelOrd.push_back(well_order);
-        std::fill(well_order.begin(), well_order.end(), 0);
+        std::ranges::fill(well_order, 0);
     }
     return curWelOrd;
 }
@@ -235,5 +236,3 @@ captureDeclaredWListData(const Schedule&   sched,
 
     }
 }
-
-

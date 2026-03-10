@@ -501,10 +501,10 @@ namespace {
                     // Well variable
                     if ((lhsQtype == 'W') && ar.conditionSatisfied()) {
                         // Find the well that violates action if relevant
-                        auto well_iter = std::find_if(wells.begin(), wells.end(),
-                                                      [&matchSet = ar.matches()]
-                                                      (const std::string& well)
-                                                      { return matchSet.hasWell(well); });
+                        auto well_iter =
+                            std::ranges::find_if(wells,
+                                                 [&matchSet = ar.matches()](const std::string& well)
+                                                 { return matchSet.hasWell(well); });
 
                         if (well_iter != wells.end()) {
                             const auto& wn = *well_iter;

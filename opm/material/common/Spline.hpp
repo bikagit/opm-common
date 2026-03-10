@@ -134,7 +134,8 @@ public:
      * \param nSamples The number of sampling points (must be > 2)
      * \param x An array containing the \f$x\f$ values of the spline's sampling points
      * \param y An array containing the \f$y\f$ values of the spline's sampling points
-     * \param periodic Indicates whether a natural or a periodic spline should be created
+     * \param splineType Type of spline
+     * \param sortInputs True to sort inputs
      */
     template <class ScalarArrayX, class ScalarArrayY>
     Spline(size_t nSamples,
@@ -149,7 +150,8 @@ public:
      *
      * \param nSamples The number of sampling points (must be > 2)
      * \param points An array of \f$(x,y)\f$ tuples of the spline's sampling points
-     * \param periodic Indicates whether a natural or a periodic spline should be created
+     * \param splineType Type of spline
+     * \param sortInputs True to sort inputs
      */
     template <class PointArray>
     Spline(size_t nSamples,
@@ -163,7 +165,8 @@ public:
      *
      * \param x An array containing the \f$x\f$ values of the spline's sampling points (must have a size() method)
      * \param y An array containing the \f$y\f$ values of the spline's sampling points (must have a size() method)
-     * \param periodic Indicates whether a natural or a periodic spline should be created
+     * \param splineType Type of spline
+     * \param sortInputs True to sort inputs
      */
     template <class ScalarContainer>
     Spline(const ScalarContainer& x,
@@ -176,7 +179,8 @@ public:
      * \brief Convenience constructor for a natural or a periodic spline
      *
      * \param points An array of \f$(x,y)\f$ tuples of the spline's sampling points (must have a size() method)
-     * \param periodic Indicates whether a natural or a periodic spline should be created
+     * \param splineType Type of spline
+     * \param sortInputs True to sort inputs
      */
     template <class PointContainer>
     explicit Spline(const PointContainer& points,
@@ -363,8 +367,8 @@ public:
 
         setNumSamples_(x.size());
 
-        std::copy(x.begin(), x.end(), xPos_.begin());
-        std::copy(y.begin(), y.end(), yPos_.begin());
+        std::ranges::copy(x, xPos_.begin());
+        std::ranges::copy(y, yPos_.begin());
 
         if (sortInputs)
             sortInput_();
@@ -557,8 +561,8 @@ public:
         assert(x.size() > 1);
 
         setNumSamples_(x.size());
-        std::copy(x.begin(), x.end(), xPos_.begin());
-        std::copy(y.begin(), y.end(), yPos_.begin());
+        std::ranges::copy(x, xPos_.begin());
+        std::ranges::copy(y, yPos_.begin());
 
         if (sortInputs)
             sortInput_();
@@ -1019,7 +1023,7 @@ protected:
         // sort the indices according to the x values of the sample
         // points
         ComparatorX_ cmp(xPos_);
-        std::sort(idxVector.begin(), idxVector.end(), cmp);
+        std::ranges::sort(idxVector, cmp);
 
         // reorder the sample points
         std::vector<Scalar> tmpX(n), tmpY(n);

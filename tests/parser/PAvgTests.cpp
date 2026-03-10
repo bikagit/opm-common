@@ -125,11 +125,9 @@ namespace {
 bool contains(const std::vector<std::size_t>& index_list,
               const std::size_t               global_index)
 {
-    return std::any_of(index_list.begin(), index_list.end(),
-                       [global_index](const std::size_t gi)
-                       {
-                           return gi == global_index;
-                       });
+    return std::ranges::any_of(index_list,
+                               [global_index](const std::size_t gi)
+                               { return gi == global_index; });
 }
 
 } // Anonymous namespace

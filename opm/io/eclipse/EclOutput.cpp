@@ -58,11 +58,10 @@ void EclOutput::write<std::string>(const std::string& name,
     int maximum_length = 8;
 
     if (data.size() > 0) {
-        auto it = std::max_element(data.begin(), data.end(), []
-                                   (const std::string& str1, const std::string& str2)
-        {
-            return str2.size() > str1.size();
-        });
+        const auto it =
+            std::ranges::max_element(data,
+                                     [](const std::string& str1, const std::string& str2)
+                                     { return str2.size() > str1.size(); });
 
         maximum_length = it->size();
     }
@@ -95,11 +94,10 @@ void EclOutput::write(const std::string& name, const std::vector<std::string>& d
     // array type will be assumed C0NN (not CHAR). Also in cases where element size is 8 or less
 
     if (data.size() > 0) {
-        auto it = std::max_element(data.begin(), data.end(), []
-                                   (const std::string& str1, const std::string& str2)
-        {
-            return str2.size() > str1.size();
-        });
+        const auto it =
+            std::ranges::max_element(data,
+                                     [](const std::string& str1, const std::string& str2)
+                                     { return str2.size() > str1.size(); });
 
         if (it->size() > static_cast<size_t>(element_size))
             OPM_THROW(std::runtime_error, "specified element size for type C0NN less than maximum string length in output data");

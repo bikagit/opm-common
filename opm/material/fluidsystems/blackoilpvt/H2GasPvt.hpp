@@ -37,10 +37,8 @@
 
 namespace Opm {
 
-#if HAVE_ECL_INPUT
 class EclipseState;
 class Schedule;
-#endif
 
 /*!
 * \brief This class represents the Pressure-Volume-Temperature relations of the gas phase for H2
@@ -63,12 +61,10 @@ public:
                       Scalar T_ref = 288.71, //(273.15 + 15.56)
                       Scalar P_ref = 101325);
 
-#if HAVE_ECL_INPUT
     /*!
     * \brief Initialize the parameters for H2 gas using an ECL deck.
     */
     void initFromState(const EclipseState& eclState, const Schedule&);
-#endif
 
     void setNumRegions(size_t numRegions);
 
@@ -187,6 +183,21 @@ public:
         //const auto rho = 1.0/(xBrine/rhoH2O + (1.0 - xBrine)/rhoH2);
         return rhoH2 / (gasReferenceDensity_[regionIdx] +
                         max(rvw,rv) * brineReferenceDensity_[regionIdx]);
+    }
+
+    /*!
+     * \brief Returns the formation volume factor [-] and viscosity [Pa s] of the fluid phase.
+     */
+    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    std::pair<LhsEval, LhsEval>
+    inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState, unsigned regionIdx)
+    {
+        const LhsEval& T = decay<LhsEval>(fluidState.temperature(FluidState::gasPhaseIdx));
+        const LhsEval& p = decay<LhsEval>(fluidState.pressure(FluidState::gasPhaseIdx));
+        const LhsEval& Rv = decay<LhsEval>(fluidState.Rv());
+        const LhsEval& Rvw = decay<LhsEval>(fluidState.Rvw());
+        return { this->inverseFormationVolumeFactor(regionIdx, T, p, Rv, Rvw),
+                 this->viscosity(regionIdx, T, p, Rv, Rvw) };
     }
 
     /*!

@@ -23,9 +23,9 @@
 
 #include <opm/common/OpmLog/KeywordLocation.hpp>
 #include <opm/common/OpmLog/OpmLog.hpp>
+
 #include <opm/common/utility/ActiveGridCells.hpp>
 #include <opm/common/utility/numeric/linearInterpolation.hpp>
-#include <opm/input/eclipse/Parser/ParserKeywords/W.hpp>
 
 #include <opm/input/eclipse/EclipseState/Grid/EclipseGrid.hpp>
 #include <opm/input/eclipse/EclipseState/Grid/FieldPropsManager.hpp>
@@ -34,17 +34,22 @@
 #include <opm/input/eclipse/Schedule/ScheduleGrid.hpp>
 #include <opm/input/eclipse/Schedule/Well/Connection.hpp>
 #include <opm/input/eclipse/Schedule/Well/WDFAC.hpp>
-#include <opm/input/eclipse/Schedule/WellTraj/RigEclipseWellLogExtractor.hpp>
 
 #include <opm/input/eclipse/Units/Units.hpp>
 
 #include <opm/input/eclipse/Deck/DeckRecord.hpp>
+
+#include <opm/input/eclipse/Parser/ParserKeywords/C.hpp>
+#include <opm/input/eclipse/Parser/ParserKeywords/W.hpp>
 
 #include <external/resinsight/LibCore/cvfVector3.h>
 #include <external/resinsight/ReservoirDataModel/RigHexIntersectionTools.h>
 #include <external/resinsight/ReservoirDataModel/RigWellLogExtractionTools.h>
 #include <external/resinsight/ReservoirDataModel/RigWellLogExtractor.h>
 #include <external/resinsight/ReservoirDataModel/RigWellPath.h>
+
+#include "../WellTraj/RigEclipseWellLogExtractor.hpp"
+#include "WellTrajInfo.hpp"
 
 #include <algorithm>
 #include <array>
@@ -280,11 +285,10 @@ namespace Opm {
         if (! this->m_connections[0].attachedToSegment() &&
             (this->m_ordering != Connection::Order::INPUT))
         {
-            std::sort(out.begin(), out.end(), [](const Opm::Connection* conn1,
-                                                 const Opm::Connection* conn2)
-            {
-                return conn1->sort_value() < conn2->sort_value();
-            });
+            std::ranges::sort(out,
+                              [](const Opm::Connection* conn1,
+                                 const Opm::Connection* conn2)
+                              { return conn1->sort_value() < conn2->sort_value(); });
         }
 
         return out;
@@ -356,12 +360,12 @@ namespace Opm {
                             seqIndex, lgr_grid_number, defaultSatTabId);
     }
 
-    void WellConnections::loadCOMPDATX(const DeckRecord&      record,
-                                       const ScheduleGrid&    grid,
-                                       const std::string&     wname,
-                                       const WDFAC&           wdfac,
-                                       const KeywordLocation& location,
-                                       std::optional<std::string> lgr_label = std::nullopt)
+    void WellConnections::loadCOMPDATX(const DeckRecord&                 record,
+                                       const ScheduleGrid&               grid,
+                                       const std::string&                wname,
+                                       const WDFAC&                      wdfac,
+                                       const KeywordLocation&            location,
+                                       const std::optional<std::string>& lgr_label)
     {
         const auto& itemI = record.getItem("I");
         const auto defaulted_I = itemI.defaultApplied(0) || (itemI.get<int>(0) == 0);
@@ -385,7 +389,7 @@ namespace Opm {
         const auto skin_factor = record.getItem("SKIN").getSIDouble(0);
         const auto d_factor = record.getItem("D_FACTOR").getSIDouble(0);
         const int lgr_grid_number = grid.get_lgr_grid_number(lgr_label);
-        
+
         int satTableId = -1;
         bool defaultSatTable = true;
         if (satTableIdItem.hasValue(0) && (satTableIdItem.get<int>(0) > 0)) {
@@ -411,10 +415,12 @@ namespace Opm {
         for (int k = K1; k <= K2; ++k) {
             const auto& cell = grid.get_cell(I, J, k, lgr_label);
             if (!cell.is_active()) {
-                auto msg = fmt::format(R"(Problem with COMPDATX keyword
+                const auto* kw_ext = lgr_label.has_value() ? "L" : "";
+
+                auto msg = fmt::format(R"(Problem with COMPDAT{} keyword
 In {} line {}
 The cell ({},{},{}) in well {} is not active and the connection will be ignored)",
-                                       location.filename, location.lineno,
+                                       kw_ext, location.filename, location.lineno,
                                        I + 1, J + 1, k + 1, wname);
 
                 OpmLog::warning(msg);
@@ -518,18 +524,15 @@ The cell ({},{},{}) in well {} is not active and the connection will be ignored)
             ctf_props.static_dfac_corr_coeff =
                 staticForchheimerCoefficient(ctf_props, props->poro, wdfac);
 
-            auto prev = std::find_if(this->m_connections.begin(),
-                                     this->m_connections.end(),
-                                     [I, J, k](const Connection& c)
-                                     {
-                                         return c.sameCoordinate(I, J, k);
-                                     });
+            const auto prev = std::ranges::find_if(this->m_connections,
+                                                  [I, J, k](const Connection& c)
+                                                  { return c.sameCoordinate(I, J, k); });
 
             if (prev == this->m_connections.end()) {
                 const std::size_t noConn = this->m_connections.size();
                 this->addConnection(I, J, k, cell.global_index, state,
                                     cell.depth, ctf_props, satTableId,
-                                    direction, ctf_kind, noConn, 
+                                    direction, ctf_kind, noConn,
                                     lgr_grid_number, defaultSatTable);
             }
             else {
@@ -550,16 +553,17 @@ The cell ({},{},{}) in well {} is not active and the connection will be ignored)
         }
     }
 
-
-    void WellConnections:: loadCOMPDAT(const DeckRecord&     record,
+    void WellConnections::loadCOMPDAT(const DeckRecord&      record,
                                       const ScheduleGrid&    grid,
                                       const std::string&     wname,
                                       const WDFAC&           wdfac,
                                       const KeywordLocation& location)
     {
-        loadCOMPDATX(record,grid,wname,wdfac,location);
-    }
+        // No LGR tag when processing the main grid COMPDAT keyword.
+        const auto lgr_tag = std::optional<std::string>{}; // == nullopt.
 
+        this->loadCOMPDATX(record, grid, wname, wdfac, location, lgr_tag);
+    }
 
     void WellConnections::loadCOMPDATL(const DeckRecord&      record,
                                        const ScheduleGrid&    grid,
@@ -567,16 +571,24 @@ The cell ({},{},{}) in well {} is not active and the connection will be ignored)
                                        const WDFAC&           wdfac,
                                        const KeywordLocation& location)
     {
-        const std::string& lgr_tag = record.getItem("LGR").get<std::string>(0);
-        loadCOMPDATX(record,grid,wname,wdfac,location, lgr_tag);
+        // We're processing a local grid's connection data (COMPDATL or
+        // COMPDATM keyword).  Convey this information to the keyword
+        // handler.
+        const auto lgr_tag = std::make_optional
+            (record.getItem<ParserKeywords::COMPDATX::LGR>().getTrimmedString(0));
+
+        this->loadCOMPDATX(record, grid, wname, wdfac, location, lgr_tag);
     }
 
-    void WellConnections::loadCOMPTRAJ(const DeckRecord&      record,
-                                       const ScheduleGrid&    grid,
-                                       const std::string&     wname,
-                                       const KeywordLocation& location,
-                                       external::cvf::ref<external::cvf::BoundingBoxTree>& cellSearchTree)
+    void
+    WellConnections::loadCOMPTRAJ(const DeckRecord&      record,
+                                  const ScheduleGrid&    grid,
+                                  const std::string&     wname,
+                                  const KeywordLocation& location,
+                                  WellTrajInfo&          wellTraj)
     {
+        if (this->coord[0].size() == 0) return;  // No path.
+
         const auto& perf_top = record.getItem("PERF_TOP");
         const auto& perf_bot = record.getItem("PERF_BOT");
 
@@ -622,7 +634,6 @@ The cell ({},{},{}) in well {} is not active and the connection will be ignored)
         points.push_back(p_top);
         measured_depths.push_back(m_top);
 
-        external::cvf::ref<external::RigWellPath> wellPathGeometry { new external::RigWellPath };
         points.reserve(this->coord[0].size());
         measured_depths.reserve(this->coord[0].size());
         for (size_t i = 0; i < coord[0].size(); ++i) {
@@ -635,25 +646,25 @@ The cell ({},{},{}) in well {} is not active and the connection will be ignored)
         points.push_back(p_bot);
         measured_depths.push_back(m_bot);
 
-        wellPathGeometry->setWellPathPoints(points);
-        wellPathGeometry->setMeasuredDepths(measured_depths);
+        wellTraj.wellPathGeometry->setWellPathPoints(points);
+        wellTraj.wellPathGeometry->setMeasuredDepths(measured_depths);
 
         external::cvf::ref<external::RigEclipseWellLogExtractor> e {
             new external::RigEclipseWellLogExtractor {
-                wellPathGeometry.p(), *ecl_grid, cellSearchTree
+                wellTraj.wellPathGeometry.p(), *ecl_grid, wellTraj.cellSearchTree
             }
         };
 
         // Keep the AABB search tree of the grid to avoid redoing an
         // expensive calulation.
-        cellSearchTree = e->getCellSearchTree();
+        wellTraj.cellSearchTree = e->getCellSearchTree();
 
         // This gives the intersected grid cells IJK, cell face entrance &
         // exit cell face point and connection length.
-        auto intersections = e->cellIntersectionInfosAlongWellPath();
+        wellTraj.intersections = e->cellIntersectionInfosAlongWellPath();
 
-        for (size_t is = 0; is < intersections.size(); ++is) {
-            const auto ijk = ecl_grid->getIJK(intersections[is].globCellIndex);
+        for (size_t is = 0; is < wellTraj.intersections.size(); ++is) {
+            const auto ijk = ecl_grid->getIJK(wellTraj.intersections[is].globCellIndex);
 
             // When using WELTRAJ & COMPTRAJ one may use default settings in
             // WELSPECS for headI/J and let the headI/J be calculated by the
@@ -715,7 +726,7 @@ The cell ({},{},{}) in well {} is not active and the connection will be ignored)
                 ctf_kind = ::Opm::Connection::CTFKind::Defaulted;
 
                 const auto& connection_vector =
-                    intersections[is].intersectionLengthsInCellCS;
+                    wellTraj.intersections[is].intersectionLengthsInCellCS;
 
                 const auto perm_thickness =
                     permThickness(connection_vector, cell_perm, props->ntg);
@@ -755,8 +766,8 @@ CF and Kh items for well {} must both be specified or both defaulted/negative)",
                 ctf_props.Ke = std::sqrt(K[0] * K[1]);
             }
 
-            auto prev = std::find_if(this->m_connections.begin(),
-                                     this->m_connections.end(),
+            const auto prev =
+                std::ranges::find_if(this->m_connections,
                                      [&ijk](const Connection& c)
                                      { return c.sameCoordinate(ijk[0], ijk[1], ijk[2]); });
 
@@ -828,9 +839,9 @@ CF and Kh items for well {} must both be specified or both defaulted/negative)",
 
     std::size_t WellConnections::num_open() const
     {
-        return std::count_if(this->m_connections.begin(),
-                             this->m_connections.end(),
-                             [] (const Connection& c) { return c.state() == Connection::State::OPEN; });
+        return std::ranges::count_if(this->m_connections,
+                                     [] (const Connection& c)
+                                     { return c.state() == Connection::State::OPEN; });
     }
 
     bool WellConnections::empty() const
@@ -854,23 +865,19 @@ CF and Kh items for well {} must both be specified or both defaulted/negative)",
             throw std::logic_error("Tried to get lowest connection from empty set");
         }
 
-        const auto max_iter = std::max_element(this->m_connections.begin(),
-                                               this->m_connections.end(),
-                                               [](const Connection& c1, const Connection& c2)
-                                               {
-                                                   return c1.depth() < c2.depth();
-                                               });
+        const auto max_iter =
+            std::ranges::max_element(this->m_connections,
+                                     [](const Connection& c1, const Connection& c2)
+                                     { return c1.depth() < c2.depth(); });
 
         return *max_iter;
     }
 
     bool WellConnections::hasGlobalIndex(std::size_t global_index) const
     {
-        return std::any_of(this->begin(), this->end(),
-                           [global_index](const Connection& conn)
-                           {
-                               return conn.global_index() == global_index;
-                           });
+        return std::ranges::any_of(*this,
+                                   [global_index](const Connection& conn)
+                                   { return conn.global_index() == global_index; });
     }
 
     const Connection&
@@ -888,9 +895,9 @@ CF and Kh items for well {} must both be specified or both defaulted/negative)",
     const Connection& WellConnections::getFromGlobalIndex(std::size_t global_index) const
     {
         auto conn_iter =
-            std::find_if(this->begin(), this->end(),
-                         [global_index] (const Connection& conn)
-                         { return conn.global_index() == global_index; });
+            std::ranges::find_if(*this,
+                                 [global_index] (const Connection& conn)
+                                 { return conn.global_index() == global_index; });
 
         if (conn_iter == this->end()) {
             throw std::logic_error(fmt::format("No connection with global index {}", global_index));
@@ -913,9 +920,9 @@ CF and Kh items for well {} must both be specified or both defaulted/negative)",
     Connection* WellConnections::maybeGetFromGlobalIndex(const std::size_t global_index)
     {
         auto conn_iter =
-            std::find_if(this->begin(), this->end(),
-                         [global_index] (const Connection& conn)
-                         { return conn.global_index() == global_index; });
+            std::ranges::find_if(*this,
+                                 [global_index] (const Connection& conn)
+                                 { return conn.global_index() == global_index; });
 
         if (conn_iter == this->end()) {
             return nullptr;
@@ -930,10 +937,9 @@ CF and Kh items for well {} must both be specified or both defaulted/negative)",
             return false;
         }
 
-        return std::all_of(this->m_connections.begin(),
-                           this->m_connections.end(),
-                           [](const Connection& c)
-                           { return c.state() == Connection::State::SHUT; });
+        return std::ranges::all_of(this->m_connections,
+                                   [](const Connection& c)
+                                   { return c.state() == Connection::State::SHUT; });
     }
 
     void WellConnections::order()
@@ -955,11 +961,9 @@ CF and Kh items for well {} must both be specified or both defaulted/negative)",
 
     void WellConnections::orderMSW()
     {
-        std::sort(this->m_connections.begin(), this->m_connections.end(),
-                  [](const Opm::Connection& conn1, const Opm::Connection& conn2)
-                  {
-                      return conn1.sort_value() < conn2.sort_value();
-                  });
+        std::ranges::sort(this->m_connections,
+                          [](const Opm::Connection& conn1, const Opm::Connection& conn2)
+                          { return conn1.sort_value() < conn2.sort_value(); });
     }
 
     void WellConnections::orderTRACK()
@@ -1018,11 +1022,9 @@ CF and Kh items for well {} must both be specified or both defaulted/negative)",
 
     void WellConnections::orderDEPTH()
     {
-        std::sort(this->m_connections.begin(), this->m_connections.end(),
-                  [](const Opm::Connection& conn1, const Opm::Connection& conn2)
-                  {
-                      return conn1.depth() < conn2.depth();
-                  });
+        std::ranges::sort(this->m_connections,
+                          [](const Opm::Connection& conn1, const Opm::Connection& conn2)
+                          { return conn1.depth() < conn2.depth(); });
     }
 
     bool WellConnections::operator==(const WellConnections& rhs) const
@@ -1031,22 +1033,12 @@ CF and Kh items for well {} must both be specified or both defaulted/negative)",
             && (this->m_ordering == rhs.m_ordering)
             && (this->coord == rhs.coord)
             && (this->md == rhs.md)
-            && std::equal( this->begin(), this->end(), rhs.begin());
+            && std::ranges::equal(*this, rhs);
     }
 
     bool WellConnections::operator!=(const WellConnections& rhs) const
     {
         return ! (*this == rhs);
-    }
-
-    void WellConnections::filter(const ActiveGridCells& grid)
-    {
-        auto isInactive = [&grid](const Connection& c) {
-            return !grid.cellActive(c.getI(), c.getJ(), c.getK());
-        };
-
-        auto new_end = std::remove_if(m_connections.begin(), m_connections.end(), isInactive);
-        m_connections.erase(new_end, m_connections.end());
     }
 
     double WellConnections::segment_perf_length(int segment) const
@@ -1081,11 +1073,10 @@ CF and Kh items for well {} must both be specified or both defaulted/negative)",
     getCompletionNumberFromGlobalConnectionIndex(const WellConnections& connections,
                                                  const std::size_t      global_index)
     {
-        auto connPos = std::find_if(connections.begin(), connections.end(),
-            [global_index](const Connection& conn)
-        {
-            return conn.global_index() == global_index;
-        });
+        const auto connPos =
+            std::ranges::find_if(connections,
+                                 [global_index](const Connection& conn)
+                                 { return conn.global_index() == global_index; });
 
         if (connPos == connections.end()) {
             // No connection exists with the requisite 'global_index'

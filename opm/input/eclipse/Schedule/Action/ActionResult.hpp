@@ -151,7 +151,7 @@ public:
         /// \return Whether or not \p elem exists in the value range.
         bool hasElementSorted(const T& elem) const
         {
-            return std::binary_search(this->begin(), this->end(), elem);
+            return std::ranges::binary_search(*this, elem);
         }
 
         /// Element existence predicate for unsorted sequences
@@ -161,8 +161,7 @@ public:
         /// \return Whether or not \p elem exists in the value range.
         bool hasElementUnsorted(const T& elem) const
         {
-            return std::find(this->begin(), this->end(), elem)
-                != this->end();
+            return std::ranges::find(*this, elem) != this->end();
         }
     };
 
@@ -197,12 +196,10 @@ public:
         ~MatchingEntities();
 
         /// Assignment operator.
-        ///
-        /// \param[in] rhs Source object whose value will overwrite \code
-        /// *this.
-        ///
+        /// \param[in] that Source object whose value will overwrite \code
+        ///                *this.
         /// \return *this.
-        MatchingEntities& operator=(const MatchingEntities& rhs);
+        MatchingEntities& operator=(const MatchingEntities& that);
 
         /// Move-assignment operator.
         ///
@@ -384,7 +381,7 @@ private:
     class Impl;
 
     /// Pointer to implementation.
-    std::unique_ptr<Impl> pImpl_{};
+    std::unique_ptr<Impl> pImpl_; // No in-class initializer to workaround nvcc issue
 };
 
 } // Namespace Opm::Action

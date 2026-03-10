@@ -56,12 +56,16 @@ macro (opm_compile_satellites opm satellite excl_all test_regexp)
 
   # compile each of these separately
   foreach (_sat_FILE IN LISTS ${satellite}_SOURCES)
-    if (NOT "${test_regexp}" STREQUAL "" AND NOT Boost_UNIT_TEST_FRAMEWORK_FOUND)
+    if (NOT "${test_regexp}" STREQUAL "" AND NOT TARGET Boost::unit_test_framework)
         continue()
     endif()
     get_filename_component (_sat_NAME "${_sat_FILE}" NAME_WE)
     add_executable (${_sat_NAME} ${excl_all} ${_sat_FILE})
     add_dependencies (${satellite} ${_sat_NAME})
+    # Ensure individual test executables depend on data files so they can be built independently
+    if (${satellite}_DATAFILES)
+      add_dependencies (${_sat_NAME} ${${satellite}_DATAFILES})
+    endif (${satellite}_DATAFILES)
     set_target_properties (${_sat_NAME} PROPERTIES
                                         LINK_FLAGS "${${opm}_LINKER_FLAGS_STR}")
     if(HAVE_DYNAMIC_BOOST_TEST)
@@ -72,16 +76,12 @@ macro (opm_compile_satellites opm satellite excl_all test_regexp)
     # require anything else, so we don't have to figure out where it
     # should go in the library list
     if (NOT "${test_regexp}" STREQUAL "")
-      set (_test_lib "${Boost_UNIT_TEST_FRAMEWORK_LIBRARY}")
+      set (_test_lib Boost::unit_test_framework)
     else (NOT "${test_regexp}" STREQUAL "")
       set (_test_lib "")
-      add_static_analysis_tests(_sat_FILE ${opm}_INCLUDE_DIRS)
     endif (NOT "${test_regexp}" STREQUAL "")
-    target_link_libraries (${_sat_NAME} ${${opm}_TARGET} ${${opm}_LIBRARIES} ${_test_lib})
-    if (STRIP_DEBUGGING_SYMBOLS)
-      strip_debug_symbols (${_sat_NAME} _sat_DEBUG)
-      list (APPEND ${satellite}_DEBUG ${_sat_DEBUG})
-    endif()
+    target_link_libraries (${_sat_NAME} PRIVATE ${${opm}_TARGET} ${${opm}_LIBRARIES} ${_test_lib})
+    opm_add_target_options(TARGET ${_sat_NAME})
 
     # variable with regular expression doubles as a flag for
     # whether tests should be setup or not
@@ -115,7 +115,7 @@ macro (opm_compile_satellites opm satellite excl_all test_regexp)
     list (FIND ${satellite}_SOURCES_DIST "${_sat_FILE}" _is_util)
     if (NOT (_is_util EQUAL -1))
       install (TARGETS ${_sat_NAME} RUNTIME
-               DESTINATION bin${${opm}_VER_DIR}/)
+               DESTINATION bin)
     endif (NOT (_is_util EQUAL -1))
   endforeach (_sat_FILE)
 endmacro (opm_compile_satellites opm prefix)
@@ -297,9 +297,9 @@ macro(opm_add_test TestName)
     if (CURTEST_ONLY_COMPILE)
       # only compile the binary but do not run it as a test
       add_executable("${CURTEST_EXE_NAME}" ${CURTEST_EXCLUDE_FROM_ALL} ${CURTEST_SOURCES})
-      target_link_libraries (${CURTEST_EXE_NAME} ${CURTEST_LIBRARIES})
+      target_link_libraries (${CURTEST_EXE_NAME} PRIVATE ${CURTEST_LIBRARIES})
+      opm_add_target_options(TARGET ${CURTEST_EXE_NAME})
       get_property(dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
-      add_static_analysis_tests(CURTEST_SOURCES dirs)
       if(HAVE_DYNAMIC_BOOST_TEST)
         set_target_properties (${CURTEST_EXE_NAME} PROPERTIES
                                 COMPILE_DEFINITIONS BOOST_TEST_DYN_LINK)
@@ -316,13 +316,13 @@ macro(opm_add_test TestName)
         # run-only case occurs if the binary is already compiled by an
         # earlier test.)
         add_executable("${CURTEST_EXE_NAME}" ${CURTEST_EXCLUDE_FROM_ALL} ${CURTEST_SOURCES})
+        opm_add_target_options(TARGET ${CURTEST_EXE_NAME})
         if(HAVE_DYNAMIC_BOOST_TEST)
           set_target_properties (${CURTEST_EXE_NAME} PROPERTIES
                                  COMPILE_DEFINITIONS BOOST_TEST_DYN_LINK)
         endif()
-        target_link_libraries (${CURTEST_EXE_NAME} ${CURTEST_LIBRARIES})
+        target_link_libraries (${CURTEST_EXE_NAME} PRIVATE ${CURTEST_LIBRARIES})
         get_property(dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
-        add_static_analysis_tests(CURTEST_SOURCES dirs)
 
         if(CURTEST_DEPENDS)
           add_dependencies("${CURTEST_EXE_NAME}" ${CURTEST_DEPENDS})

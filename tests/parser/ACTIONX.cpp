@@ -167,6 +167,11 @@ TSTEP
 )"};
 
     const auto WITH_WELSPECS = std::string{ R"(
+RUNSPEC
+OIL
+WATER
+GAS
+
 SCHEDULE
 
 WELSPECS
@@ -230,7 +235,7 @@ TSTEP
 
         const auto& action1 = sched[0].actions.get()["ACTION"];
         auto sim_update = sched.applyAction(0, action1, action_result.matches(),
-                                            std::unordered_map<std::string,double>{});
+                                            std::unordered_map<std::string,double>{}, true);
 
         const auto& affected_wells = sim_update.affected_wells;
         const std::vector<std::string> expected_wells{"W0", "W1", "W3"};
@@ -301,7 +306,7 @@ COMPDAT
     const auto& action1 = sched[0].actions.get()["ACTION"];
 
     BOOST_CHECK_NO_THROW(sched.applyAction(0, action1, Action::Result{false}.matches(),
-                                           std::unordered_map<std::string,double>{}));
+                                           std::unordered_map<std::string,double>{}, true));
 }
 
 BOOST_AUTO_TEST_CASE(EMPTY)
@@ -743,8 +748,8 @@ BOOST_AUTO_TEST_CASE(TestMatchingWells2)
 
     BOOST_CHECK(res2.conditionSatisfied());
     BOOST_CHECK_EQUAL(wells2.size(), 2U);
-    BOOST_CHECK_EQUAL(std::count(wells2.begin(), wells2.end(), "PZ"), 1);
-    BOOST_CHECK_EQUAL(std::count(wells2.begin(), wells2.end(), "IZ"), 1);
+    BOOST_CHECK_EQUAL(std::ranges::count(wells2, "PZ"), 1);
+    BOOST_CHECK_EQUAL(std::ranges::count(wells2, "IZ"), 1);
 }
 
 BOOST_AUTO_TEST_CASE(TestMatchingWells_AND)
@@ -794,8 +799,8 @@ BOOST_AUTO_TEST_CASE(TestMatchingWells_OR)
     // second condition, since the two conditions are combined with || the
     // resulting mathcing_wells variable should contain both these wells.
     BOOST_CHECK_EQUAL(wells.size(), 2U);
-    BOOST_CHECK(std::find(wells.begin(), wells.end(), "OPZ") != wells.end());
-    BOOST_CHECK(std::find(wells.begin(), wells.end(), "OPY") != wells.end());
+    BOOST_CHECK(std::ranges::find(wells, "OPZ") != wells.end());
+    BOOST_CHECK(std::ranges::find(wells, "OPY") != wells.end());
 }
 
 BOOST_AUTO_TEST_CASE(TestWLIST)
@@ -818,7 +823,7 @@ BOOST_AUTO_TEST_CASE(TestWLIST)
     BOOST_CHECK(res.conditionSatisfied());
     BOOST_CHECK_EQUAL(wells.size(), 3U);
     for (const auto& w : {"W1", "W3", "W5"}) {
-        auto find_iter = std::find(wells.begin(), wells.end(), w);
+        const auto find_iter = std::ranges::find(wells, w);
         BOOST_CHECK(find_iter != wells.end());
     }
 }
@@ -1234,7 +1239,7 @@ END
 
     const Action::Result action_result{true};
     sched.applyAction(0, action1, action_result.matches(),
-                      std::unordered_map<std::string,double>{});
+                      std::unordered_map<std::string,double>{}, true);
 
     {
         const auto& group = sched.getGroup("G1", 1);
@@ -1255,8 +1260,7 @@ namespace {
 bool has_well(const std::vector<std::string>& wells,
               const std::string&              well)
 {
-    return std::find(wells.begin(), wells.end(), well)
-        != wells.end();
+    return std::ranges::find(wells, well) != wells.end();
 }
 
 } // Anonymous namespace
@@ -1361,7 +1365,8 @@ END
     {
         const Action::Result action_result(true);
         const auto& sim_update = sched.applyAction(0, action1, action_result.matches(),
-                                                   std::unordered_map<std::string,double>{});
+                                                   std::unordered_map<std::string,double>{},
+                                                   true);
 
         BOOST_CHECK(sim_update.affected_wells.empty());
     }
@@ -1444,7 +1449,7 @@ END
 
     Action::Result action_result(true);
     sched.applyAction(0, action1, action_result.matches(),
-                      std::unordered_map<std::string,double>{});
+                      std::unordered_map<std::string,double>{}, true);
 
     const auto& well = sched.getWell("PROD1", 1);
     const auto& connections = well.getConnections();
@@ -1505,14 +1510,15 @@ END
 
     const Action::Result action_result(true);
     BOOST_CHECK_THROW(sched.applyAction(0, action1, action_result.matches(),
-                                        std::unordered_map<std::string,double>{}), std::exception);
+                                        std::unordered_map<std::string,double>{}, true),
+                      std::exception);
 
     {
         const auto& well = sched.getWell("PROD1", 0);
         const auto& sim_update = sched.applyAction(0, action1, action_result.matches(),
                                                    std::unordered_map<std::string,double> {
                                                        { "PROD1", well.convertDeckPI(500) },
-                                                   });
+                                                   }, true);
 
         BOOST_CHECK_EQUAL(sim_update.welpi_wells.count("PROD1"), 1);
         BOOST_CHECK_EQUAL(sim_update.welpi_wells.size(), 1);
@@ -1586,7 +1592,7 @@ END
     const auto& action1 = sched[0].actions.get()["A"];
     const Action::Result action_result(true);
     auto sim_update = sched.applyAction(0, action1, action_result.matches(),
-                                        std::unordered_map<std::string,double>{});
+                                        std::unordered_map<std::string,double>{}, true);
 
     BOOST_CHECK(sim_update.tran_update);
     BOOST_CHECK_EQUAL(sched[0].geo_keywords().size(), 3);
@@ -1765,6 +1771,23 @@ END
     BOOST_CHECK(result.matches().wells().asVector() == std::vector<std::string>{"P1"});
 }
 
+BOOST_AUTO_TEST_CASE(MatchingWellsConnectionQuant)
+{
+    std::vector<std::string> varnames{"WWCTL2", "WWCTL_2", "WWCTL__2"};
+    for(const auto& var: varnames)
+    {
+        Action::AST ast({var, "P1", ">", "0.1"});
+        auto st = SummaryState{ TimeService::now(), 0.0 };
+        Opm::WListManager wlm;
+
+        st.update("WWCTL:P1:2", .5);
+        Opm::Action::Context context(st, wlm);
+        auto result = ast.eval(context);
+        BOOST_CHECK(result.conditionSatisfied());
+        BOOST_CHECK(result.matches().wells().asVector() == std::vector<std::string>{"P1"});
+    }
+}
+
 BOOST_AUTO_TEST_CASE(MaxConditions)
 {
     const auto deck_string = std::string{ R"(
@@ -1928,7 +1951,7 @@ BOOST_AUTO_TEST_CASE(ParseNestedExpression)
     auto sortedVectors = std::vector<std::string> {
         requisiteVectors.begin(), requisiteVectors.end()
     };
-    std::sort(sortedVectors.begin(), sortedVectors.end());
+    std::ranges::sort(sortedVectors);
 
     const auto expected = std::vector {
         "FGOR"s, "GUWIRMIN"s, "GWIR"s, "WMCTL"s,
@@ -1953,7 +1976,7 @@ BOOST_AUTO_TEST_CASE(RegionVector_In_Condition)
     auto sortedVectors = std::vector<std::string> {
         requisiteVectors.begin(), requisiteVectors.end()
     };
-    std::sort(sortedVectors.begin(), sortedVectors.end());
+    std::ranges::sort(sortedVectors);
 
     const auto expected = std::vector {
         "RPR__RE3"s,
@@ -1978,7 +2001,7 @@ BOOST_AUTO_TEST_CASE(RegionVector_In_Condition_Default_RegSet)
     auto sortedVectors = std::vector<std::string> {
         requisiteVectors.begin(), requisiteVectors.end()
     };
-    std::sort(sortedVectors.begin(), sortedVectors.end());
+    std::ranges::sort(sortedVectors);
 
     const auto expected = std::vector {
         "RPR"s,
@@ -2003,7 +2026,7 @@ BOOST_AUTO_TEST_CASE(RegionVector_In_Condition_Default_RegSet_2)
     auto sortedVectors = std::vector<std::string> {
         requisiteVectors.begin(), requisiteVectors.end()
     };
-    std::sort(sortedVectors.begin(), sortedVectors.end());
+    std::ranges::sort(sortedVectors);
 
     const auto expected = std::vector {
         "RPR"s,

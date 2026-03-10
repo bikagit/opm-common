@@ -731,7 +731,7 @@ private:
 
         std::vector<Scalar> lowerDiag(diag_[0]), mainDiag(diag_[1]), upperDiag(diag_[2]), lastColumn(n);
         std::vector<Scalar> bStar(n);
-        std::copy(b.begin(), b.end(), bStar.begin());
+        std::ranges::copy(b, bStar.begin());
 
         lastColumn[0] = upperDiag[0];
 
@@ -772,7 +772,7 @@ private:
 
         std::vector<Scalar> lowerDiag(diag_[0]), mainDiag(diag_[1]), upperDiag(diag_[2]);
         std::vector<Scalar> bStar(n);
-        std::copy(b.begin(), b.end(), bStar.begin());
+        std::ranges::copy(b, bStar.begin());
 
         // forward elimination
         for (size_t i = 1; i < n; ++i) {

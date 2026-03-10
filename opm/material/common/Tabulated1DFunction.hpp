@@ -64,6 +64,7 @@ public:
      * \param nSamples The number of sampling points (must be >= 2)
      * \param x An array containing the \f$x\f$ values of the spline's sampling points
      * \param y An array containing the \f$y\f$ values of the spline's sampling points
+     * \param sortInputs True to sort inputs
      */
     template <class ScalarArrayX, class ScalarArrayY>
     Tabulated1DFunction(size_t nSamples,
@@ -79,6 +80,7 @@ public:
      *          (must have a size() method)
      * \param y An array containing the \f$y\f$ values of the spline's sampling points
      *          (must have a size() method)
+     * \param sortInputs True to sort inputs
      */
     template <class ScalarContainer>
     Tabulated1DFunction(const ScalarContainer& x,
@@ -91,6 +93,7 @@ public:
      *
      * \param points A container of \f$(x,y)\f$ tuples of the spline's sampling points (must
      *               have a size() method)
+     * \param sortInputs True to sort inputs
      */
     template <class PointContainer>
     explicit Tabulated1DFunction(const PointContainer& points,
@@ -136,8 +139,8 @@ public:
 
         resizeArrays_(x.size());
         if (x.size() > 0) {
-            std::copy(x.begin(), x.end(), xValues_.begin());
-            std::copy(y.begin(), y.end(), yValues_.begin());
+            std::ranges::copy(x, xValues_.begin());
+            std::ranges::copy(y, yValues_.begin());
 
             if (sortInputs)
                 sortInput_();
@@ -576,7 +579,7 @@ private:
         // sort the indices according to the x values of the sample
         // points
         ComparatorX_ cmp(xValues_);
-        std::sort(idxVector.begin(), idxVector.end(), cmp);
+        std::ranges::sort(idxVector, cmp);
 
         // reorder the sample points
         std::vector<Scalar> tmpX(n), tmpY(n);

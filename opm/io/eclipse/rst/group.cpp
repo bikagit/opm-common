@@ -52,6 +52,7 @@ Opm::RestartIO::RstGroup::RstGroup(const ::Opm::UnitSystem& unit_system,
     inj_gas_guide_rate_def(igrp[header.nwgmax + VI::IGroup::GConInjeGasGuideRateMode]),
     voidage_group_index(igrp[header.nwgmax + VI::IGroup::VoidageGroupIndex]),
     add_gas_lift_gas(igrp[header.nwgmax + VI::IGroup::AddGLiftGasAsProducedGas]),
+    group_type(igrp[header.nwgmax + VI::IGroup::GroupType]),
 
     // -------------------------------------------------------------------------
 
@@ -62,6 +63,7 @@ Opm::RestartIO::RstGroup::RstGroup(const ::Opm::UnitSystem& unit_system,
     water_rate_limit(              sgrp[VI::SGroup::WatRateLimit]),
     gas_rate_limit(                sgrp[VI::SGroup::GasRateLimit]),
     liquid_rate_limit(             sgrp[VI::SGroup::LiqRateLimit]),
+    resv_rate_limit(               sgrp[VI::SGroup::ResvRateLimit]),
     water_surface_limit(           sgrp[VI::SGroup::waterSurfRateLimit]),
     water_reservoir_limit(         sgrp[VI::SGroup::waterResRateLimit]),
     water_reinject_limit(          sgrp[VI::SGroup::waterReinjectionLimit]),

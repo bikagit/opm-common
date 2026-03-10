@@ -47,6 +47,13 @@ namespace Opm { namespace RestartIO { namespace Helpers { namespace VectorItems 
 
         dRsDt   = 25,
 
+        OilVapPropensity = 26, // Oil's propensity to vaporise into
+                               // unsaturated gas phase (VAPPARS(1)).
+
+        OilVapDensPropensity = 27, // Oil's density increase propensity as
+                                   // lighter fractions vaporise
+                                   // (VAPPARS(2)).
+
         Netbalthpc    = 50,    //  Network balancing THP convergence limit (NETBALAN(4))
         Netbalint     = 51,    //  Network balancing interval (NETBALAN(1))
         Netbalnpre    = 53,    //  Network balancing nodal pressure
@@ -93,11 +100,11 @@ namespace Opm { namespace RestartIO { namespace Helpers { namespace VectorItems 
 
         // Default => Use TSMINZ from TUNING
         constexpr auto NetBalMinTSDefault = 0.0;
-        
+
         // Default => Let Simulator choose TSINIT
         constexpr auto TSINITNoValue = 1.00000011;
         inline bool TSINITHasNoValue(const double value) {
-            return std::abs(value - TSINITNoValue) < 1.0e-7; 
+            return std::abs(value - TSINITNoValue) < 1.0e-7;
         }
     }
 

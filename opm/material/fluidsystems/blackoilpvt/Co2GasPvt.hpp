@@ -27,10 +27,13 @@
 #ifndef OPM_CO2_GAS_PVT_HPP
 #define OPM_CO2_GAS_PVT_HPP
 
+#include <opm/common/utility/VectorWithDefaultAllocator.hpp>
+
 #include <opm/material/Constants.hpp>
 #include <opm/common/TimingMacros.hpp>
 #include <opm/common/ErrorMacros.hpp>
 #include <opm/common/utility/gpuDecorators.hpp>
+#include <opm/common/utility/gpuistl_if_available.hpp>
 
 #include <opm/material/components/CO2.hpp>
 #include <opm/material/components/BrineDynamic.hpp>
@@ -52,27 +55,29 @@ class Schedule;
 class Co2StoreConfig;
 
 // forward declaration of the class so the function in the next namespace can be declared
-template <class Scalar, class ParamsT, class ContainerT>
+template <class Scalar, template<class> class Storage>
 class Co2GasPvt;
 
+#if HAVE_CUDA
 // declaration of make_view in correct namespace so friend function can be declared in the class
 namespace gpuistl {
-    template <class ViewType, class OutputParams, class InputParams, class ContainerType, class Scalar>
-    Co2GasPvt<Scalar, OutputParams, ViewType>
-    make_view(Co2GasPvt<Scalar, InputParams, ContainerType>&);
-}
-
+    template <class Scalar>
+    Co2GasPvt<Scalar, GpuView>
+    make_view(Co2GasPvt<Scalar, GpuVector>&);
+} // namespace gpuistl
+#endif // HAVE_CUDA
 /*!
  * \brief This class represents the Pressure-Volume-Temperature relations of the gas phase
  *        for CO2.
  */
-template <class Scalar, class ParamsT = Opm::CO2Tables<double, std::vector<double>>, class ContainerT = std::vector<Scalar>>
+template <class Scalar, template<class> class Storage = VectorWithDefaultAllocator>
 class Co2GasPvt
 {
-    using CO2 = ::Opm::CO2<Scalar, ParamsT>;
+    using Params = Opm::CO2Tables<double, Storage>;
+    using CO2 = ::Opm::CO2<Scalar, Params>;
     using H2O = SimpleHuDuanH2O<Scalar>;
     using Brine = ::Opm::BrineDynamic<Scalar, H2O>;
-    using Params = ParamsT;
+    using ContainerT = Storage<Scalar>;
     static constexpr bool extrapolate = true;
 
 public:
@@ -107,14 +112,18 @@ public:
     assert(enableEzrokhiDensity == false && "Ezrokhi density not supported by GPUs");
 }
 
-#if HAVE_ECL_INPUT
     void initFromState(const EclipseState& eclState, const Schedule&);
-#endif
 
     void setNumRegions(std::size_t numRegions);
 
     OPM_HOST_DEVICE void setVapPars(const Scalar, const Scalar)
     {
+    }
+
+
+    OPM_HOST_DEVICE static constexpr bool isActive()
+    {
+        return true;
     }
 
     /*!
@@ -170,7 +179,7 @@ public:
                         const Evaluation& rv,
                         const Evaluation& rvw) const
     {
-        OPM_TIMEBLOCK_LOCAL(internalEnergy);
+        OPM_TIMEBLOCK_LOCAL(internalEnergy, Subsystem::PvtProps);
         if (gastype_ == Co2StoreConfig::GasMixingType::NONE) {
             // use the gasInternalEnergy of CO2
             return CO2::gasInternalEnergy(co2Tables, temperature, pressure, extrapolate);
@@ -208,7 +217,7 @@ public:
                                   const Evaluation& temperature,
                                   const Evaluation& pressure) const
     {
-        OPM_TIMEBLOCK_LOCAL(saturatedViscosity);
+        OPM_TIMEBLOCK_LOCAL(saturatedViscosity, Subsystem::PvtProps);
         // Neglects impact of vaporized water on the visosity
         return CO2::gasViscosity(co2Tables, temperature, pressure, extrapolate);
     }
@@ -223,7 +232,7 @@ public:
                                             const Evaluation& rv,
                                             const Evaluation& rvw) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         if (!enableVaporization_) {
             return CO2::gasDensity(co2Tables, temperature, pressure, extrapolate) /
                    gasReferenceDensity_[regionIdx];
@@ -242,6 +251,21 @@ public:
     }
 
     /*!
+     * \brief Returns the formation volume factor [-] and viscosity [Pa s] of the fluid phase.
+     */
+    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    std::pair<LhsEval, LhsEval>
+    inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState, unsigned regionIdx)
+    {
+        const LhsEval& T = decay<LhsEval>(fluidState.temperature(FluidState::gasPhaseIdx));
+        const LhsEval& p = decay<LhsEval>(fluidState.pressure(FluidState::gasPhaseIdx));
+        const LhsEval& Rv = decay<LhsEval>(fluidState.Rv());
+        const LhsEval& Rvw = decay<LhsEval>(fluidState.Rvw());
+        return { this->inverseFormationVolumeFactor(regionIdx, T, p, Rv, Rvw),
+                 this->viscosity(regionIdx, T, p, Rv, Rvw) };
+    }
+
+    /*!
      * \brief Returns the formation volume factor [-] of water saturated gas at given pressure.
      */
     template <class Evaluation>
@@ -249,7 +273,7 @@ public:
                                                      const Evaluation& temperature,
                                                      const Evaluation& pressure) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         const Evaluation rvw = rvwSat_(regionIdx, temperature, pressure,
                                        Evaluation(salinity_[regionIdx]));
         return inverseFormationVolumeFactor(regionIdx, temperature,
@@ -287,7 +311,7 @@ public:
                                               const Evaluation& pressure,
                                               const Evaluation& saltConcentration) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         const Evaluation salinity = salinityFromConcentration(temperature, pressure,
                                                               saltConcentration);
         return rvwSat_(regionIdx, temperature, pressure, salinity);
@@ -322,7 +346,9 @@ public:
     }
 
     OPM_HOST_DEVICE Scalar gasReferenceDensity(unsigned regionIdx) const
-    { return gasReferenceDensity_[regionIdx]; }
+    {
+        return gasReferenceDensity_[regionIdx];
+    }
 
     OPM_HOST_DEVICE Scalar oilReferenceDensity(unsigned regionIdx) const
     { return brineReferenceDensity_[regionIdx]; }
@@ -375,7 +401,7 @@ private:
                     const LhsEval& pressure,
                     const LhsEval& salinity) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         if (!enableVaporization_) {
             return 0.0;
         }
@@ -407,7 +433,7 @@ private:
     template <class LhsEval>
     OPM_HOST_DEVICE LhsEval convertXgWToRvw(const LhsEval& XgW, unsigned regionIdx) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         Scalar rho_wRef = brineReferenceDensity_[regionIdx];
         Scalar rho_gRef = gasReferenceDensity_[regionIdx];
 
@@ -421,7 +447,7 @@ private:
     template <class LhsEval>
     OPM_HOST_DEVICE LhsEval convertRvwToXgW_(const LhsEval& Rvw, unsigned regionIdx) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         Scalar rho_wRef = brineReferenceDensity_[regionIdx];
         Scalar rho_gRef = gasReferenceDensity_[regionIdx];
 
@@ -434,16 +460,18 @@ private:
     template <class LhsEval>
     OPM_HOST_DEVICE LhsEval convertxgWToXgW(const LhsEval& xgW, const LhsEval& salinity) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         Scalar M_CO2 = CO2::molarMass();
         LhsEval M_Brine = Brine::molarMass(salinity);
 
         return xgW * M_Brine / (xgW * (M_Brine - M_CO2) + M_CO2);
     }
 
-    template <class ViewType, class OutputParams, class InputParams, class ContainerType, class ScalarT>
-    friend Co2GasPvt<ScalarT, OutputParams, ViewType>
-    gpuistl::make_view(Co2GasPvt<ScalarT, InputParams, ContainerType>&);
+    #if HAVE_CUDA
+    template <class ScalarT>
+    friend Co2GasPvt<ScalarT, gpuistl::GpuView>
+    gpuistl::make_view(Co2GasPvt<ScalarT, gpuistl::GpuBuffer>&);
+    #endif // HAVE_CUDA
 
     template <class LhsEval>
     OPM_HOST_DEVICE const LhsEval salinityFromConcentration(const LhsEval&T, const LhsEval& P,
@@ -463,34 +491,35 @@ private:
 
 } // namespace Opm
 
-namespace Opm::gpuistl{
-    template<class GPUContainer, class Params, class ScalarT>
-    Co2GasPvt<ScalarT, Params, GPUContainer>
+#if HAVE_CUDA
+namespace Opm::gpuistl {
+    template<class ScalarT>
+    Co2GasPvt<ScalarT, GpuBuffer>
     copy_to_gpu(const Co2GasPvt<ScalarT>& cpuCo2)
     {
-        return Co2GasPvt<ScalarT, Params, GPUContainer>(
-            copy_to_gpu<GPUContainer>(cpuCo2.getParams()),
-            GPUContainer(cpuCo2.getBrineReferenceDensity()),
-            GPUContainer(cpuCo2.getGasReferenceDensity()),
-            GPUContainer(cpuCo2.getSalinity()),
+        return Co2GasPvt<ScalarT, GpuBuffer>(
+            copy_to_gpu(cpuCo2.getParams()),
+            GpuBuffer<ScalarT>(cpuCo2.getBrineReferenceDensity()),
+            GpuBuffer<ScalarT>(cpuCo2.getGasReferenceDensity()),
+            GpuBuffer<ScalarT>(cpuCo2.getSalinity()),
             cpuCo2.getEnableEzrokhiDensity(),
             cpuCo2.getEnableVaporization(),
             cpuCo2.getActivityModel(),
             cpuCo2.getGasType());
     }
 
-    template <class ViewType, class OutputParams, class InputParams, class ContainerType, class ScalarT>
-    Co2GasPvt<ScalarT, OutputParams, ViewType>
-    make_view(Co2GasPvt<ScalarT, InputParams, ContainerType>& co2GasPvt)
+    template <class ScalarT>
+    Co2GasPvt<ScalarT, GpuView>
+    make_view(Co2GasPvt<ScalarT, GpuBuffer>& co2GasPvt)
     {
-        using ContainedType = typename ContainerType::value_type;
+        using ContainedType = ScalarT;
 
-        ViewType newBrineReferenceDensity = make_view<ContainedType>(co2GasPvt.brineReferenceDensity_);
-        ViewType newGasReferenceDensity = make_view<ContainedType>(co2GasPvt.gasReferenceDensity_);
-        ViewType newSalinity = make_view<ContainedType>(co2GasPvt.salinity_);
+        auto newBrineReferenceDensity = make_view<ContainedType>(co2GasPvt.brineReferenceDensity_);
+        auto newGasReferenceDensity = make_view<ContainedType>(co2GasPvt.gasReferenceDensity_);
+        auto newSalinity = make_view<ContainedType>(co2GasPvt.salinity_);
 
-        return Co2GasPvt<ScalarT, OutputParams, ViewType>(
-            make_view<ViewType>(co2GasPvt.co2Tables),
+        return Co2GasPvt<ScalarT, GpuView>(
+            make_view(co2GasPvt.co2Tables),
             newBrineReferenceDensity,
             newGasReferenceDensity,
             newSalinity,
@@ -499,7 +528,7 @@ namespace Opm::gpuistl{
             co2GasPvt.getActivityModel(),
             co2GasPvt.getGasType());
     }
-}
-
+} // namespace Opm::gpuistl
+#endif // HAVE_CUDA
 
 #endif

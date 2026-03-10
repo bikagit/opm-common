@@ -71,26 +71,23 @@ public:
     const std::vector<float>& get_coord() const { return coord_array; }
     const std::vector<float>& get_zcorn() const { return zcorn_array; }
 
-
-
-
 private:
     std::filesystem::path inputFileName, initFileName;
     std::string m_grid_name;
-    bool m_radial;
+    bool m_radial{false};
 
-    std::array<double, 6> m_mapaxes;
+    std::array<double, 6> m_mapaxes{};
     std::string m_mapunits;
-    bool m_mapaxes_loaded;
-    std::array<double, 4> origin;
-    std::array<double, 2> unit_x;
-    std::array<double, 2> unit_y;
+    bool m_mapaxes_loaded{false};
+    std::array<double, 4> origin{};
+    std::array<double, 2> unit_x{};
+    std::array<double, 2> unit_y{};
 
-    std::array<int, 3> nijk;
-    std::array<int, 3> host_nijk;
+    std::array<int, 3> nijk{};
+    std::array<int, 3> host_nijk{};
 
-    int nactive;
-    mutable bool m_nncs_loaded;
+    int nactive{};
+    mutable bool m_nncs_loaded{false};
 
     std::vector<int> act_index;
     std::vector<int> glob_index;
@@ -103,17 +100,17 @@ private:
     std::vector<float> transnnc_array;
     std::vector<int> host_cells;
     std::map<int,int> res;
-     
+
     std::vector<std::string> lgr_names;
-    
-    int numres;
-    
-    int zcorn_array_index;
-    int coord_array_index;
-    int coordsys_array_index;
-    int actnum_array_index;
-    int nnc1_array_index;
-    int nnc2_array_index;
+
+    int numres{};
+
+    int zcorn_array_index{-1};
+    int coord_array_index{-1};
+    int coordsys_array_index{-1};
+    int actnum_array_index{-1};
+    int nnc1_array_index{-1};
+    int nnc2_array_index{-1};
 
     std::vector<float> get_zcorn_from_disk(int layer, bool bottom);
 
@@ -121,7 +118,7 @@ private:
                         std::array<double, 4>& X, std::array<double, 4>& Y, std::array<double, 4>& Z);
 
     void mapaxes_init();
-    
+
 };
 
 }} // namespace Opm::EclIO

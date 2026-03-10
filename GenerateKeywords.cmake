@@ -32,12 +32,10 @@ set(genkw_SOURCES opm/json/JsonObject.cpp
                   opm/common/OpmLog/LogBackend.cpp
                   opm/common/OpmLog/LogUtil.cpp
 )
-if(NOT cjson_FOUND)
-  list(APPEND genkw_SOURCES ${cjson_SOURCE_DIR}/cJSON.c)
-endif()
 add_executable(genkw ${genkw_SOURCES})
 
-target_link_libraries(genkw ${opm-common_LIBRARIES})
+target_link_libraries(genkw PRIVATE fmt::fmt cjson)
+opm_add_target_options(TARGET genkw)
 
 # Generate keyword list
 include(opm/input/eclipse/share/keywords/keyword_list.cmake)
@@ -60,10 +58,10 @@ foreach (name A B C D E F G H I J K L M N O P Q R S T U V W X Y Z)
                           ${PROJECT_BINARY_DIR}/tmp_gen/ParserKeywords/Builtin${name}.cpp
                           ${PROJECT_BINARY_DIR}/tmp_gen/include/opm/input/eclipse/Parser/ParserKeywords/ParserInit${name}.hpp)
   list(APPEND _target_output ${PROJECT_BINARY_DIR}/ParserKeywords/${name}.cpp
-                             ${PROJECT_BINARY_DIR}/include/opm/input/eclipse/Parser/ParserKeywords/${name}.hpp
+                             ${PROJECT_BINARY_DIR}/opm/input/eclipse/Parser/ParserKeywords/${name}.hpp
                              ${PROJECT_BINARY_DIR}/ParserKeywords/ParserInit${name}.cpp
                              ${PROJECT_BINARY_DIR}/ParserKeywords/Builtin${name}.cpp
-                             ${PROJECT_BINARY_DIR}/include/opm/input/eclipse/Parser/ParserKeywords/ParserInit${name}.hpp)
+                             ${PROJECT_BINARY_DIR}/opm/input/eclipse/Parser/ParserKeywords/ParserInit${name}.hpp)
 endforeach()
 
 foreach(name TestKeywords.cpp ParserInit.cpp)
@@ -71,7 +69,7 @@ foreach(name TestKeywords.cpp ParserInit.cpp)
   list(APPEND _tmp_output ${PROJECT_BINARY_DIR}/tmp_gen/${name})
 endforeach()
 
-list(APPEND _target_output ${PROJECT_BINARY_DIR}/include/opm/input/eclipse/Parser/ParserKeywords/Builtin.hpp)
+list(APPEND _target_output ${PROJECT_BINARY_DIR}/opm/input/eclipse/Parser/ParserKeywords/Builtin.hpp)
 list(APPEND _tmp_output ${PROJECT_BINARY_DIR}/tmp_gen/include/opm/input/eclipse/Parser/ParserKeywords/Builtin.hpp)
 
 set(GEN_DEPS ${_tmp_output})

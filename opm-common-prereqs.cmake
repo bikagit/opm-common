@@ -1,33 +1,23 @@
-# -*- mode: cmake; tab-width: 2; indent-tabs-mode: t; truncate-lines: t; compile-command: "cmake -Wdev" -*-
-# vim: set filetype=cmake autoindent tabstop=2 shiftwidth=2 noexpandtab softtabstop=2 nowrap:
+# -*- mode: cmake; tab-width: 2; indent-tabs-mode: nil; truncate-lines: t; compile-command: "cmake -Wdev" -*-
+# vim: set filetype=cmake autoindent tabstop=2 shiftwidth=2 expandtab softtabstop=2 nowrap:
 
-# defines that must be present in config.h for our headers
-set (opm-common_CONFIG_VAR
-	HAVE_OPENMP
-	HAVE_TYPE_TRAITS
-	HAVE_VALGRIND
-	HAVE_FINAL
-	HAVE_ECL_INPUT
-	HAVE_CXA_DEMANGLE
-	HAVE_FNMATCH_H
-	)
+find_package(Boost REQUIRED)
+find_package(cJSON)
+find_package(fmt)
+find_package(QuadMath)
 
-# dependencies
-set (opm-common_DEPS
-	# compile with C99 support if available
-	"C99"
-	# valgrind client requests
-	"Valgrind"
-)
+if(TARGET opmcommon)
+  get_property(opm-common_EMBEDDED_PYTHON TARGET opmcommon PROPERTY EMBEDDED_PYTHON)
+  get_property(opm-common_COMPILE_DEFINITIONS TARGET opmcommon PROPERTY INTERFACE_COMPILE_DEFINITIONS)
 
-list(APPEND opm-common_DEPS
-      # various runtime library enhancements
-      "Boost 1.44.0 COMPONENTS system unit_test_framework REQUIRED"
-      "cjson"
-      # Still it produces compile errors complaining that it
-      # cannot format UDQVarType. Hence we use the same version
-      # as the embedded one.
-      "fmt 8.0"
-      "QuadMath"
-)
-find_package_deps(opm-common)
+  if(opm-common_EMBEDDED_PYTHON)
+    find_package(Python3 COMPONENTS Development.Embed REQUIRED)
+  endif()
+
+  if(opm-common_COMPILE_DEFINITIONS MATCHES HAVE_DUNE_COMMON)
+    find_package(dune-common REQUIRED)
+    if(dune-common_VERSION VERSION_LESS 2.11)
+      target_include_directories(dunecommon INTERFACE ${dune-common_INCLUDE_DIRS})
+    endif()
+  endif()
+endif()

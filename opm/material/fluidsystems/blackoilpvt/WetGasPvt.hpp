@@ -38,11 +38,9 @@
 
 namespace Opm {
 
-#if HAVE_ECL_INPUT
 class EclipseState;
 class Schedule;
 class SimpleTable;
-#endif
 
 /*!
  * \brief This class represents the Pressure-Volume-Temperature relations of the gas phas
@@ -57,7 +55,6 @@ public:
     using TabulatedTwoDFunction = UniformXTabulated2DFunction<Scalar>;
     using TabulatedOneDFunction = Tabulated1DFunction<Scalar>;
 
-#if HAVE_ECL_INPUT
     /*!
      * \brief Initialize the parameters for wet gas using an ECL deck.
      *
@@ -72,8 +69,6 @@ private:
                           const SimpleTable& masterTable);
 
 public:
-#endif // HAVE_ECL_INPUT
-
     void setNumRegions(std::size_t numRegions);
 
     void setVapPars(const Scalar par1, const Scalar)
@@ -92,6 +87,7 @@ public:
     /*!
      * \brief Initialize the function for the oil vaporization factor \f$R_v\f$
      *
+     * \param regionIdx Region index to use
      * \param samplePoints A container of (x,y) values.
      */
     void setSaturatedGasOilVaporizationFactor(unsigned regionIdx,
@@ -217,6 +213,36 @@ public:
     { return inverseGasB_[regionIdx].eval(pressure, Rv, /*extrapolate=*/true); }
 
     /*!
+     * \brief Returns the formation volume factor [-] and viscosity [Pa s] of the fluid phase.
+     */
+    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    std::pair<LhsEval, LhsEval>
+    inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState, unsigned regionIdx)
+    {
+        const LhsEval& p = decay<LhsEval>(fluidState.pressure(FluidState::gasPhaseIdx));
+        const LhsEval& Rv = decay<LhsEval>(fluidState.Rv());
+
+        const auto satSegIdx = this->saturatedOilVaporizationFactorTable_[regionIdx].findSegmentIndex(p, /*extrapolate=*/ true);
+        const auto RvSat = this->saturatedOilVaporizationFactorTable_[regionIdx].eval(p, SegmentIndex{satSegIdx});
+        const bool useSaturatedTables = (fluidState.saturation(FluidState::oilPhaseIdx) > 0.0) && (Rv >= (1.0 - 1e-10) * RvSat);
+
+        if (useSaturatedTables) {
+            const LhsEval b = this->inverseSaturatedGasB_[regionIdx].eval(p, SegmentIndex{satSegIdx});
+            const LhsEval invBMu = this->inverseSaturatedGasBMu_[regionIdx].eval(p, SegmentIndex{satSegIdx});
+            const LhsEval mu = b / invBMu;
+            return { b, mu };
+        } else {
+            unsigned ii, jj1, jj2;
+            LhsEval alpha, beta1, beta2;
+            this->inverseGasB_[regionIdx].findPoints(ii, jj1, jj2, alpha, beta1, beta2, p, Rv, /*extrapolate =*/ true);
+            const LhsEval b = this->inverseGasB_[regionIdx].eval(ii, jj1, jj2, alpha, beta1, beta2);
+            const LhsEval invBMu = this->inverseGasBMu_[regionIdx].eval(ii, jj1, jj2, alpha, beta1, beta2);
+            const LhsEval mu = b / invBMu;
+            return { b, mu };
+        }
+    }
+
+    /*!
      * \brief Returns the formation volume factor [-] of oil saturated gas at a given pressure.
      */
     template <class Evaluation>
@@ -291,6 +317,7 @@ public:
      * This method uses the standard blackoil assumptions: This means that the Rv value
      * does not depend on the saturation of oil. (cf. the Eclipse VAPPARS keyword.)
      *
+     * \param regionIdx Region index to use
      * \param Rv The surface volume of oil component dissolved in what will yield one
      *           cubic meter of gas at the surface [-]
      */

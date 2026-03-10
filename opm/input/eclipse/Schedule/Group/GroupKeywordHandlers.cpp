@@ -29,18 +29,110 @@
 #include <opm/input/eclipse/Schedule/GasLiftOpt.hpp>
 #include <opm/input/eclipse/Schedule/Group/GConSale.hpp>
 #include <opm/input/eclipse/Schedule/Group/GConSump.hpp>
-#include <opm/input/eclipse/Schedule/Group/GSatProd.hpp>
 #include <opm/input/eclipse/Schedule/Group/Group.hpp>
 #include <opm/input/eclipse/Schedule/Group/GroupEconProductionLimits.hpp>
+#include <opm/input/eclipse/Schedule/Group/GroupSatelliteInjection.hpp>
+#include <opm/input/eclipse/Schedule/Group/GSatProd.hpp>
 #include <opm/input/eclipse/Schedule/Group/GuideRateConfig.hpp>
+#include <opm/input/eclipse/Schedule/Network/ExtNetwork.hpp>
+#include <opm/input/eclipse/Schedule/Network/Node.hpp>
 #include <opm/input/eclipse/Schedule/ScheduleState.hpp>
 #include <opm/input/eclipse/Schedule/ScheduleStatic.hpp>
 #include <opm/input/eclipse/Schedule/UDQ/UDQActive.hpp>
 #include <opm/input/eclipse/Schedule/UDQ/UDQConfig.hpp>
 
+#include <opm/input/eclipse/Units/UnitSystem.hpp>
+
 #include "../HandlerContext.hpp"
 
+#include <opm/input/eclipse/Parser/ParserKeywords/G.hpp>
+
 #include <fmt/format.h>
+
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace {
+
+    Opm::GroupSatelliteInjection::Rate
+    parseGSatInje(const Opm::Phase       phase,
+                  const Opm::UnitSystem& usys,
+                  const Opm::DeckRecord& record)
+    {
+        using Kw = Opm::ParserKeywords::GSATINJE;
+
+        auto rate = Opm::GroupSatelliteInjection::Rate{};
+
+        if (const auto& rateItem = record.getItem<Kw::SURF_INJ_RATE>();
+            ! rateItem.defaultApplied(0))
+        {
+            const auto rateUnit = (phase == Opm::Phase::GAS)
+                ? Opm::UnitSystem::measure::gas_surface_rate
+                : Opm::UnitSystem::measure::liquid_surface_rate;
+
+            rate.surface(usys.to_si(rateUnit, rateItem.get<double>(0)));
+        }
+
+        if (const auto& resvItem = record.getItem<Kw::RES_INJ_RATE>();
+            ! resvItem.defaultApplied(0))
+        {
+            rate.reservoir(resvItem.getSIDouble(0));
+        }
+
+        if (const auto& calorificItem = record.getItem<Kw::MEAN_CALORIFIC>();
+            ! calorificItem.defaultApplied(0))
+        {
+            rate.calorific(calorificItem.getSIDouble(0));
+        }
+
+        return rate;
+    }
+
+    void rejectGroupIfField(const std::string&   group_name,
+                            Opm::HandlerContext& handlerContext)
+    {
+        if (group_name == "FIELD") {
+            const auto msg_fmt = std::string {
+                "Problem with {keyword}\n"
+                "In {file} line {line}\n"
+                "{keyword} cannot be applied to FIELD"
+            };
+
+            handlerContext.parseContext
+                .handleError(Opm::ParseContext::SCHEDULE_GROUP_ERROR,
+                             msg_fmt, handlerContext.keyword.location(),
+                             handlerContext.errors);
+        }
+    }
+
+    std::vector<std::string>
+    getGroupNamesAndCreateIfNeeded(const std::string&   groupNamePattern,
+                                   Opm::HandlerContext& handlerContext)
+    {
+        auto group_names = handlerContext.groupNames(groupNamePattern);
+
+        if (group_names.empty()) {
+            if (groupNamePattern.find('*') != std::string::npos) {
+                // Pattern is a root of the form 'S*'.  There must be at
+                // least one group matching that pattern for GSATINJE to
+                // apply.
+                handlerContext.invalidNamePattern(groupNamePattern);
+            }
+            else {
+                // Pattern is fully specified group name like 'SAT', but the
+                // group does not yet exist.  Create it, and parent the new
+                // group directly to FIELD.
+                handlerContext.addGroup(groupNamePattern);
+                group_names.push_back(groupNamePattern);
+            }
+        }
+
+        return group_names;
+    }
+
+} // Anonymous namespace
 
 namespace Opm {
 
@@ -179,20 +271,24 @@ void handleGCONPROD(HandlerContext& handlerContext)
         }
 
         const Group::ProductionCMode controlMode = Group::ProductionCModeFromString(record.getItem("CONTROL_MODE").getTrimmedString(0));
+
+        // Set the group limit actions. Item 7 (EXCEED_PROC) gives the general action, items 11-13 (WATER_EXCEED_PROCEDURE etc.)
+        // can override this for water, gas or liquid rate limits.
         Group::GroupLimitAction groupLimitAction;
         groupLimitAction.allRates = Group::ExceedActionFromString(record.getItem("EXCEED_PROC").getTrimmedString(0));
-
+        // \Note: we do not use the allRates anymore. Instead, we have explicit definition of actions for all the possible rate limits
+        // \Note: the allRates is here for backward compatibility for the RESTART file output
+        const auto& allRates = groupLimitAction.allRates;
+        groupLimitAction.oil = allRates;
         groupLimitAction.water = record.getItem("WATER_EXCEED_PROCEDURE").defaultApplied(0)
-        ? groupLimitAction.allRates
-        : Group::ExceedActionFromString(record.getItem("WATER_EXCEED_PROCEDURE").getTrimmedString(0));
-        
+            ? allRates
+            : Group::ExceedActionFromString(record.getItem("WATER_EXCEED_PROCEDURE").getTrimmedString(0));
         groupLimitAction.gas = record.getItem("GAS_EXCEED_PROCEDURE").defaultApplied(0)
-        ? groupLimitAction.allRates
-        : Group::ExceedActionFromString(record.getItem("GAS_EXCEED_PROCEDURE").getTrimmedString(0));
-
+            ? allRates
+            : Group::ExceedActionFromString(record.getItem("GAS_EXCEED_PROCEDURE").getTrimmedString(0));
         groupLimitAction.liquid = record.getItem("LIQUID_EXCEED_PROCEDURE").defaultApplied(0)
-        ? groupLimitAction.allRates
-        : Group::ExceedActionFromString(record.getItem("LIQUID_EXCEED_PROCEDURE").getTrimmedString(0));
+            ? allRates
+            : Group::ExceedActionFromString(record.getItem("LIQUID_EXCEED_PROCEDURE").getTrimmedString(0));
 
         const bool respond_to_parent = DeckItem::to_bool(record.getItem("RESPOND_TO_PARENT").getTrimmedString(0));
 
@@ -200,7 +296,7 @@ void handleGCONPROD(HandlerContext& handlerContext)
         const auto gas_target = record.getItem("GAS_TARGET").get<UDAValue>(0);
         const auto water_target = record.getItem("WATER_TARGET").get<UDAValue>(0);
         const auto liquid_target = record.getItem("LIQUID_TARGET").get<UDAValue>(0);
-        const auto resv_target = record.getItem("RESERVOIR_FLUID_TARGET").getSIDouble(0);
+        const auto resv_target = record.getItem("RESERVOIR_FLUID_TARGET").get<UDAValue>(0);
 
         const bool apply_default_oil_target = record.getItem("OIL_TARGET").defaultApplied(0);
         const bool apply_default_gas_target = record.getItem("GAS_TARGET").defaultApplied(0);
@@ -222,6 +318,7 @@ void handleGCONPROD(HandlerContext& handlerContext)
         for (const auto& group_name : group_names) {
             const bool is_field { group_name == "FIELD" } ;
 
+            // Find guide rates.
             auto guide_rate_def = Group::GuideRateProdTarget::NO_GUIDE_RATE;
             double guide_rate = 0;
             if (!is_field) {
@@ -245,101 +342,125 @@ void handleGCONPROD(HandlerContext& handlerContext)
                 }
             }
 
-            {
-                // FLD overrides item 8 (respond_to_parent i.e if FLD the group is available for higher up groups)
-                const bool availableForGroupControl { (respond_to_parent || controlMode == Group::ProductionCMode::FLD) && !is_field } ;
-                auto new_group = handlerContext.state().groups.get(group_name);
-                Group::GroupProductionProperties production(handlerContext.static_schedule().m_unit_system, group_name);
-                production.cmode = controlMode;
-                production.oil_target = oil_target;
-                production.gas_target = gas_target;
-                production.water_target = water_target;
-                production.liquid_target = liquid_target;
-                production.guide_rate = guide_rate;
-                production.guide_rate_def = guide_rate_def;
-                production.resv_target = resv_target;
-                production.available_group_control = availableForGroupControl;
-                production.group_limit_action = groupLimitAction;
+            // FLD overrides item 8 (respond_to_parent i.e if FLD the group is available for higher up groups)
+            const bool availableForGroupControl { (respond_to_parent || controlMode == Group::ProductionCMode::FLD) && !is_field } ;
 
-                production.production_controls = 0;
-                // GCONPROD
-                // 'G1' 'ORAT' 1000 100 200 300 NONE =>  constraints 100,200,300 should be ignored
-                //
-                // GCONPROD
-                // 'G1' 'ORAT' 1000 100 200 300 RATE =>  constraints 100,200,300 should be honored
-                if (production.cmode == Group::ProductionCMode::ORAT ||
-                    (groupLimitAction.allRates != Group::ExceedAction::NONE &&
-                    !apply_default_oil_target)) {
-                    production.production_controls |= static_cast<int>(Group::ProductionCMode::ORAT);
-                }
-                if (production.cmode == Group::ProductionCMode::WRAT ||
-                    ((groupLimitAction.water != Group::ExceedAction::NONE) &&
-                    !apply_default_water_target)) {
-                    production.production_controls |= static_cast<int>(Group::ProductionCMode::WRAT);
-                }
-                if (production.cmode == Group::ProductionCMode::GRAT ||
-                    ((groupLimitAction.gas  != Group::ExceedAction::NONE) &&
-                    !apply_default_gas_target)) {
-                    production.production_controls |= static_cast<int>(Group::ProductionCMode::GRAT);
-                }
-                if (production.cmode == Group::ProductionCMode::LRAT ||
-                    ((groupLimitAction.liquid != Group::ExceedAction::NONE) &&
-                    !apply_default_liquid_target)) {
-                    production.production_controls |= static_cast<int>(Group::ProductionCMode::LRAT);
-                }
+            auto new_group = handlerContext.state().groups.get(group_name);
+            Group::GroupProductionProperties production(handlerContext.static_schedule().m_unit_system, group_name);
 
-                if (!apply_default_resv_target)
-                    production.production_controls |= static_cast<int>(Group::ProductionCMode::RESV);
+            production.cmode = controlMode;
 
-                if (new_group.updateProduction(production)) {
-                    auto new_config = handlerContext.state().guide_rate();
-                    new_config.update_production_group(new_group);
-                    handlerContext.state().guide_rate.update( std::move(new_config));
+            production.oil_target = oil_target;
+            production.gas_target = gas_target;
+            production.water_target = water_target;
+            production.liquid_target = liquid_target;
+            production.guide_rate = guide_rate;
+            production.guide_rate_def = guide_rate_def;
+            production.resv_target = resv_target;
+            production.available_group_control = availableForGroupControl;
+            production.group_limit_action = groupLimitAction;
 
-                    handlerContext.state().groups.update( std::move(new_group));
-                    handlerContext.state().events().addEvent(ScheduleEvents::GROUP_PRODUCTION_UPDATE);
-                    handlerContext.state().wellgroup_events().addEvent( group_name, ScheduleEvents::GROUP_PRODUCTION_UPDATE);
-
-                    auto udq_active = handlerContext.state().udq_active.get();
-                    if (production.updateUDQActive(handlerContext.state().udq.get(), udq_active))
-                        handlerContext.state().udq_active.update( std::move(udq_active));
+            // We must overwrite the actions based on the control mode.
+            // First we find the mode to use. It will usually be the group's mode...
+            Group::ProductionCMode modeForActionOverride = controlMode;
+            // ...however, if the mode is FLD we must find it at a higher level:
+            if (controlMode == Group::ProductionCMode::FLD) {
+                // FLD is invalid for the FIELD group
+                if (is_field) {
+                    const auto& parseContext = handlerContext.parseContext;
+                    auto& errors = handlerContext.errors;
+                    parseContext.handleError(ParseContext::SCHEDULE_GROUP_ERROR,
+                                             "The FIELD group cannot have FLD control mode.",
+                                             keyword.location(),
+                                             errors);
                 }
+                // Set this group's mode for action override to be the
+                // one of the closest parent group with a mode
+                // different from FLD or NONE. If there is no parent
+                // with a definite control mode, set it to NONE.
+                modeForActionOverride = Group::ProductionCMode::NONE; // May be overwritten below
+                std::string parent_name = new_group.parent();
+                while (true) {
+                    const auto& parent_group = handlerContext.state().groups.get(parent_name);
+                    const auto parent_mode = parent_group.productionProperties().cmode;
+                    if (parent_mode != Group::ProductionCMode::FLD && parent_mode != Group::ProductionCMode::NONE) {
+                        // Found a definite control mode.
+                        modeForActionOverride = parent_mode;
+                        break;
+                    }
+                    if (parent_name == "FIELD" || parent_name.empty()) {
+                        // Reached the top of the tree.
+                        break;
+                    } else {
+                        // Go one level up in the tree.
+                        parent_name = parent_group.parent();
+                    }
+                }
+            }
+
+            // Override the action corresponding to the found mode.
+            switch (modeForActionOverride) {
+            case Group::ProductionCMode::ORAT:
+                production.group_limit_action.oil = Group::ExceedAction::RATE;
+                break;
+            case Group::ProductionCMode::WRAT:
+                production.group_limit_action.water = Group::ExceedAction::RATE;
+                break;
+            case Group::ProductionCMode::GRAT:
+                production.group_limit_action.gas = Group::ExceedAction::RATE;
+                break;
+            case Group::ProductionCMode::LRAT:
+                production.group_limit_action.liquid = Group::ExceedAction::RATE;
+                break;
+            default:
+                break; // do nothing
+            }
+
+            production.production_controls = 0;
+            // GCONPROD
+            // 'G1' 'ORAT' 1000 100 200 300 NONE =>  constraints 100,200,300 should be ignored
+            //
+            // GCONPROD
+            // 'G1' 'ORAT' 1000 100 200 300 RATE =>  constraints 100,200,300 should be honored
+            if (production.cmode == Group::ProductionCMode::ORAT ||
+                (groupLimitAction.oil != Group::ExceedAction::NONE &&
+                 !apply_default_oil_target)) {
+                production.production_controls |= static_cast<int>(Group::ProductionCMode::ORAT);
+            }
+            if (production.cmode == Group::ProductionCMode::WRAT ||
+                ((groupLimitAction.water != Group::ExceedAction::NONE) &&
+                 !apply_default_water_target)) {
+                production.production_controls |= static_cast<int>(Group::ProductionCMode::WRAT);
+            }
+            if (production.cmode == Group::ProductionCMode::GRAT ||
+                ((groupLimitAction.gas  != Group::ExceedAction::NONE) &&
+                 !apply_default_gas_target)) {
+                production.production_controls |= static_cast<int>(Group::ProductionCMode::GRAT);
+            }
+            if (production.cmode == Group::ProductionCMode::LRAT ||
+                ((groupLimitAction.liquid != Group::ExceedAction::NONE) &&
+                 !apply_default_liquid_target)) {
+                production.production_controls |= static_cast<int>(Group::ProductionCMode::LRAT);
+            }
+
+            if (!apply_default_resv_target)
+                production.production_controls |= static_cast<int>(Group::ProductionCMode::RESV);
+
+            if (new_group.updateProduction(production)) {
+                auto new_config = handlerContext.state().guide_rate();
+                new_config.update_production_group(new_group);
+                handlerContext.state().guide_rate.update( std::move(new_config));
+
+                handlerContext.state().groups.update( std::move(new_group));
+                handlerContext.state().events().addEvent(ScheduleEvents::GROUP_PRODUCTION_UPDATE);
+                handlerContext.state().wellgroup_events().addEvent( group_name, ScheduleEvents::GROUP_PRODUCTION_UPDATE);
+
+                auto udq_active = handlerContext.state().udq_active.get();
+                if (production.updateUDQActive(handlerContext.state().udq.get(), udq_active))
+                    handlerContext.state().udq_active.update( std::move(udq_active));
             }
         }
     }
-}
-
-void handleGSATPROD(HandlerContext& handlerContext)
-{
-    const auto& keyword = handlerContext.keyword;
-    auto new_gsatprod = handlerContext.state().gsatprod.get();
-
-    for (const auto& record : keyword) {
-        const std::string& groupNamePattern = record.getItem("SATELLITE_GROUP_NAME_OR_GROUP_NAME_ROOT").getTrimmedString(0);
-        const auto group_names = handlerContext.groupNames(groupNamePattern);
-        if (group_names.empty()) {
-            handlerContext.invalidNamePattern(groupNamePattern);
-        }
-        const auto oil_rate = record.getItem("OIL_PRODUCTION_RATE").getSIDouble(0);
-        const auto gas_rate = record.getItem("GAS_PRODUCTION_RATE").getSIDouble(0);
-        const auto water_rate = record.getItem("WATER_PRODUCTION_RATE").getSIDouble(0);
-        const auto resv_rate = record.getItem("RES_FLUID_VOL_PRODUCTION_RATE").getSIDouble(0);
-        const auto glift_rate = record.getItem("LIFT_GAS_SUPPLY_RATE").getSIDouble(0);
-
-        for (const auto& group_name : group_names) {
-            const bool is_field { group_name == "FIELD" } ;
-            if (is_field) {
-                std::string msg_fmt = "Problem with {keyword}\n"
-                    "In {file} line {line}\n"
-                    "GSATPROD group cannot be named FIELD ";
-                const auto& parseContext = handlerContext.parseContext;
-                auto& errors = handlerContext.errors;
-                parseContext.handleError(ParseContext::SCHEDULE_GROUP_ERROR, msg_fmt, keyword.location(), errors);
-            }
-            new_gsatprod.assign(group_name, oil_rate, gas_rate, water_rate, resv_rate, glift_rate);
-        }
-    }
-    handlerContext.state().gsatprod.update( std::move(new_gsatprod) );
 }
 
 void handleGCONSALE(HandlerContext& handlerContext)
@@ -351,10 +472,10 @@ void handleGCONSALE(HandlerContext& handlerContext)
         auto max_rate = record.getItem("MAX_SALES_RATE").get<UDAValue>(0);
         auto min_rate = record.getItem("MIN_SALES_RATE").get<UDAValue>(0);
         std::string procedure = record.getItem("MAX_PROC").getTrimmedString(0);
-        auto udqconfig = handlerContext.state().udq.get().params().undefinedValue();
+        auto udq_undefined = handlerContext.state().udq.get().params().undefinedValue();
 
         new_gconsale.add(groupName, sales_target, max_rate, min_rate, procedure,
-                         udqconfig, handlerContext.static_schedule().m_unit_system);
+                         udq_undefined, handlerContext.static_schedule().m_unit_system);
 
         auto new_group = handlerContext.state().groups.get( groupName );
         Group::GroupInjectionProperties injection{groupName};
@@ -378,10 +499,10 @@ void handleGCONSUMP(HandlerContext& handlerContext)
         if (!network_node.defaultApplied(0))
             network_node_name = network_node.getTrimmedString(0);
 
-        auto udqconfig = handlerContext.state().udq.get().params().undefinedValue();
+        auto udq_undefined = handlerContext.state().udq.get().params().undefinedValue();
 
         new_gconsump.add(groupName, consumption_rate, import_rate, network_node_name,
-                         udqconfig, handlerContext.static_schedule().m_unit_system);
+                         udq_undefined, handlerContext.static_schedule().m_unit_system);
     }
     handlerContext.state().gconsump.update( std::move(new_gconsump) );
 }
@@ -423,6 +544,17 @@ void handleGEFAC(HandlerContext& handlerContext)
                 handlerContext.state().wellgroup_events().addEvent( group_name, ScheduleEvents::WELLGROUP_EFFICIENCY_UPDATE);
                 handlerContext.state().events().addEvent( ScheduleEvents::WELLGROUP_EFFICIENCY_UPDATE );
                 handlerContext.state().groups.update(std::move(new_group));
+                // Ensure network node efficiences are also updated
+                auto ext_network = handlerContext.state().network.get();
+                if (ext_network.active() && ext_network.has_node(group_name)) {
+                    const auto network_efficiency = new_group.getGroupEfficiencyFactor(/*network*/ true);
+                    auto node = ext_network.node(group_name);
+                    if (node.efficiency() != network_efficiency) {
+                        node.set_efficiency(network_efficiency);
+                        ext_network.update_node(node);
+                        handlerContext.state().network.update( std::move(ext_network) );
+                    }
+                }
             }
         }
     }
@@ -476,6 +608,86 @@ void handleGRUPTREE(HandlerContext& handlerContext)
     }
 }
 
+void handleGSATINJE(HandlerContext& handlerContext)
+{
+    using Kw = ParserKeywords::GSATINJE;
+
+    for (const auto& record : handlerContext.keyword) {
+        const auto group_names =
+            getGroupNamesAndCreateIfNeeded(record.getItem<Kw::GROUP>()
+                                           .getTrimmedString(0), handlerContext);
+
+        const auto phase = get_phase(record.getItem<Kw::PHASE>().getTrimmedString(0));
+        const auto rate =
+            parseGSatInje(phase, handlerContext.static_schedule().m_unit_system, record);
+
+        for (const auto& group_name : group_names) {
+            rejectGroupIfField(group_name, handlerContext);
+
+            auto i = handlerContext.state().satelliteInjection.has(group_name)
+                ? handlerContext.state().satelliteInjection(group_name)
+                : GroupSatelliteInjection { group_name };
+
+            i.rate(phase) = rate;
+            handlerContext.state().satelliteInjection.update(std::move(i));
+
+            auto grp = handlerContext.state().groups(group_name);
+            grp.recordSatelliteInjection();
+
+            handlerContext.state().groups.update(std::move(grp));
+        }
+    }
+}
+
+void handleGSATPROD(HandlerContext& handlerContext)
+{
+    using Kw = ParserKeywords::GSATPROD;
+
+    const auto& keyword = handlerContext.keyword;
+
+    auto new_gsatprod = handlerContext.state().gsatprod.get();
+
+    auto update = false;
+
+    for (const auto& record : keyword) {
+        const auto group_names =
+            getGroupNamesAndCreateIfNeeded(record
+                                           .getItem<Kw::SATELLITE_GROUP_NAME_OR_GROUP_NAME_ROOT>()
+                                           .getTrimmedString(0), handlerContext);
+
+        const auto oil_rate = record.getItem<Kw::OIL_PRODUCTION_RATE>().get<UDAValue>(0);
+        const auto gas_rate = record.getItem<Kw::GAS_PRODUCTION_RATE>().get<UDAValue>(0);
+        const auto water_rate = record.getItem<Kw::WATER_PRODUCTION_RATE>().get<UDAValue>(0);
+        const auto resv_rate = record.getItem<Kw::RES_FLUID_VOL_PRODUCTION_RATE>().get<UDAValue>(0);
+        const auto glift_rate = record.getItem<Kw::LIFT_GAS_SUPPLY_RATE>().get<UDAValue>(0);
+
+        for (const auto& group_name : group_names) {
+            rejectGroupIfField(group_name, handlerContext);
+
+            auto udq_undefined = handlerContext.state().udq.get().params().undefinedValue();
+
+            new_gsatprod.assign(group_name,
+                                oil_rate,
+                                gas_rate,
+                                water_rate,
+                                resv_rate,
+                                glift_rate,
+                                udq_undefined);
+
+            auto grp = handlerContext.state().groups(group_name);
+            grp.recordSatelliteProduction();
+
+            handlerContext.state().groups.update(std::move(grp));
+
+            update = true;
+        }
+    }
+
+    if (update) {
+        handlerContext.state().gsatprod.update(std::move(new_gsatprod));
+    }
+}
+
 }
 
 std::vector<std::pair<std::string,KeywordHandlers::handler_function>>
@@ -486,11 +698,12 @@ getGroupHandlers()
         { "GCONPROD", &handleGCONPROD },
         { "GCONSALE", &handleGCONSALE },
         { "GCONSUMP", &handleGCONSUMP },
-        { "GSATPROD", &handleGSATPROD },
         { "GECON"   , &handleGECON    },
         { "GEFAC"   , &handleGEFAC    },
         { "GPMAINT" , &handleGPMAINT  },
         { "GRUPTREE", &handleGRUPTREE },
+        { "GSATINJE", &handleGSATINJE },
+        { "GSATPROD", &handleGSATPROD },
     };
 }
 

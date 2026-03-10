@@ -57,12 +57,9 @@ namespace {
         std::vector<std::string> strings{};
         strings.reserve(quoted_strings.size());
 
-        std::transform(quoted_strings.begin(), quoted_strings.end(),
-                       std::back_inserter(strings),
-                       [](const std::string& qs)
-                       {
-                           return strip_quotes(qs);
-                       });
+        std::ranges::transform(quoted_strings, std::back_inserter(strings),
+                               [](const std::string& qs)
+                               { return strip_quotes(qs); });
 
         return strings;
     }
@@ -387,9 +384,9 @@ Opm::Action::ASTNode::getWellList(const Context& context) const
     auto wnames = std::vector<std::string>{};
     wnames.reserve(wells.size());
 
-    std::copy_if(wells.begin(), wells.end(), std::back_inserter(wnames),
-                 [wpatt = normalisePattern(this->arg_list.front())]
-                 (const auto& well) { return shmatch(wpatt, well); });
+    std::ranges::copy_if(wells, std::back_inserter(wnames),
+                         [wpatt = normalisePattern(this->arg_list.front())]
+                         (const auto& well) { return shmatch(wpatt, well); });
 
     return wnames;
 }

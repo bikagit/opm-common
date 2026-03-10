@@ -22,7 +22,7 @@
 
 #include <opm/output/eclipse/Inplace.hpp>
 
-#include <stdexcept>
+#include <exception>
 #include <vector>
 
 using namespace Opm;
@@ -31,7 +31,7 @@ namespace {
 
 bool contains(const std::vector<Inplace::Phase>& phases, Inplace::Phase phase)
 {
-    auto find_iter = std::find(phases.begin(), phases.end(), phase);
+    const auto find_iter = std::ranges::find(phases, phase);
     return find_iter != phases.end();
 }
 

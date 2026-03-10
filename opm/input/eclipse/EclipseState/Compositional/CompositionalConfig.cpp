@@ -128,7 +128,7 @@ namespace {
             // using copy here to consider the situation that there is
             // default values, we might not specify all the values and keep
             // the rest to be the default values
-            std::copy(data.begin(), data.end(), target[i].begin());
+            std::ranges::copy(data, target[i].begin());
         }
     }
 

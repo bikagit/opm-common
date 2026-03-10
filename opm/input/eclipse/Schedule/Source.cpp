@@ -29,9 +29,9 @@
 template <typename SourceCellSequence>
 auto findInSequence(SourceCellSequence&& sequence, const Opm::SourceComponent comp)
 {
-    return std::find_if(std::begin(sequence), std::end(sequence),
-                        [comp](const auto& source)
-                        { return source.component == comp; });
+    return std::ranges::find_if(sequence,
+                                [comp](const auto& source)
+                                { return source.component == comp; });
 }
 
 namespace Opm {

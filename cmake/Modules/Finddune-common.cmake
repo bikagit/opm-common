@@ -18,7 +18,6 @@ find_opm_package (
   # dependencies
   "BLAS REQUIRED;
   LAPACK REQUIRED;
-  CxaDemangle;
   MPI;
   TBB;
   GMP
@@ -51,14 +50,12 @@ int main (void) {
   HAVE_ARRAY;
   HAVE_BOOST_MAKE_SHARED_HPP;
   HAVE_BOOST_SHARED_PTR_HPP;
-  HAVE_DUNE_BOOST;
   HAVE_GMP;
   HAVE_MAKE_SHARED;
   HAVE_MPI;
   HAVE_NULLPTR;
   HAVE_STATIC_ASSERT;
   HAVE_SHARED_PTR;
-  MPI_2;
   SHARED_PTR_HEADER;
   SHARED_PTR_NAMESPACE;
   HAVE_TYPE_TRAITS;
@@ -68,17 +65,10 @@ int main (void) {
   ")
 #debug_find_vars ("dune-common")
 
-if(MPI_C_FOUND)
-  # check for MPI version 2
-  include(CMakePushCheckState)
-  include(CheckFunctionExists)
-  cmake_push_check_state()
-  set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES};${MPI_C_LIBRARIES})
-  set(CMAKE_REQUIRED_INCLUDES ${CMAKE_REQUIRED_INCLUDES};${MPI_C_INCLUDES})
-  check_function_exists(MPI_Finalized MPI_2)
-  cmake_pop_check_state()
-endif(MPI_C_FOUND)
-
 # make version number available in config.h
 include (UseDuneVer)
 find_dune_version ("dune" "common")
+
+if(${DUNE_COMMON_VERSION_MAJOR}.${DUNE_COMMON_VERSION_MINOR} VERSION_GREATER_EQUAL "2.11")
+  set(CMAKE_CXX_STANDARD 20)
+endif()

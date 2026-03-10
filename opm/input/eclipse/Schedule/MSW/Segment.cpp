@@ -80,8 +80,8 @@ namespace Opm {
         : m_segment_number   (-1)
         , m_branch           (-1)
         , m_outlet_segment   (-1)
-        , m_total_length     (invalid_value)
         , m_depth            (invalid_value)
+        , m_total_length     (invalid_value)
         , m_internal_diameter(invalid_value)
         , m_roughness        (invalid_value)
         , m_cross_area       (invalid_value)
@@ -95,8 +95,8 @@ namespace Opm {
         : m_segment_number   (rst_segment.segment)
         , m_branch           (rst_segment.branch)
         , m_outlet_segment   (rst_segment.outlet_segment)
-        , m_total_length     (rst_segment.dist_bhp_ref)
         , m_depth            (rst_segment.node_depth)
+        , m_total_length     (rst_segment.dist_bhp_ref)
         , m_internal_diameter(if_invalid_value(rst_segment.diameter))
         , m_roughness        (if_invalid_value(rst_segment.roughness))
         , m_cross_area       (if_invalid_value(rst_segment.area))
@@ -106,12 +106,12 @@ namespace Opm {
         , m_y                (0.0)
     {
         if (is_valid_value(m_roughness) && is_valid_value(m_internal_diameter)) {
-            const double safe_roughness = m_internal_diameter * std::min(MAX_REL_ROUGHNESS, m_roughness/m_internal_diameter);
+            const double safe_roughness = m_internal_diameter * MAX_REL_ROUGHNESS;
             if (m_roughness > safe_roughness) {
                 OpmLog::warning(fmt::format("Well {} segment {}: Too high roughness {:.3e} is limited to {:.3e} to avoid singularity in friction factor calculation.",
                                             wname, m_segment_number, m_roughness, safe_roughness));
+                m_roughness = safe_roughness;
             }
-            m_roughness = safe_roughness;
         }
 
         const auto segment_type = segmentTypeFromInt(rst_segment.segment_type);
@@ -134,8 +134,8 @@ namespace Opm {
     Segment::Segment(const int    segment_number_in,
                      const int    branch_in,
                      const int    outlet_segment_in,
-                     const double length_in,
                      const double depth_in,
+                     const double length_in,
                      const double internal_diameter_in,
                      const double roughness_in,
                      const double cross_area_in,
@@ -146,8 +146,8 @@ namespace Opm {
         : m_segment_number   (segment_number_in)
         , m_branch           (branch_in)
         , m_outlet_segment   (outlet_segment_in)
-        , m_total_length     (length_in)
         , m_depth            (depth_in)
+        , m_total_length     (length_in)
         , m_internal_diameter(internal_diameter_in)
         , m_roughness        (roughness_in)
         , m_cross_area       (cross_area_in)
@@ -221,7 +221,6 @@ namespace Opm {
         result.m_data_ready = true;
         result.m_x = 12.0;
         result.m_y = 13.0;
-        result.m_perf_length = 14.0;
         result.m_icd = SICD::serializationTestObject();
         return result;
     }
@@ -252,11 +251,6 @@ namespace Opm {
     double Segment::depth() const
     {
         return m_depth;
-    }
-
-    double Segment::perfLength() const
-    {
-        return *this->m_perf_length;
     }
 
     double Segment::internalDiameter() const
@@ -308,9 +302,7 @@ namespace Opm {
 
     void Segment::addInletSegment(const int segment_number_in)
     {
-        auto segPos = std::find(this->m_inlet_segments.begin(),
-                                this->m_inlet_segments.end(),
-                                segment_number_in);
+        auto segPos = std::ranges::find(this->m_inlet_segments, segment_number_in);
 
         if (segPos == this->m_inlet_segments.end()) {
             this->m_inlet_segments.push_back(segment_number_in);
@@ -333,7 +325,6 @@ namespace Opm {
             && this->m_roughness         == rhs.m_roughness
             && this->m_cross_area        == rhs.m_cross_area
             && this->m_volume            == rhs.m_volume
-            && this->m_perf_length       == rhs.m_perf_length
             && this->m_icd               == rhs.m_icd
             && this->m_data_ready        == rhs.m_data_ready
             && (this->m_x                == rhs.m_x)
@@ -413,9 +404,24 @@ namespace Opm {
         this->updateValve__(new_valve, segment_length);
     }
 
-    void Segment::updatePerfLength(double perf_length)
+    bool Segment::updateICDScalingFactor(const double outlet_segment_length,
+                                         const double completion_length)
     {
-        this->m_perf_length = perf_length;
+        if (this->isSpiralICD()) {
+            auto sicd = this->spiralICD();
+            if (sicd.updateScalingFactor(outlet_segment_length, completion_length) ) {
+                this->updateSpiralICD(sicd);
+                return true;
+            }
+        }
+        if (this->isAICD()) {
+            auto aicd = this->autoICD();
+            if ( aicd.updateScalingFactor(outlet_segment_length, completion_length) ) {
+                this->updateAutoICD(aicd);
+                return true;
+            }
+        }
+        return false;
     }
 
     const Valve& Segment::valve() const

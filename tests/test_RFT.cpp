@@ -732,12 +732,12 @@ BOOST_AUTO_TEST_CASE(test_RFT)
         std::vector<Opm::data::Connection> well1_comps(9);
         Opm::data::ConnectionFiltrate con_filtrate {0.1, 1, 3, 0.4, 1.e-9, 0.2, 0.05, 10.}; // values are not used in this test
         for (size_t i = 0; i < 9; ++i) {
-            Opm::data::Connection well_comp { grid.getGlobalIndex(8,8,i), r1, 0.0 , 0.0, (double)i, 0.1*i,0.2*i, 1.2e3, 4.321, 0.0, 1.23, con_filtrate};
+            Opm::data::Connection well_comp { grid.getGlobalIndex(8,8,i), r1, 0.0 , 0.0, (double)i, 0.1*i,0.2*i, 1.2e3, 4.321, 0.0, 1.23, 0, con_filtrate};
             well1_comps[i] = std::move(well_comp);
         }
         std::vector<Opm::data::Connection> well2_comps(6);
         for (size_t i = 0; i < 6; ++i) {
-            Opm::data::Connection well_comp { grid.getGlobalIndex(3,3,i+3), r2, 0.0 , 0.0, (double)i, i*0.1,i*0.2, 0.15, 0.54321, 0.0, 0.98, con_filtrate};
+            Opm::data::Connection well_comp { grid.getGlobalIndex(3,3,i+3), r2, 0.0 , 0.0, (double)i, i*0.1,i*0.2, 0.15, 0.54321, 0.0, 0.98, 0, con_filtrate};
             well2_comps[i] = std::move(well_comp);
         }
 
@@ -871,12 +871,12 @@ BOOST_AUTO_TEST_CASE(test_RFT2)
                 std::vector<Opm::data::Connection> well1_comps(9);
                 Opm::data::ConnectionFiltrate con_filtrate {0.1, 1, 3, 0.4, 1.e-9, 0.2, 0.05, 10.}; // values are not used in this test
                 for (size_t i = 0; i < 9; ++i) {
-                    Opm::data::Connection well_comp { grid.getGlobalIndex(8,8,i), r1, 0.0 , 0.0, (double)i, 0.1*i,0.2*i, 3.14e5, 0.1234, 0.0, 1.23, con_filtrate};
+                    Opm::data::Connection well_comp { grid.getGlobalIndex(8,8,i), r1, 0.0 , 0.0, (double)i, 0.1*i,0.2*i, 3.14e5, 0.1234, 0.0, 1.23, 0, con_filtrate};
                     well1_comps[i] = std::move(well_comp);
                 }
                 std::vector<Opm::data::Connection> well2_comps(6);
                 for (size_t i = 0; i < 6; ++i) {
-                    Opm::data::Connection well_comp { grid.getGlobalIndex(3,3,i+3), r2, 0.0 , 0.0, (double)i, i*0.1,i*0.2, 355.113, 0.9876, 0.0, 0.98, con_filtrate};
+                    Opm::data::Connection well_comp { grid.getGlobalIndex(3,3,i+3), r2, 0.0 , 0.0, (double)i, i*0.1,i*0.2, 355.113, 0.9876, 0.0, 0.98, 0, con_filtrate};
                     well2_comps[i] = std::move(well_comp);
                 }
 
@@ -3224,13 +3224,13 @@ END
         auto cellIx = std::vector<int>{};
         cellIx.reserve(ijk.size());
 
-        std::transform(ijk.begin(), ijk.end(), std::back_inserter(cellIx),
-                       [&grid](const auto& ijk_entry)
-                       {
-                           return grid.getGlobalIndex(ijk_entry[0] - 1,
-                                                      ijk_entry[1] - 1,
-                                                      ijk_entry[2] - 1);
-                       });
+        std::ranges::transform(ijk, std::back_inserter(cellIx),
+                             [&grid](const auto& ijk_entry)
+                             {
+                                 return grid.getGlobalIndex(ijk_entry[0] - 1,
+                                                            ijk_entry[1] - 1,
+                                                            ijk_entry[2] - 1);
+                             });
 
         return cellIx;
     }
@@ -4210,13 +4210,13 @@ END
         auto cellIx = std::vector<int>{};
         cellIx.reserve(ijk.size());
 
-        std::transform(ijk.begin(), ijk.end(), std::back_inserter(cellIx),
-                       [&grid](const auto& ijk_entry)
-                       {
-                           return grid.getGlobalIndex(ijk_entry[0] - 1,
-                                                      ijk_entry[1] - 1,
-                                                      ijk_entry[2] - 1);
-                       });
+        std::ranges::transform(ijk, std::back_inserter(cellIx),
+                               [&grid](const auto& ijk_entry)
+                               {
+                                   return grid.getGlobalIndex(ijk_entry[0] - 1,
+                                                              ijk_entry[1] - 1,
+                                                              ijk_entry[2] - 1);
+                               });
 
         return cellIx;
     }

@@ -305,11 +305,9 @@ UDQSet UDQSet::regions(const std::string&                  name,
 
 bool UDQSet::has(const std::string& name) const
 {
-    return std::any_of(this->values.begin(), this->values.end(),
-                       [&name](const UDQScalar& value)
-                       {
-                           return value.wgname() == name;
-                       });
+    return std::ranges::any_of(this->values,
+                               [&name](const UDQScalar& value)
+                               { return value.wgname() == name; });
 }
 
 std::size_t UDQSet::size() const
@@ -404,8 +402,8 @@ std::vector<std::string> UDQSet::wgnames() const
     auto names = std::vector<std::string> {};
     names.reserve(this->values.size());
 
-    std::transform(this->values.begin(), this->values.end(), std::back_inserter(names),
-                   [](const UDQScalar& value) { return value.wgname(); });
+    std::ranges::transform(this->values, std::back_inserter(names),
+                           [](const UDQScalar& value) { return value.wgname(); });
 
     return names;
 }
@@ -485,11 +483,9 @@ std::vector<double> UDQSet::defined_values() const
 
 std::size_t UDQSet::defined_size() const
 {
-    return std::count_if(this->values.begin(), this->values.end(),
-                         [](const UDQScalar& value)
-                         {
-                             return value.defined();
-                         });
+    return std::ranges::count_if(this->values,
+                                 [](const UDQScalar& value)
+                                 { return value.defined(); });
 }
 
 const UDQScalar& UDQSet::operator[](std::size_t index) const
@@ -503,11 +499,9 @@ const UDQScalar& UDQSet::operator[](std::size_t index) const
 
 const UDQScalar& UDQSet::operator[](const std::string& wgname) const
 {
-    auto value_iter = std::find_if(this->values.begin(), this->values.end(),
-                                   [&wgname](const UDQScalar& value)
-                                   {
-                                       return value.wgname() == wgname;
-                                   });
+    const auto value_iter = std::ranges::find_if(this->values,
+                                                 [&wgname](const UDQScalar& value)
+                                                 { return value.wgname() == wgname; });
 
     if (value_iter == this->values.end()) {
         throw std::out_of_range("No such well/group: " + wgname);
@@ -520,12 +514,12 @@ const UDQScalar&
 UDQSet::operator()(const std::string& well,
                    const std::size_t  item) const
 {
-    auto value_iter = std::find_if(this->values.begin(), this->values.end(),
-                                   [&well, item](const UDQScalar& value)
-                                   {
-                                       return (value.number() == item)
-                                           && (value.wgname() == well);
-                                   });
+    const auto value_iter = std::ranges::find_if(this->values,
+                                                 [&well, item](const UDQScalar& value)
+                                                 {
+                                                     return (value.number() == item)
+                                                         && (value.wgname() == well);
+                                                 });
 
     if (value_iter == this->values.end()) {
         throw std::out_of_range {

@@ -27,7 +27,6 @@
 #include <opm/input/eclipse/EclipseState/Grid/SatfuncPropertyInitializers.hpp>
 #include <opm/input/eclipse/EclipseState/Grid/TranCalculator.hpp>
 #include <opm/input/eclipse/EclipseState/Runspec.hpp>
-#include <opm/input/eclipse/EclipseState/Util/OrderedMap.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/TableManager.hpp>
 
 #include <opm/input/eclipse/Units/UnitSystem.hpp>
@@ -153,7 +152,8 @@ static const std::unordered_map<std::string, keyword_info<double>> double_keywor
                                                                                       {"THCOIL",  keyword_info<double>{}.unit_string("Energy/AbsoluteTemperature*Length*Time")},
                                                                                       {"THCGAS",  keyword_info<double>{}.unit_string("Energy/AbsoluteTemperature*Length*Time")},
                                                                                       {"THCWATER",keyword_info<double>{}.unit_string("Energy/AbsoluteTemperature*Length*Time")},
-                                                                                      {"YMODULE", keyword_info<double>{}.unit_string("Giga*Pascal")},
+                                                                                      {"YMODULE", keyword_info<double>{}.unit_string("Ymodule")},
+                                                                                      {"CSTRESS", keyword_info<double>{}.unit_string("1")},
                                                                                       {"PRATIO", keyword_info<double>{}.unit_string("1")},
                                                                                       {"BIOTCOEF", keyword_info<double>{}.unit_string("1")},
                                                                                       {"POELCOEF", keyword_info<double>{}.unit_string("1")},
@@ -268,18 +268,18 @@ static const std::unordered_map<std::string, keyword_info<int>> int_keywords = {
 namespace SOLUTION {
 
 static const std::unordered_map<std::string, keyword_info<double>> double_keywords = {{"PRESSURE", keyword_info<double>{}.unit_string("Pressure")},
-                                                                                      {"SPOLY",    keyword_info<double>{}.unit_string("Density")},
+                                                                                      {"SPOLY",    keyword_info<double>{}.unit_string("Concentration")},
                                                                                       {"SPOLYMW",  keyword_info<double>{}},
                                                                                       {"SSOL",     keyword_info<double>{}},
                                                                                       {"SWAT",     keyword_info<double>{}},
                                                                                       {"SGAS",     keyword_info<double>{}},
-                                                                                      {"SMICR",    keyword_info<double>{}.unit_string("Density")},
-                                                                                      {"SOXYG",    keyword_info<double>{}.unit_string("Density")},
-                                                                                      {"SUREA",    keyword_info<double>{}.unit_string("Density")},
+                                                                                      {"SMICR",    keyword_info<double>{}.unit_string("Concentration")},
+                                                                                      {"SOXYG",    keyword_info<double>{}.unit_string("Concentration")},
+                                                                                      {"SUREA",    keyword_info<double>{}.unit_string("Concentration")},
                                                                                       {"SBIOF",    keyword_info<double>{}},
                                                                                       {"SCALC",    keyword_info<double>{}},
                                                                                       {"SALTP",    keyword_info<double>{}},
-                                                                                      {"SALT",     keyword_info<double>{}.unit_string("Salinity")},
+                                                                                      {"SALT",     keyword_info<double>{}.unit_string("Concentration")},
                                                                                       {"TEMPI",    keyword_info<double>{}.unit_string("Temperature")},
                                                                                       {"RS",       keyword_info<double>{}.unit_string("GasDissolutionFactor")},
                                                                                       {"RSW",      keyword_info<double>{}.unit_string("GasDissolutionFactor")},
@@ -403,7 +403,7 @@ public:
         /// \code this->status \endcode is not \code GetStatus::OK \endcode.
         /// Does nothing otherwise.
         ///
-        /// \param[in] Input keyword which prompted request.
+        /// \param[in] loc Location of input keyword which prompted request.
         ///
         /// \param[in] descr Textual description of context in which request
         ///   occurred.
@@ -685,16 +685,6 @@ public:
     std::size_t active_size;
     std::size_t global_size;
 
-    std::size_t num_int() const
-    {
-        return this->int_data.size();
-    }
-
-    std::size_t num_double() const
-    {
-        return this->double_data.size();
-    }
-
     void handle_schedule_keywords(const std::vector<DeckKeyword>& keywords);
     bool tran_active(const std::string& keyword) const;
     void apply_tran(const std::string& keyword, std::vector<double>& data);
@@ -759,9 +749,9 @@ private:
 
     template <typename T>
     Fieldprops::FieldData<T>&
-    init_get(const std::string& keyword,
+    init_get(const std::string&                           keyword,
              const Fieldprops::keywords::keyword_info<T>& kw_info,
-             const bool multiplier_in_edit = false);
+             const bool                                   multiplier_in_edit = false);
 
     std::string region_name(const DeckItem& region_item) const;
 
@@ -776,9 +766,6 @@ private:
     void distribute_toplayer(Fieldprops::FieldData<double>& field_data,
                              const std::vector<double>& deck_data,
                              const Box& box);
-
-    double get_beta(const std::string& func_name, const std::string& target_array, double raw_beta);
-    double get_alpha(const std::string& func_name, const std::string& target_array, double raw_alpha);
 
     void handle_keyword(Section section, const DeckKeyword& keyword, Box& box);
     void handle_double_keyword(Section section,
@@ -816,6 +803,8 @@ private:
         return "__MULT__"sv;
     }
 
+    void resetWorkArrays();
+
     const UnitSystem unit_system;
     std::size_t nx,ny,nz;
     Phases m_phases;
@@ -832,6 +821,11 @@ private:
     std::unordered_map<std::string, Fieldprops::FieldData<int>> int_data;
     std::unordered_map<std::string, Fieldprops::FieldData<double>> double_data;
     std::unordered_map<std::string, std::string> fipreg_shortname_translation{};
+
+    /// Backing store for intermediate WORK<n> arrays.
+    ///
+    /// Cleared at end of each section.
+    std::unordered_map<std::string, Fieldprops::FieldData<double>> work_arrays{};
 
     std::unordered_map<std::string,Fieldprops::TranCalculator> tran;
 

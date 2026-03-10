@@ -27,7 +27,6 @@
 
 #include <opm/material/fluidmatrixinteractions/EclEpsConfig.hpp>
 
-#if HAVE_ECL_INPUT
 #include <opm/input/eclipse/EclipseState/EclipseState.hpp>
 #include <opm/input/eclipse/EclipseState/Grid/SatfuncPropertyInitializers.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/TableManager.hpp>
@@ -39,13 +38,11 @@
 #include <cmath>
 #include <stdexcept>
 #include <vector>
-#endif // HAVE_ECL_INPUT
 
 #include <cassert>
 #include <iostream>
 #include <string>
 
-#if HAVE_ECL_INPUT
 namespace {
     template <typename Scalar>
     void updateIfNonNull(Scalar& targetValue, const double* value_ptr)
@@ -55,7 +52,6 @@ namespace {
         }
     }
 } // Anonymous namespace
-#endif // HAVE_ECL_INPUT
 
 template<class Scalar>
 void Opm::EclEpsScalingPointsInfo<Scalar>::print() const
@@ -82,7 +78,6 @@ void Opm::EclEpsScalingPointsInfo<Scalar>::print() const
               << "    maxKrog: " << maxKrog << '\n';
 }
 
-#if HAVE_ECL_INPUT
 template<class Scalar>
 void Opm::EclEpsScalingPointsInfo<Scalar>::
 extractUnscaled(const satfunc::RawTableEndPoints&    rtep,
@@ -231,7 +226,6 @@ calculateLeverettFactors(const EclipseState&         eclState,
         this->pcgoLeverettFactor = commonFactor * gamma * Uconst;
     }
 }
-#endif  // HAVE_ECL_INPUT
 
 // ---------------------------------------------------------------------------
 
@@ -270,10 +264,7 @@ init(const EclEpsScalingPointsInfo<Scalar>& epsInfo,
         maxKrw_ = epsInfo.maxKrw;
         maxKrn_ = epsInfo.maxKrow;
     }
-    else {
-        assert(epsSystemType == EclTwoPhaseSystemType::GasOil ||
-               epsSystemType == EclTwoPhaseSystemType::GasWater);
-
+    else if (epsSystemType == EclTwoPhaseSystemType::GasOil) {
         // saturation scaling for capillary pressure
         saturationPcPoints_[0] = 1.0 - epsInfo.Swl - epsInfo.Sgu;
         saturationPcPoints_[2] = saturationPcPoints_[1] = 1.0 - epsInfo.Swl - epsInfo.Sgl;
@@ -302,6 +293,35 @@ init(const EclEpsScalingPointsInfo<Scalar>& epsInfo,
         Krnr_   = epsInfo.Krgr;
 
         maxKrw_ = epsInfo.maxKrog;
+        maxKrn_ = epsInfo.maxKrg;
+    }
+    else {
+        assert(epsSystemType == EclTwoPhaseSystemType::GasWater);
+
+        // saturation scaling for capillary pressure
+        saturationPcPoints_[0] = epsInfo.Swl;
+        saturationPcPoints_[2] = saturationPcPoints_[1] = epsInfo.Swu;
+
+        // krw saturation scaling endpoints
+        saturationKrwPoints_[0] = epsInfo.Swcr;
+        saturationKrwPoints_[1] = 1.0 - epsInfo.Sgcr;
+        saturationKrwPoints_[2] = epsInfo.Swu;
+
+        // krn saturation scaling endpoints (with the non-wetting phase being gas)
+        saturationKrnPoints_[2] = 1.0 - epsInfo.Sgcr;
+        saturationKrnPoints_[1] = epsInfo.Swcr;
+        saturationKrnPoints_[0] = 1.0 - epsInfo.Sgu;
+
+        // Pcgo is used for Pcgw for gas-water systems
+        if (config.enableLeverettScaling())
+            maxPcnwOrLeverettFactor_ = epsInfo.pcgoLeverettFactor;
+        else
+            maxPcnwOrLeverettFactor_ = epsInfo.maxPcgo;
+
+        Krwr_   = epsInfo.Krwr;
+        Krnr_   = epsInfo.Krgr;
+
+        maxKrw_ = epsInfo.maxKrw;
         maxKrn_ = epsInfo.maxKrg;
     }
 }

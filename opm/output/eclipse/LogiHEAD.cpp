@@ -2,12 +2,14 @@
 
 #include <opm/output/eclipse/VectorItems/logihead.hpp>
 
+#include <opm/input/eclipse/Schedule/OilVaporizationProperties.hpp>
+
 #include <utility>
 #include <vector>
 
 namespace VI = ::Opm::RestartIO::Helpers::VectorItems;
 
-enum index : std::vector<int>::size_type {
+enum index : std::vector<bool>::size_type {
     // Flag to signify live oil (dissolved gas) PVT
     IsLiveOil = VI::logihead::IsLiveOil,
 
@@ -71,7 +73,7 @@ lh_028	=	28	,		//	FALSE
 lh_029	=	29	,		//	FALSE
 lh_030	=	30	,		//	FALSE		Flag for coalbed methane (ECLIPSE 100)
 lh_031	=	31	,		//	TRUE
-lh_032	=	32	,		//	FALSE
+lh_032	=	32	,		//	FALSE       Flag for TEMP option (ECLIPSE 100)
 lh_033	=	33	,		//	FALSE
 lh_034	=	34	,		//	FALSE
 lh_035	=	35	,		//	FALSE
@@ -79,10 +81,11 @@ lh_036	=	36	,		//	FALSE
 
     // Flag to indicate that the network option is used
     HasNetwork = VI::logihead::HasNetwork,
+
     // Flag to signify constant oil compressibility
     ConstCo = VI::logihead::ConstCo,
 
-lh_039	=	39	,		//	FALSE
+lh_039	=	39	,		//	FALSE       Flag for TEMP option (ECLIPSE 100)
 lh_040	=	40	,		//	FALSE
 lh_041	=	41	,		//	FALSE
 lh_042	=	42	,		//	FALSE
@@ -96,7 +99,10 @@ lh_049	=	49	,		//	FALSE
 lh_050	=	50	,		//	FALSE
 lh_051	=	51	,		//	FALSE
 lh_052	=	52	,		//	FALSE
-lh_053	=	53	,		//	FALSE
+
+    // Whether or not VAPPARS is currently active.
+    VapPars = VI::logihead::VapPars,
+
 lh_054	=	54	,		//	FALSE
 lh_055	=	55	,		//	FALSE
 lh_056	=	56	,		//	FALSE
@@ -171,7 +177,7 @@ lh_120	=	120	,		//	FALSE
 // ---------------------------------------------------------------------
 // ---------------------------------------------------------------------
 
-    LOGIHEAD_NUMBER_OF_ITEMS        // MUST be last element of enum.
+    LOGIHEAD_NUMBER_OF_ITEMS,       // MUST be last enumerator.
 };
 
 // =====================================================================
@@ -187,13 +193,16 @@ Opm::RestartIO::LogiHEAD::
 variousParam(const bool e300_radial,
              const bool e100_radial,
              const int  nswlmx,
-             const bool enableHyster)
+             const bool enableHyster,
+             const bool hasTemp)
 {
     this -> data_[E300Radial] = e300_radial;
     this -> data_[E100Radial] = e100_radial;
     this -> data_[Hyster]     = enableHyster;
     this -> data_[HasMSWells] = nswlmx >= 1; // True if MS Wells exist.
 
+    this -> data_[32] = hasTemp;
+    this -> data_[39] = hasTemp;
     return *this;
 }
 
@@ -223,7 +232,16 @@ Opm::RestartIO::LogiHEAD::saturationFunction(const SatfuncFlags& satfunc)
 Opm::RestartIO::LogiHEAD&
 Opm::RestartIO::LogiHEAD::network(const int maxNoNodes)
 {
-    this->data_[HasNetwork  ] = (maxNoNodes >= 1) ? true : false;
+    this->data_[HasNetwork] = maxNoNodes >= 1;
+
+    return *this;
+}
+
+Opm::RestartIO::LogiHEAD&
+Opm::RestartIO::LogiHEAD::phaseMixing(const OilVaporizationProperties& oilvap)
+{
+    this->data_[VapPars] = oilvap.defined() &&
+        (oilvap.getType() == OilVaporizationProperties::OilVaporization::VAPPARS);
 
     return *this;
 }

@@ -68,9 +68,7 @@ namespace Opm {
         return this->m_name == rhs.m_name
             && this->m_transMult == rhs.m_transMult
             && this->m_faceList.size() == rhs.m_faceList.size()
-            && std::equal( this->m_faceList.begin(),
-                           this->m_faceList.end(),
-                           rhs.m_faceList.begin() );
+            && std::ranges::equal(this->m_faceList, rhs.m_faceList);
     }
 
     bool Fault::operator!=( const Fault& rhs ) const {

@@ -30,6 +30,7 @@
 #include <opm/input/eclipse/Schedule/Action/SimulatorUpdate.hpp>
 #include <opm/input/eclipse/Schedule/Schedule.hpp>
 #include <opm/input/eclipse/Schedule/Well/Well.hpp>
+#include <opm/input/eclipse/Schedule/Well/WellMatcher.hpp>
 
 #include "MSW/WelSegsSet.hpp"
 
@@ -79,6 +80,13 @@ void HandlerContext::compsegs_handled(const std::string& well_name)
 {
     if (compsegs_wells) {
         compsegs_wells->insert(well_name);
+    }
+}
+
+void HandlerContext::comptraj_handled(const std::string& well_name)
+{
+    if (comptraj_wells) {
+        comptraj_wells->insert(well_name);
     }
 }
 
@@ -149,6 +157,21 @@ void HandlerContext::invalidNamePattern(const std::string& namePattern) const
 const Action::WGNames& HandlerContext::action_wgnames() const
 {
     return schedule_.action_wgnames;
+}
+
+bool HandlerContext::hasWell(const std::string& pattern) const
+{
+    const auto& schedState = this->schedule_.back();
+
+    return WellMatcher {
+        &schedState.well_order(), // <- Note: Pointer to NameOrder
+        schedState.wlist_manager()
+    }.hasWell(pattern);
+}
+
+bool HandlerContext::hasGroup(const std::string& pattern) const
+{
+    return this->schedule_.back().group_order().anyGroupMatches(pattern);
 }
 
 std::vector<std::string>

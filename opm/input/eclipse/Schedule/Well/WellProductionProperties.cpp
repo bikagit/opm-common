@@ -17,16 +17,13 @@
   along with OPM.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <fmt/format.h>
-#include <ostream>
-#include <string>
-
 #include <opm/common/OpmLog/KeywordLocation.hpp>
 #include <opm/common/OpmLog/OpmLog.hpp>
 #include <opm/common/utility/OpmInputError.hpp>
 #include <opm/input/eclipse/Deck/DeckItem.hpp>
 #include <opm/input/eclipse/Deck/DeckRecord.hpp>
 #include <opm/input/eclipse/Deck/UDAValue.hpp>
+#include <opm/input/eclipse/EclipseState/Runspec.hpp>
 #include <opm/input/eclipse/Units/Units.hpp>
 #include <opm/input/eclipse/Schedule/UDQ/UDQActive.hpp>
 #include <opm/input/eclipse/Schedule/SummaryState.hpp>
@@ -35,6 +32,12 @@
 #include <opm/input/eclipse/Units/Dimension.hpp>
 
 #include "../eval_uda.hpp"
+
+#include <fmt/format.h>
+
+#include <ostream>
+#include <string>
+#include <string_view>
 
 namespace Opm {
 
@@ -170,6 +173,7 @@ namespace Opm {
                                                         const double bhp_def,
                                                         const UnitSystem& unit_system_arg,
                                                         const std::string& well_name,
+                                                        const Phases& phases,
                                                         const DeckRecord& record,
                                                         const KeywordLocation& location)
     {
@@ -193,10 +197,16 @@ namespace Opm {
             { "LRAT", ProducerCMode::LRAT }, { "RESV", ProducerCMode::RESV }, { "THP", ProducerCMode::THP }
         };
 
+        auto warnInactive = [&location, &well_name](std::string_view constraint, std::string_view context) {
+            const auto msg_format = fmt::format(R"(Problem with keyword {{keyword}}
+In {{file}} line {{line}}
+Well {} specifies {} constraint, but {}. The constraint will be ignored.)",
+                                    well_name, constraint, context);
+            OpmLog::warning(OpmInputError::format(msg_format, location));
+        };
 
         for( const auto& cmode : modes ) {
             if( !record.getItem( cmode.first ).defaultApplied( 0 ) ) {
-
                 if (cmode.first == "THP") {
                     // a zero value THP limit will not be handled as a THP limit
                     if (this->THPTarget.is<double>() && this->THPTarget.zero()) {
@@ -208,6 +218,39 @@ namespace Opm {
                                                          " non-zero THP constraint", well_name);
                             throw OpmInputError(msg, location);
                     }
+                }
+
+                switch (cmode.second) {
+                case ProducerCMode::ORAT: {
+                    if ( !phases.active(Phase::OIL) ) {
+                        warnInactive("an oil rate", "the oil phase is inactive");
+                        continue;
+                    }
+                    break;
+                }
+                case ProducerCMode::WRAT: {
+                    if ( !phases.active(Phase::WATER) ) {
+                        warnInactive("a water rate", "the water phase is inactive");
+                        continue;
+                    }
+                    break;
+                }
+                case ProducerCMode::GRAT: {
+                    if ( !phases.active(Phase::GAS) ) {
+                        warnInactive("a gas rate", "the gas phase is inactive");
+                        continue;
+                    }
+                    break;
+                }
+                case ProducerCMode::LRAT: {
+                    if ( !phases.active(Phase::OIL) && !phases.active(Phase::WATER) ) {
+                        warnInactive("a liquid rate", "neither oil nor water phase is active");
+                        continue;
+                    }
+                    break;
+                }
+                default:
+                    break;
                 }
 
                 this->addProductionControl( cmode.second );

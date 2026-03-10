@@ -99,8 +99,8 @@ namespace Opm {
     void WDFAC::updateWDFACType(const WellConnections& connections)
     {
         const auto non_trivial_dfactor =
-            std::any_of(connections.begin(), connections.end(),
-                [](const auto& conn) { return conn.dFactor() != 0.0; });
+            std::ranges::any_of(connections,
+                                [](const auto& conn) { return conn.dFactor() != 0.0; });
 
         if (non_trivial_dfactor) {
             // Non-trivial D-factors detected.  Use connection D-factors.

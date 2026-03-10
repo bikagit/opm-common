@@ -37,6 +37,7 @@
 #include <opm/material/IdealGas.hpp>
 #include <opm/material/common/MathToolbox.hpp>
 
+#include <cassert>
 #include <cmath>
 #include <string_view>
 
@@ -142,7 +143,7 @@ public:
     OPM_HOST_DEVICE static Evaluation vaporPressure(const Evaluation& T)
     {
 
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         if (T > criticalTemperature())
             return criticalPressure();
         if (T < tripleTemperature())
@@ -191,7 +192,7 @@ public:
     /*!
      * \brief Specific enthalpy of liquid water \f$\mathrm{[J/kg]}\f$.
      *        Made by fitting a 2nd-degree polynomial to Coolprop data
-     *        for temperature range [0.1, 99] Celcius with reference 
+     *        for temperature range [0.1, 99] Celcius with reference
      *        temperature = 288.71 K (= 15.56 C) and pressure = 1.01325 bar.
      *
      * \param temperature temperature of component in \f$\mathrm{[K]}\f$
@@ -238,11 +239,13 @@ public:
      *
      * \param temperature temperature of component in \f$\mathrm{[K]}\f$
      * \param pressure pressure of component in \f$\mathrm{[Pa]}\f$
+     * \param extrapolate True to use extrapolation
      */
     template <class Evaluation>
-    OPM_HOST_DEVICE static Evaluation liquidInternalEnergy(const Evaluation& temperature,
-                                           const Evaluation& pressure,
-                                           bool extrapolate)
+    OPM_HOST_DEVICE static Evaluation
+    liquidInternalEnergy(const Evaluation& temperature,
+                         const Evaluation& pressure,
+                         bool extrapolate)
     {
         return
             liquidEnthalpy(temperature, pressure) -
@@ -400,7 +403,7 @@ private:
         // Hu, Duan, Zhu and Chou: PVTx properties of the CO2-H2O and CO2-H2O-NaCl
         // systems below 647 K: Assessment of experimental data and
         // thermodynamics models, Chemical Geology, 2007.
-        OPM_TIMEBLOCK_LOCAL(liquidDensity_);
+        OPM_TIMEBLOCK_LOCAL(liquidDensity_, Subsystem::PvtProps);
         if (T > 647 || pressure > 100e6) {
 #if !OPM_IS_INSIDE_DEVICE_FUNCTION
             const std::string msg =

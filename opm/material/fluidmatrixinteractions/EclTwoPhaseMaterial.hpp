@@ -138,15 +138,15 @@ public:
      *
      * \param values Container for the return values
      * \param params Parameters
-     * \param state The fluid state
+     * \param fluidState The fluid state
      */
 
-    template <class ContainerT, class FluidState>
+    template <class ContainerT, class FluidState, class ...Args>
     static void capillaryPressures(ContainerT& values,
                                    const Params& params,
                                    const FluidState& fluidState)
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::SatProps);
         using Evaluation = typename std::remove_reference<decltype(values[0])>::type;
 
         switch (params.approach()) {
@@ -155,7 +155,7 @@ public:
                 decay<Evaluation>(fluidState.saturation(oilPhaseIdx));
 
             values[oilPhaseIdx] = 0.0;
-            values[gasPhaseIdx] = GasOilMaterialLaw::twoPhaseSatPcnw(params.gasOilParams(), So);
+            values[gasPhaseIdx] = GasOilMaterialLaw::template twoPhaseSatPcnw<Evaluation, Args...>(params.gasOilParams(), So);
             break;
         }
 
@@ -164,7 +164,7 @@ public:
                 decay<Evaluation>(fluidState.saturation(waterPhaseIdx));
 
             values[waterPhaseIdx] = 0.0;
-            values[oilPhaseIdx] = OilWaterMaterialLaw::twoPhaseSatPcnw(params.oilWaterParams(), Sw);
+            values[oilPhaseIdx] = OilWaterMaterialLaw::template twoPhaseSatPcnw<Evaluation, Args...>(params.oilWaterParams(), Sw);
             break;
         }
 
@@ -173,7 +173,7 @@ public:
                 decay<Evaluation>(fluidState.saturation(waterPhaseIdx));
 
             values[waterPhaseIdx] = 0.0;
-            values[gasPhaseIdx] = GasWaterMaterialLaw::twoPhaseSatPcnw(params.gasWaterParams(), Sw);
+            values[gasPhaseIdx] = GasWaterMaterialLaw::template twoPhaseSatPcnw<Evaluation, Args...>(params.gasWaterParams(), Sw);
             break;
         }
 
@@ -192,12 +192,14 @@ public:
                                          Scalar& swMin,
                                          const Params& params)
     {
-        soMax = 1.0 - params.oilWaterParams().krnSwMdc();
-        swMax = params.oilWaterParams().krwSwMdc();
-        swMin = params.oilWaterParams().pcSwMdc();
-        Valgrind::CheckDefined(soMax);
-        Valgrind::CheckDefined(swMax);
-        Valgrind::CheckDefined(swMin);
+        if constexpr (Traits::enableHysteresis) {
+            soMax = 1.0 - params.oilWaterParams().krnSwMdc();
+            swMax = params.oilWaterParams().krwSwMdc();
+            swMin = params.oilWaterParams().pcSwMdc();
+            Valgrind::CheckDefined(soMax);
+            Valgrind::CheckDefined(swMax);
+            Valgrind::CheckDefined(swMin);
+        }
     }
 
     /*
@@ -212,7 +214,9 @@ public:
                                             const Scalar& swMin,
                                             Params& params)
     {
-        params.oilWaterParams().update(swMin, swMax, 1.0 - soMax);
+        if constexpr (Traits::enableHysteresis) {
+            params.oilWaterParams().update(swMin, swMax, 1.0 - soMax);
+        }
     }
 
 
@@ -228,12 +232,14 @@ public:
                                        Scalar& somin,
                                        const Params& params)
     {
-        sgmax = 1.0 - params.gasOilParams().krnSwMdc();
-        shmax = params.gasOilParams().krwSwMdc();
-        somin = params.gasOilParams().pcSwMdc();
-        Valgrind::CheckDefined(sgmax);
-        Valgrind::CheckDefined(shmax);
-        Valgrind::CheckDefined(somin);
+        if constexpr (Traits::enableHysteresis) {
+            sgmax = 1.0 - params.gasOilParams().krnSwMdc();
+            shmax = params.gasOilParams().krwSwMdc();
+            somin = params.gasOilParams().pcSwMdc();
+            Valgrind::CheckDefined(sgmax);
+            Valgrind::CheckDefined(shmax);
+            Valgrind::CheckDefined(somin);
+        }
     }
 
     /*
@@ -247,7 +253,9 @@ public:
                                           const Scalar& somin,
                                           Params& params)
     {
-        params.gasOilParams().update(somin , shmax, 1.0 - sgmax);
+        if constexpr (Traits::enableHysteresis) {
+            params.gasOilParams().update(somin , shmax, 1.0 - sgmax);
+        }
     }
 
     static Scalar trappedGasSaturation(const Params& params, bool maximumTrapping){
@@ -371,12 +379,12 @@ public:
      * oil relative permeability models" section of the ECLipse
      * technical description.
      */
-    template <class ContainerT, class FluidState>
+    template <class ContainerT, class FluidState, class ...Args>
     static void relativePermeabilities(ContainerT& values,
                                        const Params& params,
                                        const FluidState& fluidState)
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::SatProps);
         using Evaluation = typename std::remove_reference<decltype(values[0])>::type;
 
         switch (params.approach()) {
@@ -384,8 +392,8 @@ public:
             const Evaluation& So =
                 decay<Evaluation>(fluidState.saturation(oilPhaseIdx));
 
-            values[oilPhaseIdx] = GasOilMaterialLaw::twoPhaseSatKrw(params.gasOilParams(), So);
-            values[gasPhaseIdx] = GasOilMaterialLaw::twoPhaseSatKrn(params.gasOilParams(), So);
+            values[oilPhaseIdx] = GasOilMaterialLaw::template twoPhaseSatKrw<Evaluation, Args...>(params.gasOilParams(), So);
+            values[gasPhaseIdx] = GasOilMaterialLaw::template twoPhaseSatKrn<Evaluation, Args...>(params.gasOilParams(), So);
             break;
         }
 
@@ -393,8 +401,8 @@ public:
             const Evaluation& sw =
                 decay<Evaluation>(fluidState.saturation(waterPhaseIdx));
 
-            values[waterPhaseIdx] = OilWaterMaterialLaw::twoPhaseSatKrw(params.oilWaterParams(), sw);
-            values[oilPhaseIdx] = OilWaterMaterialLaw::twoPhaseSatKrn(params.oilWaterParams(), sw);
+            values[waterPhaseIdx] = OilWaterMaterialLaw::template twoPhaseSatKrw<Evaluation, Args...>(params.oilWaterParams(), sw);
+            values[oilPhaseIdx] = OilWaterMaterialLaw::template twoPhaseSatKrn<Evaluation, Args...>(params.oilWaterParams(), sw);
             break;
         }
 
@@ -402,8 +410,8 @@ public:
             const Evaluation& sw =
                 decay<Evaluation>(fluidState.saturation(waterPhaseIdx));
 
-            values[waterPhaseIdx] = GasWaterMaterialLaw::twoPhaseSatKrw(params.gasWaterParams(), sw);
-            values[gasPhaseIdx] = GasWaterMaterialLaw::twoPhaseSatKrn(params.gasWaterParams(), sw);
+            values[waterPhaseIdx] = GasWaterMaterialLaw::template twoPhaseSatKrw<Evaluation, Args...>(params.gasWaterParams(), sw);
+            values[gasPhaseIdx] = GasWaterMaterialLaw::template twoPhaseSatKrn<Evaluation, Args...>(params.gasWaterParams(), sw);
 
             break;
         }
@@ -451,26 +459,26 @@ public:
     template <class FluidState>
     static bool updateHysteresis(Params& params, const FluidState& fluidState)
     {
-        OPM_TIMEFUNCTION_LOCAL();
-        switch (params.approach()) {
-        case EclTwoPhaseApproach::GasOil: {
-            Scalar So = scalarValue(fluidState.saturation(oilPhaseIdx));
-            return params.gasOilParams().update(/*pcSw=*/So, /*krwSw=*/So, /*krnSw=*/So);
+        if constexpr (Traits::enableHysteresis) {
+            OPM_TIMEFUNCTION_LOCAL(Subsystem::SatProps);
+            switch (params.approach()) {
+            case EclTwoPhaseApproach::GasOil: {
+                Scalar So = scalarValue(fluidState.saturation(oilPhaseIdx));
+                return params.gasOilParams().update(/*pcSw=*/So, /*krwSw=*/So, /*krnSw=*/So);
+            }
+            case EclTwoPhaseApproach::OilWater: {
+                Scalar sw = scalarValue(fluidState.saturation(waterPhaseIdx));
+                return params.oilWaterParams().update(/*pcSw=*/sw, /*krwSw=*/sw, /*krnSw=*/sw);
+            }
+            case EclTwoPhaseApproach::GasWater: {
+                Scalar sw = scalarValue(fluidState.saturation(waterPhaseIdx));
+                return params.gasWaterParams().update(/*pcSw=*/sw, /*krwSw=*/sw, /*krnSw=*/sw);
+            }
+            }
+            return false;
+        } else {
+            return false;
         }
-
-        case EclTwoPhaseApproach::OilWater: {
-            Scalar sw = scalarValue(fluidState.saturation(waterPhaseIdx));
-            return params.oilWaterParams().update(/*pcSw=*/sw, /*krwSw=*/sw, /*krnSw=*/sw);
-        }
-
-        case EclTwoPhaseApproach::GasWater: {
-            Scalar sw = scalarValue(fluidState.saturation(waterPhaseIdx));
-            return params.gasWaterParams().update(/*pcSw=*/sw, /*krwSw=*/sw, /*krnSw=*/sw);
-        }
-        }
-
-        // Should not get here...
-        return false;
     }
 };
 

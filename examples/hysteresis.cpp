@@ -24,8 +24,10 @@
 /*!
  * \file
  *
- * \brief A small application to extract relative permeability hysteresis
- * from a history of saturations
+ * \brief A small application to extract relative permeability and
+ * capillary pressures curves from a history of saturations
+ * If hysteresis is enabled the tool can be used to extract
+ * the scanning curves.
  *
  */
 #include "config.h"
@@ -59,10 +61,14 @@ struct Fixture {
     enum { waterPhaseIdx = 0 };
     enum { oilPhaseIdx = 1 };
     enum { gasPhaseIdx = 2 };
+    static constexpr bool enableHysteresis = true;
+    static constexpr bool enableEndpointScaling = true;
     using MaterialTraits = Opm::ThreePhaseMaterialTraits<Scalar,
                                                          waterPhaseIdx,
                                                          oilPhaseIdx,
-                                                         gasPhaseIdx>;
+                                                         gasPhaseIdx,
+                                                         enableHysteresis,
+                                                         enableEndpointScaling>;
 
     using FluidState = Opm::SimpleModularFluidState<Scalar,
                                                     /*numPhases=*/3,
@@ -76,7 +82,7 @@ struct Fixture {
                                                     /*storeDensity=*/false,
                                                     /*storeViscosity=*/false,
                                                     /*storeEnthalpy=*/false>;
-    using MaterialLawManager = Opm::EclMaterialLawManager<MaterialTraits>;
+    using MaterialLawManager = Opm::EclMaterialLaw::Manager<MaterialTraits>;
     using MaterialLaw = typename MaterialLawManager::MaterialLaw;
 };
 
@@ -150,10 +156,10 @@ int main(int argc, char **argv)
 
     if (argc < 5 || help) {
         std::cout << "USAGE:" << std::endl;
-        std::cout << "hysteresis <fn_data> <fn_saturation> <fn_relperm> <wphase> <cellIdx>"<< std::endl;
+        std::cout << "hysteresis <fn_data> <fn_input> <fn_output> <wphase> <cellIdx>"<< std::endl;
         std::cout << "fn_data: Data file name that contains SGOF, EHYSTR etc. " << std::endl;
-        std::cout << "fn_saturation: Data file name that contains saturations (s = water or gas depending on two-phase-system type). Single saturation per line " << std::endl;
-        std::cout << "fn_relperm: Data file name that contains [s, kr, kro, krnSwMdc(So at turning point), Sn(trapped s) ]." << std::endl;
+        std::cout << "fn_input: Data file name that contains saturations (s = water or gas depending on two-phase-system type). Single saturation per line " << std::endl;
+        std::cout << "fn_output: Data file name that contains [sw, krw, kro, Pcow, krnSwMdc(So at turning point), Sn(trapped s) ]. (for water-oil system)" << std::endl;
         std::cout << "two-phase-system: = {WO, GO, GW}, WO=water-oil, GO=gas-oil, GW=gas-water" << std::endl;
         std::cout << "cellIdx: cell index (default = 0), used to map SATNUM/IMBNUM" << std::endl;
         return help ? EXIT_SUCCESS : EXIT_FAILURE;
@@ -220,7 +226,8 @@ int main(int argc, char **argv)
         fs.setSaturation(phaseIdx2, 1 - s);
         fs.setSaturation(phaseIdx3, 0);
         auto relperm = relativePermeabilities<double>(param, fs);
-        outfile << relperm[phaseIdx1] << "," << relperm[phaseIdx2]<< ",";
+        auto cap = capillaryPressure<double>(param, fs);
+        outfile << relperm[phaseIdx1] << "," << relperm[phaseIdx2]<< "," << cap[phaseIdx1] << ",";
 
         MaterialLaw::updateHysteresis(param, fs);
         double somax_out = 0.0;

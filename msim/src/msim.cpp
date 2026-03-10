@@ -82,8 +82,9 @@ msim::msim(const EclipseState& state_arg, const Schedule& schedule_arg)
 {}
 
 
-void msim::run(EclipseIO& io, bool report_only)
+bool msim::run(EclipseIO& io, bool report_only)
 {
+    bool any_actions_applied = false;
     const double week = 7 * 86400;
 
     data::Solution sol;
@@ -107,13 +108,15 @@ void msim::run(EclipseIO& io, bool report_only)
         }
 
         const auto sim_time = TimeService::from_time_t(schedule.simTime(report_step));
-        post_step(sol, well_data, group_nwrk_data, report_step, sim_time);
+        auto action_applied = post_step(sol, well_data, group_nwrk_data, report_step, sim_time);
+        any_actions_applied = any_actions_applied || action_applied;
 
         const auto& exit_status = schedule.exitStatus();
         if (exit_status.has_value()) {
-            return;
+            return any_actions_applied;
         }
     }
+    return any_actions_applied;
 }
 
 
@@ -123,15 +126,16 @@ UDAValue msim::uda_val()
 }
 
 
-void msim::post_step(data::Solution& /* sol */,
+bool msim::post_step(data::Solution& /* sol */,
                      data::Wells& /* well_data */,
                      data::GroupAndNetworkValues& /* grp_nwrk_data */,
                      const size_t report_step,
                      const time_point& sim_time)
 {
+    bool action_applied = false;
     const auto& actions = this->schedule[report_step].actions.get();
     if (actions.empty()) {
-        return;
+        return action_applied;
     }
 
     const auto context = Action::Context {
@@ -142,7 +146,8 @@ void msim::post_step(data::Solution& /* sol */,
         const auto result = action->eval(context);
         if (result.conditionSatisfied()) {
             this->schedule.applyAction(report_step, *action, result.matches(),
-                                       std::unordered_map<std::string,double>{});
+                                       std::unordered_map<std::string,double>{}, true);
+            action_applied = true;
         }
     }
 
@@ -150,6 +155,7 @@ void msim::post_step(data::Solution& /* sol */,
         this->schedule.runPyAction(report_step, *pyaction,
                                    this->action_state, this->state, this->st);
     }
+    return action_applied;
 }
 
 
@@ -188,15 +194,11 @@ void msim::run_step(const WellTestState& wtest_state,
 
         seconds_elapsed += time_step;
 
-        io.summary().eval(this->st,
-                          report_step,
-                          seconds_elapsed,
-                          well_data,
-                          /* wbp = */ {},
-                          group_nwrk_data,
-                          /* sing_values = */ {},
-                          /* initial_inplace = */ {},
-                          /* inplace = */ {});
+        auto values = out::Summary::DynamicSimulatorState{};
+        values.well_solution = &well_data;
+        values.group_and_nwrk_solution = &group_nwrk_data;
+
+        io.summary().eval(report_step, seconds_elapsed, values, this->st);
 
         this->schedule.getUDQConfig(report_step - 1)
             .eval(report_step,

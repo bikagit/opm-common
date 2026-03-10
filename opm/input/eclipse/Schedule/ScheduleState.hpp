@@ -42,12 +42,17 @@
 
 #include <opm/input/eclipse/Deck/DeckKeyword.hpp>
 
+#include <array>
 #include <cstddef>
+#include <iterator>
 #include <memory>
 #include <optional>
+#include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -69,9 +74,10 @@ namespace Opm {
     class GasLiftOpt;
     class GConSale;
     class GConSump;
-    class GSatProd;
     class GroupEconProductionLimits;
     class GroupOrder;
+    class GroupSatelliteInjection;
+    class GSatProd;
     class GuideRateConfig;
     class NameOrder;
     namespace Network {
@@ -176,16 +182,18 @@ namespace Opm {
         public:
             std::vector<K> keys() const {
                 std::vector<K> key_vector;
-                std::transform( this->m_data.begin(), this->m_data.end(), std::back_inserter(key_vector), [](const auto& pair) { return pair.first; });
+                std::ranges::transform(this->m_data, std::back_inserter(key_vector),
+                                       [](const auto& pair) { return pair.first; });
                 return key_vector;
             }
 
 
             template <typename Predicate>
             const T* find(Predicate&& predicate) const {
-                auto iter = std::find_if( this->m_data.begin(), this->m_data.end(), std::forward<Predicate>(predicate));
-                if (iter == this->m_data.end())
+                const auto iter = std::ranges::find_if(this->m_data, std::forward<Predicate>(predicate));
+                if (iter == this->m_data.end()) {
                     return nullptr;
+                }
 
                 return iter->second.get();
             }
@@ -325,6 +333,101 @@ namespace Opm {
             }
         };
 
+        /// Flag for structural changes to the run's well list
+        class WellListChangeTracker
+        {
+        private:
+            /// Named flag indices
+            enum class Ix : std::size_t {
+                /// Flag for static (regular) well list changes.
+                Static,
+
+                /// Flag for dynamic, i.e., ACTIONX based, well list changes.
+                Action,
+
+                /// Number of flags.  Must be last enumerator.
+                Num,
+            };
+
+            /// Translate flag to numeric index
+            ///
+            /// \param[in] Flag index
+            ///
+            /// \return numeric index corresponding to flag index \p i.
+            static constexpr auto index(const Ix i)
+            {
+                return static_cast<std::underlying_type_t<Ix>>(i);
+            }
+
+        public:
+            /// Record that one or more well lists have changed structurally
+            /// in response to a WLIST keyword entered in the regular input
+            /// stream.
+            void recordStaticChangedLists()
+            {
+                this->listsChanged_[ index(Ix::Static) ] = true;
+            }
+
+            /// Record that one or more well lists have changed structurally
+            /// in response to a WLIST keyword entered in an ACTIONX block.
+            void recordActionChangedLists()
+            {
+                this->listsChanged_[ index(Ix::Action) ] = true;
+            }
+
+            /// Report whether or not any well lists have changed since the
+            /// previous report step.
+            bool changedLists() const
+            {
+                return this->listsChanged_[ index(Ix::Static) ];
+            }
+
+            /// Prepare internal structure to record changes at the next
+            /// report step.
+            ///
+            /// Should typically be called at the end of one report step or
+            /// at the very beginning of the next report step, usually as
+            /// part of preparing the next ScheduleState object.
+            void prepareNextReportStep();
+
+            /// Create a serialisation test object.
+            static WellListChangeTracker serializationTestObject();
+
+            /// Equality predicate.
+            ///
+            /// \param[in] that Object against which \code *this \endcode
+            /// will be tested for equality.
+            ///
+            /// \return Whether or not \code *this \endcode is the same as
+            /// \p that.
+            bool operator==(const WellListChangeTracker& that) const
+            {
+                return this->listsChanged_ == that.listsChanged_;
+            }
+
+            /// Convert between byte array and object representation.
+            ///
+            /// \tparam Serializer Byte array conversion protocol.
+            ///
+            /// \param[in,out] serializer Byte array conversion object.
+            template <class Serializer>
+            void serializeOp(Serializer& serializer)
+            {
+                serializer(this->listsChanged_);
+            }
+
+        private:
+            /// Collection of change flags for run's well lists.
+            using ListChangeStatus = std::array
+                <bool, static_cast<std::underlying_type_t<Ix>>(Ix::Num)>;
+
+            /// Change flags for run's well lists.
+            ///
+            /// This could arguably be packed into a single unsigned char
+            /// (or std::byte).
+            ListChangeStatus listsChanged_{{false, false}};
+        };
+
         ScheduleState() = default;
         explicit ScheduleState(const time_point& start_time);
         ScheduleState(const time_point& start_time, const time_point& end_time);
@@ -347,22 +450,30 @@ namespace Opm {
         std::size_t year_num() const;
         bool first_in_month() const;
         bool first_in_year() const;
+        bool well_group_contains_lgr(const Group& grp, const std::string& lgr_tag) const;
+        bool group_contains_lgr(const Group& grp, const std::string& lgr_tag) const;
+
+        std::size_t num_lgr_well_in_group(const Group& grp, const std::string& lgr_tag) const;
+        std::size_t num_lgr_groups_in_group(const Group& grp, const std::string& lgr_tag) const;
+
 
         bool operator==(const ScheduleState& other) const;
         static ScheduleState serializationTestObject();
 
+        // ---- TUNING ----
         void update_tuning(Tuning tuning);
         Tuning& tuning();
         const Tuning& tuning() const;
         double max_next_tstep(const bool enableTUNING = false) const;
 
+        // ---- TUNINGDP ----
+        void update_tuning_dp(TuningDp tuningDp);
+        TuningDp& tuning_dp();
+        const TuningDp& tuning_dp() const;
+
         void init_nupcol(Nupcol nupcol);
         void update_nupcol(int nupcol);
         int nupcol() const;
-
-        void update_oilvap(OilVaporizationProperties oilvap);
-        const OilVaporizationProperties& oilvap() const;
-        OilVaporizationProperties& oilvap();
 
         void update_events(Events events);
         Events& events();
@@ -428,9 +539,13 @@ namespace Opm {
         ptr_member<RFTConfig> rft_config;
         ptr_member<RSTConfig> rst_config;
 
+        ptr_member<OilVaporizationProperties> oilvap;
+
         ptr_member<BHPDefaults> bhp_defaults;
         ptr_member<Source> source;
         ptr_member<WCYCLE> wcycle;
+
+        ptr_member<WellListChangeTracker> wlist_tracker;
 
         template <typename T>
         ptr_member<T>& get() {
@@ -482,12 +597,16 @@ namespace Opm {
                                   return this->rft_config;
             else if constexpr ( std::is_same_v<T, RSTConfig> )
                                   return this->rst_config;
+            else if constexpr ( std::is_same_v<T, OilVaporizationProperties> )
+                                  return this->oilvap;
             else if constexpr ( std::is_same_v<T, BHPDefaults> )
                                   return this->bhp_defaults;
             else if constexpr ( std::is_same_v<T, Source> )
                                   return this->source;
             else if constexpr ( std::is_same_v<T, WCYCLE> )
                                   return this->wcycle;
+            else if constexpr ( std::is_same_v<T, WellListChangeTracker> )
+                                  return this->wlist_tracker;
             else {
                 #if !OPM_IS_COMPILING_WITH_GPU_COMPILER // NVCC evaluates this branch for some reason
                 static_assert(always_false1::value, "Template type <T> not supported in get()");
@@ -500,6 +619,9 @@ namespace Opm {
         map_member<std::string, Group> groups;
         map_member<std::string, Well> wells;
 
+        /// Group level satellite injection rates.
+        map_member<std::string, GroupSatelliteInjection> satelliteInjection;
+
         /// Well fracturing seed points and associate fracture plane normal
         /// vectors.
         map_member<std::string, WellFractureSeeds> wseed;
@@ -507,7 +629,7 @@ namespace Opm {
         // constant flux aquifers
         std::unordered_map<int, SingleAquiferFlux> aqufluxs;
         BCProp bcprop;
-        // injection streams for compostional STREAM injection using WINJGAS 
+        // injection streams for compostional STREAM injection using WINJGAS
         map_member<std::string, std::vector<double>> inj_streams;
 
         std::unordered_map<std::string, double> target_wellpi;
@@ -536,13 +658,16 @@ namespace Opm {
             serializer(rpt_config);
             serializer(rft_config);
             serializer(rst_config);
+            serializer(this->oilvap);
             serializer(bhp_defaults);
             serializer(source);
             serializer(wcycle);
+            serializer(this->wlist_tracker);
             serializer(vfpprod);
             serializer(vfpinj);
             serializer(groups);
             serializer(wells);
+            serializer(this->satelliteInjection);
             serializer(wseed);
             serializer(aqufluxs);
             serializer(bcprop);
@@ -558,8 +683,8 @@ namespace Opm {
             serializer(m_first_in_month);
             serializer(m_save_step);
             serializer(m_tuning);
+            serializer(m_tuning_dp);
             serializer(m_nupcol);
-            serializer(m_oilvap);
             serializer(m_events);
             serializer(m_wellgroup_events);
             serializer(m_geo_keywords);
@@ -581,8 +706,8 @@ namespace Opm {
         bool m_save_step{false};
 
         Tuning m_tuning{};
+        TuningDp m_tuning_dp{};
         Nupcol m_nupcol{};
-        OilVaporizationProperties m_oilvap{};
         Events m_events{};
         WellGroupEvents m_wellgroup_events{};
         std::vector<DeckKeyword> m_geo_keywords{};

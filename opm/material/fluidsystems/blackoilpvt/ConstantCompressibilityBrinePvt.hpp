@@ -28,6 +28,7 @@
 #define OPM_CONSTANT_COMPRESSIBILITY_BRINE_PVT_HPP
 
 #include <opm/material/common/Tabulated1DFunction.hpp>
+#include <opm/material/fluidsystems/BlackOilFunctions.hpp>
 
 #include <cstddef>
 #include <vector>
@@ -37,10 +38,8 @@ namespace Opm {
 template <class Scalar, bool enableThermal, bool enableBrine>
 class WaterPvtMultiplexer;
 
-#if HAVE_ECL_INPUT
 class EclipseState;
 class Schedule;
-#endif
 
 /*!
  * \brief This class represents the Pressure-Volume-Temperature relations of the gas phase
@@ -52,13 +51,11 @@ class ConstantCompressibilityBrinePvt
 public:
     using TabulatedFunction = Tabulated1DFunction<Scalar>;
 
-#if HAVE_ECL_INPUT
     /*!
      * \brief Sets the pressure-dependent water viscosity and density
      *        using a table stemming from the Eclipse PVTWSALT keyword.
      */
     void initFromState(const EclipseState& eclState, const Schedule&);
-#endif
 
     void setNumRegions(std::size_t numRegions);
 
@@ -181,6 +178,35 @@ public:
 
         return (1.0 + X * (1.0 + X / 2.0)) / BwRef;
 
+    }
+
+    /*!
+     * \brief Returns the formation volume factor [-] and viscosity [Pa s] of the fluid phase.
+     */
+    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    std::pair<LhsEval, LhsEval>
+    inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState, unsigned regionIdx)
+    {
+        const LhsEval& pressure = decay<LhsEval>(fluidState.pressure(FluidState::waterPhaseIdx));
+        const LhsEval& saltConcentration
+            = BlackOil::template getSaltConcentration_<FluidState, LhsEval>(fluidState, regionIdx);
+        const auto segIdx = this->formationVolumeTables_[regionIdx]
+            .findSegmentIndex(saltConcentration, /*extrapolate=*/ true);
+
+        // Calculate bw.
+        const Scalar pRef = referencePressure_[regionIdx];
+        const LhsEval BwRef = formationVolumeTables_[regionIdx].eval(saltConcentration, SegmentIndex{segIdx});
+        const LhsEval C = compressibilityTables_[regionIdx].eval(saltConcentration, SegmentIndex{segIdx});
+        const LhsEval X = C * (pressure - pRef);
+        const LhsEval bw = (1.0 + X * (1.0 + X / 2.0)) / BwRef;
+
+        // Calculate muw.
+        const LhsEval Cv = viscosibilityTables_[regionIdx].eval(saltConcentration,  SegmentIndex{segIdx});
+        const LhsEval Y = (C - Cv) * (pressure - pRef);
+        const LhsEval MuwRef = viscosityTables_[regionIdx].eval(saltConcentration, SegmentIndex{segIdx});
+        const LhsEval muw = MuwRef * BwRef * bw / (1.0 + Y * (1.0 + Y / 2.0));
+
+        return { bw, muw };
     }
 
     /*!

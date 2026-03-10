@@ -82,14 +82,14 @@ namespace Opm {
             energy_rate,
             icd_strength,
             aicd_strength,
-            polymer_density,
-            salinity,
+            concentration,
             gas_oil_ratio_rate,
             moles,
             ppm,
             ymodule,
             thermalconductivity,
             dfactor,
+            velocity,
             _count // New entries must be added *before* this
         };
 

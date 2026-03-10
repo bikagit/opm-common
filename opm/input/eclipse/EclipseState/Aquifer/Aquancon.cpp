@@ -71,9 +71,9 @@ namespace {
         const auto& rst_cells = rst_connections.cells();
 
         connections.reserve(rst_cells.size());
-        std::transform(rst_cells.begin(), rst_cells.end(),
-                       std::back_inserter(connections),
-                       [aquiferID](const auto& rst_cell) { return makeAquiferCell(aquiferID, rst_cell); });
+        std::ranges::transform(rst_cells, std::back_inserter(connections),
+                               [aquiferID](const auto& rst_cell)
+                               { return makeAquiferCell(aquiferID, rst_cell); });
 
         return connections;
     }
@@ -243,13 +243,9 @@ namespace Opm {
         };
 
         for (auto& conns : this->cells) {
-            auto end = std::remove_if(conns.second.begin(), conns.second.end(),
-                [&removed](const AquancCell& cell) -> bool
-            {
-                return removed.find(cell.global_index) != removed.end();
-            });
-
-            conns.second.erase(end, conns.second.end());
+            std::erase_if(conns.second,
+                          [&removed](const AquancCell& cell) -> bool
+                          { return removed.find(cell.global_index) != removed.end(); });
         }
     }
 

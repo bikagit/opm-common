@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    const auto n_converted = std::count(status.begin(), status.end(), true);
+    const auto n_converted = std::ranges::count(status, true);
 
     auto lap1 = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds1 = lap1-lap0;

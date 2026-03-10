@@ -61,9 +61,7 @@ namespace {
         if (m_dataRecord)
             throw std::invalid_argument("Record is already marked as DataRecord - can not add items");
 
-        auto itr = std::find_if( this->m_items.begin(),
-                                 this->m_items.end(),
-                                 name_eq( item.name() ) );
+        const auto itr = std::ranges::find_if(this->m_items, name_eq(item.name()));
 
         if( itr != this->m_items.end() )
             throw std::invalid_argument("Itemname: " + item.name() + " already exists.");
@@ -94,9 +92,11 @@ namespace {
     }
 
 
-    bool ParserRecord::hasDimension() const {
-        return std::any_of( this->begin(), this->end(),
-                            []( const ParserItem& x ) { return x.dimensions().size() > 0; } );
+    bool ParserRecord::hasDimension() const
+    {
+        return std::ranges::any_of(*this,
+                                   [](const ParserItem& x)
+                                   { return x.dimensions().size() > 0; } );
     }
 
 
@@ -106,16 +106,13 @@ namespace {
         return this->m_items.at( index );
     }
 
-    bool ParserRecord::hasItem( const std::string& name ) const {
-        return std::any_of( this->m_items.begin(),
-                            this->m_items.end(),
-                            name_eq( name ) );
+    bool ParserRecord::hasItem(const std::string& name) const
+    {
+        return std::ranges::any_of(this->m_items, name_eq(name));
     }
 
     const ParserItem& ParserRecord::get( const std::string& name ) const {
-        auto itr = std::find_if( this->m_items.begin(),
-                                 this->m_items.end(),
-                                 name_eq( name ) );
+        const auto itr = std::ranges::find_if(this->m_items, name_eq(name));
 
         if( itr == this->m_items.end() )
             throw std::out_of_range( "No item '" + name + "'" );
@@ -132,11 +129,9 @@ namespace {
     {
         std::vector< DeckItem > items;
         items.reserve( this->size() );
-        std::transform(this->begin(), this->end(), std::back_inserter(items),
-                       [&rawRecord, &active_unitsystem, &default_unitsystem](const auto& parserItem)
-                       {
-                           return parserItem.scan(rawRecord, active_unitsystem, default_unitsystem);
-                       });
+        std::ranges::transform(*this, std::back_inserter(items),
+                               [&rawRecord, &active_unitsystem, &default_unitsystem](const auto& parserItem)
+                               { return parserItem.scan(rawRecord, active_unitsystem, default_unitsystem); });
 
         if (rawRecord.size() > 0) {
             std::string msg_format = fmt::format("Record contains too many items in keyword {{0}}. Expected {} items, found {}.\n", this->size(), rawRecord.max_size()) +

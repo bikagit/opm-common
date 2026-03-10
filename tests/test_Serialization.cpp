@@ -98,6 +98,7 @@
 #include <opm/input/eclipse/Schedule/Group/GSatProd.hpp>
 #include <opm/input/eclipse/Schedule/Group/Group.hpp>
 #include <opm/input/eclipse/Schedule/Group/GroupEconProductionLimits.hpp>
+#include <opm/input/eclipse/Schedule/Group/GroupSatelliteInjection.hpp>
 #include <opm/input/eclipse/Schedule/Group/GuideRateConfig.hpp>
 #include <opm/input/eclipse/Schedule/Group/GuideRateModel.hpp>
 #include <opm/input/eclipse/Schedule/MSW/AICD.hpp>
@@ -115,6 +116,7 @@
 #include <opm/input/eclipse/Schedule/RPTConfig.hpp>
 #include <opm/input/eclipse/Schedule/RSTConfig.hpp>
 #include <opm/input/eclipse/Schedule/Schedule.hpp>
+#include <opm/input/eclipse/Schedule/ScheduleState.hpp>
 #include <opm/input/eclipse/Schedule/ScheduleTypes.hpp>
 #include <opm/input/eclipse/Schedule/SummaryState.hpp>
 #include <opm/input/eclipse/Schedule/Tuning.hpp>
@@ -266,6 +268,8 @@ TEST_FOR_TYPE(GConSale)
 TEST_FOR_TYPE(GConSump)
 TEST_FOR_TYPE(GSatProd)
 TEST_FOR_TYPE(GroupEconProductionLimits)
+TEST_FOR_TYPE_NAMED(GroupSatelliteInjection::Rate, GroupSatelliteInjectionRate)
+TEST_FOR_TYPE(GroupSatelliteInjection)
 TEST_FOR_TYPE(GridDims)
 TEST_FOR_TYPE(Group)
 TEST_FOR_TYPE_NAMED(Group::GroupInjectionProperties, GroupInjectionProperties)
@@ -304,6 +308,8 @@ TEST_FOR_TYPE(Rock2dTable)
 TEST_FOR_TYPE(Runspec)
 TEST_FOR_TYPE(Schedule)
 TEST_FOR_TYPE(ScheduleDeck)
+TEST_FOR_TYPE_NAMED(ScheduleState::BHPDefaults, BHPDefaults)
+TEST_FOR_TYPE_NAMED(ScheduleState::WellListChangeTracker, WellListChangeTracker)
 TEST_FOR_TYPE(Segment)
 TEST_FOR_TYPE(SimpleTable)
 TEST_FOR_TYPE(SimulationConfig)
@@ -323,6 +329,7 @@ TEST_FOR_TYPE(ThresholdPressure)
 TEST_FOR_TYPE(TracerConfig)
 TEST_FOR_TYPE(TransMult)
 TEST_FOR_TYPE(Tuning)
+TEST_FOR_TYPE(TuningDp)
 TEST_FOR_TYPE(UDAValue)
 TEST_FOR_TYPE(UDQAssign)
 TEST_FOR_TYPE(UDQActive)

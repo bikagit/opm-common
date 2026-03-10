@@ -122,7 +122,7 @@ PROD01 /
 /
 
 WSEGAICD
-'PROD01'  8   8   0.002   -0.7  1* 1* 0.6 1* 1* 2* 1.0 1.0 'SHUT' /
+'PROD01'  8   8   0.002   -0.7  1* 1* 0.6 1* 1* 2* 1.0 1.0 'SHUT' 0.8 0.9 1.1 1.2 1.3 1.4 0.8 /
 /
 )";
 
@@ -145,7 +145,7 @@ WSEGAICD
     parseContext.update(Opm::ParseContext::SCHEDULE_COMPSEGS_NOT_SUPPORTED, Opm::InputErrorAction::THROW_EXCEPTION);
     Opm::CompletedCells cells(grid);
     Opm::FieldPropsManager fp(deck, Opm::Phases{true, true, true}, grid, Opm::TableManager());
-    const auto& [new_connection_set, new_segment_set] = Opm::Compsegs::processCOMPSEGS(compsegs, connection_set, segment_set, Opm::ScheduleGrid(grid, fp, cells), parseContext, errorGuard);
+    const auto new_connection_set = Opm::Compsegs::processCOMPSEGS(compsegs, connection_set, segment_set, Opm::ScheduleGrid(grid, fp, cells), parseContext, errorGuard);
 
     // checking the ICD segment
     const Opm::DeckKeyword wsegaicd = deck["WSEGAICD"].back();
@@ -180,6 +180,15 @@ WSEGAICD
     BOOST_CHECK_EQUAL(aicd.widthTransitionRegion(), 0.05);
     BOOST_CHECK_EQUAL(aicd.maxViscosityRatio(), 5.0);
     BOOST_CHECK_EQUAL(aicd.methodFlowScaling(), -1);
+    BOOST_CHECK_EQUAL(aicd.flowRateExponent(), 1.0);
+    BOOST_CHECK_EQUAL(aicd.viscExponent(), 1.0);
+    BOOST_CHECK_EQUAL(aicd.oilDensityExponent(), 0.8);
+    BOOST_CHECK_EQUAL(aicd.waterDensityExponent(), 0.9);
+    BOOST_CHECK_EQUAL(aicd.gasDensityExponent(), 1.1);
+    BOOST_CHECK_EQUAL(aicd.oilViscExponent(), 1.2);
+    BOOST_CHECK_EQUAL(aicd.waterViscExponent(), 1.3);
+    BOOST_CHECK_EQUAL(aicd.gasViscExponent(), 1.4);
+    BOOST_CHECK_EQUAL(aicd.densityExponent(), 0.8);
 
     const int outlet_segment_number = segment.outletSegment();
     const double outlet_segment_length = segment_set.segmentLength(outlet_segment_number);
@@ -189,7 +198,7 @@ WSEGAICD
     const auto connection_length = perf_range->second - perf_range->first;
     aicd.updateScalingFactor(outlet_segment_length, connection_length);
 
-    BOOST_CHECK_EQUAL(7U, new_segment_set.size());
+    BOOST_CHECK_EQUAL(7U, segment_set.size());
 
     // updated, so it should not throw
     BOOST_CHECK_NO_THROW(aicd.scalingFactor());
@@ -314,7 +323,7 @@ WSEGSICD
     Opm::FieldPropsManager fp(deck, Opm::Phases{true, true, true}, grid, Opm::TableManager());
     parseContext.update(Opm::ParseContext::SCHEDULE_COMPSEGS_INVALID, Opm::InputErrorAction::THROW_EXCEPTION);
     parseContext.update(Opm::ParseContext::SCHEDULE_COMPSEGS_NOT_SUPPORTED, Opm::InputErrorAction::THROW_EXCEPTION);
-    const auto& [new_connection_set, new_segment_set] = Opm::Compsegs::processCOMPSEGS(compsegs, connection_set, segment_set, Opm::ScheduleGrid(grid, fp, cells), parseContext, errorGuard);
+    const auto new_connection_set = Opm::Compsegs::processCOMPSEGS(compsegs, connection_set, segment_set, Opm::ScheduleGrid(grid, fp, cells), parseContext, errorGuard);
 
     // checking the ICD segment
     const Opm::DeckKeyword wsegsicd = deck["WSEGSICD"].back();
@@ -371,7 +380,7 @@ WSEGSICD
     BOOST_CHECK_NO_THROW(sicd.scalingFactor());
     BOOST_CHECK_EQUAL(0.7, sicd.scalingFactor());
 
-    BOOST_CHECK_EQUAL(7U, new_segment_set.size());
+    BOOST_CHECK_EQUAL(7U, segment_set.size());
 
     BOOST_CHECK_EQUAL(7U, new_connection_set.size());
 
@@ -405,6 +414,424 @@ WSEGSICD
     BOOST_CHECK_EQUAL(segment_number_connection7, 8);
     BOOST_CHECK_EQUAL(center_depth_connection7, 2534.5);
 
+}
+
+BOOST_AUTO_TEST_CASE(SICDAfterCOMPSEGS)
+{
+// This test uses/modified small excerpts from reservoir simulation decks in OPM-tests.
+// Source files: wells.sch3, wells.sch5
+// Available from:
+//   https://github.com/OPM/opm-tests/blob/master/model3/include/wells.sch3
+//   https://github.com/OPM/opm-tests/blob/master/model3/include/wells.sch5
+// Copyright (C) 2018 Equinor
+// Licensed under the Open Database License (ODbL) v1.0
+//   http://opendatacommons.org/licenses/odbl/1.0/
+// Individual contents are licensed under the Database Contents License (DbCL) v1.0
+//   http://opendatacommons.org/licenses/dbcl/1.0/
+
+    const auto deck = ::Opm::Parser{}.parseString(R"(RUNSPEC
+
+OIL
+GAS
+WATER
+
+DIMENS
+  20 20 20 /
+
+START
+1 JUL 2006 /
+
+GRID
+
+DXV
+  20*100 /
+
+DYV
+  20*100 /
+
+DZV
+  20*10 /
+
+DEPTHZ
+  441*2000.0 /
+
+PORO
+    8000*0.1 /
+PERMX
+    8000*1 /
+PERMY
+    8000*0.1 /
+PERMZ
+    8000*0.01 /
+SCHEDULE
+DATES             -- 1
+ 1 JUL 2007/
+/
+WELSPECS
+--WELL  GROUP  IHEEL JHEEL       DREF PHASE       DRAD INFEQ SIINS XFLOW PRTAB  DENS
+ 'OP1' 'PROD'      4     4       2643   OIL         1*    1*  SHUT   YES    1*   SEG /
+/
+
+COMPDAT
+--WELL     I     J    K1    K2 OP/SH  SATN       TRAN      WBDIA         KH       SKIN DFACT   DIR      PEQVR
+--------------------------------------------------------------------------------------------------------------
+ 'OP1'     4     4    15    15  OPEN    1* 397.772162      0.248 24635.0747          0    1*     Y 3.42355664 /
+ 'OP1'     4     5    15    15  OPEN    1*  408.50499      0.248 25299.7858          0    1*     Y 3.42355614 /
+ 'OP1'     4     6    15    15  OPEN    1* 408.504745      0.248 25299.7802          0    1*     Y 3.42356042 /
+ 'OP1'     4     7    15    15  OPEN    1* 408.505053      0.248 25299.7908          0    1*     Y 3.42355664 /
+ 'OP1'     4     8    15    15  OPEN    1* 408.505024      0.248 25299.7891          0    1*     Y 3.42355664 /
+ 'OP1'     4     9    15    15  OPEN    1* 408.504802      0.248 25299.7837          0    1*     Y 3.42356042 /
+ 'OP1'     4    10    15    15  OPEN    1* 408.505031      0.248 25299.7894          0    1*     Y 3.42355664 /
+ 'OP1'     4    11    15    15  OPEN    1* 408.504922      0.248 25299.7827          0    1*     Y 3.42355664 /
+ 'OP1'     4    12    15    15  OPEN    1* 408.505055      0.248 25299.7904          0    1*     Y 3.42355639 /
+ 'OP1'     4    13    15    15  OPEN    1* 408.504994      0.248 25299.7872          0    1*     Y 3.42355664 /
+ 'OP1'     4    14    15    15  OPEN    1* 408.504946      0.248 25299.7842          0    1*     Y 3.42355664 /
+ 'OP1'     4    15    15    15  OPEN    1* 408.505053      0.248 25299.7908          0    1*     Y 3.42355664 /
+ 'OP1'     4    16    15    15  OPEN    1*  214.66929      0.248 13295.0368          0    1*     Y 3.42355992 /
+--------------------------------------------------------------------------------------------------------------
+/
+
+WELSEGS
+--WELL       TDEP       CLEN        VOL  TYPE DROPT MPMOD
+ 'OP1'       2643       2645         1*   ABS   HFA    1* /
+--SEGS  SEGE BRNCH  SEGJ       CLEN       NDEP       TDIA      ROUGH       AREA
+     2     2     1     1 2687.90045       2643      0.159    0.00015         1* /
+     3     3     1     2 2767.90542       2643      0.159    0.00015         1* /
+     4     4     1     3 2847.91036       2643      0.159    0.00015         1* /
+     5     5     1     4 2927.91531       2643      0.159    0.00015         1* /
+     6     6     1     5 3007.92027       2643      0.159    0.00015         1* /
+     7     7     1     6 3087.92522       2643      0.159    0.00015         1* /
+     8     8     1     7 3167.93016       2643      0.159    0.00015         1* /
+     9     9     1     8 3247.93511       2643      0.159    0.00015         1* /
+    10    10     1     9 3327.94006       2643      0.159    0.00015         1* /
+    11    11     1    10 3407.94502       2643      0.159    0.00015         1* /
+    12    12     1    11 3487.94997       2643      0.159    0.00015         1* /
+    13    13     1    12 3567.95492       2643      0.159    0.00015         1* /
+    14    14     1    13 3647.95988       2643      0.159    0.00015         1* /
+    15    15     1    14       3650       2643      0.159    0.00015         1* /
+-- ICD segments ----------------------------------------------------------------
+    16    16     2     2 2688.00045       2643      0.159    0.00015         1* /
+    17    17     3     3 2768.00542       2643      0.159    0.00015         1* /
+    18    18     4     4 2848.01036       2643      0.159    0.00015         1* /
+    19    19     5     5 2928.01531       2643      0.159    0.00015         1* /
+    20    20     6     6 3008.02027       2643      0.159    0.00015         1* /
+    21    21     7     7 3088.02522       2643      0.159    0.00015         1* /
+    22    22     8     8 3168.03016       2643      0.159    0.00015         1* /
+    23    23     9     9 3248.03511       2643      0.159    0.00015         1* /
+    24    24    10    10 3328.04006       2643      0.159    0.00015         1* /
+    25    25    11    11 3408.04502       2643      0.159    0.00015         1* /
+    26    26    12    12 3488.04997       2643      0.159    0.00015         1* /
+    27    27    13    13 3568.05492       2643      0.159    0.00015         1* /
+    28    28    14    14 3648.05988       2643      0.159    0.00015         1* /
+/
+
+WSEGSICD
+--WELL  SEGS  SEGE   STRENGTH      SCALE       DCAL       VCAL     WLFRAC     TWIDTH     VRATIO  CALC      RATMX OP/SH
+-----------------------------------------------------------------------------------------------------------------------
+ 'OP1'    16    16      0.005         12         1*         1*        0.7         1*         1*     2         1*  OPEN /
+ 'OP1'    17    17      0.005         12         1*         1*        0.7         1*         1*     2         1*  OPEN /
+ 'OP1'    18    18      0.005         12         1*         1*        0.7         1*         1*     2         1*  OPEN /
+ 'OP1'    19    19      0.005         12         1*         1*        0.7         1*         1*     2         1*  OPEN /
+ 'OP1'    20    20      0.005         12         1*         1*        0.7         1*         1*     2         1*  OPEN /
+ 'OP1'    21    21      0.005         12         1*         1*        0.7         1*         1*     2         1*  OPEN /
+ 'OP1'    22    22      0.005         12         1*         1*        0.7         1*         1*     2         1*  OPEN /
+ 'OP1'    23    23      0.005         12         1*         1*        0.7         1*         1*     2         1*  OPEN /
+ 'OP1'    24    24 0.00330154         12         1*         1*        0.7         1*         1*     2         1*  OPEN /
+ 'OP1'    25    25      0.003         12         1*         1*        0.7         1*         1*     2         1*  OPEN /
+ 'OP1'    26    26      0.003         12         1*         1*        0.7         1*         1*     2         1*  OPEN /
+ 'OP1'    27    27      0.003         12         1*         1*        0.7         1*         1*     2         1*  OPEN /
+ 'OP1'    28    28      0.003         12         1*         1*        0.7         1*         1*     2         1*  OPEN /
+-----------------------------------------------------------------------------------------------------------------------
+/
+
+COMPSEGS
+ 'OP1' /
+--   I     J     K BRNCH       MD_S       MD_E   DIR IJK_E       CDEP  CLEN SEGNO
+     4     4    15     2 2647 2727    1*    1*       2643    1*    16 /
+     4     5    15     3 2727 2807    1*    1*       2643    1*    17 /
+     4     6    15     4 2807 2887    1*    1*       2643    1*    18 /
+     4     7    15     5 2887 2967    1*    1*       2643    1*    19 /
+     4     8    15     6 2967 3047    1*    1*       2643    1*    20 /
+     4     9    15     7 3047 3127   1*    1*       2643    1*    21 /
+     4    10    15     8 3127 3207    1*    1*       2643    1*    22 /
+     4    11    15     9 3207 3287    1*    1*       2643    1*    23 /
+     4    12    15    10 3287 3367    1*    1*       2643    1*    24 /
+     4    13    15    11 3367  3447    1*    1*       2643    1*    25 /
+     4    14    15    12  3447 3527    1*    1*       2643    1*    26 /
+     4    15    15    13 3527  3607    1*    1*       2643    1*    27 /
+     4    16    15    14  3607 3687    1*    1*       2643    1*    28 /
+/
+
+WCONPROD
+--WELL OP/SH   CTL       ORAT       WRAT       GRAT       LRAT       RRAT        BHP        THP   VFP        ALQ
+ 'OP1'  OPEN  ORAT       3000       3000     300000       3000         1*         60          3*     /
+/
+
+DATES             -- 2
+ 10  JUL 2008 /
+/
+
+WELSPECS
+--WELL  GROUP  IHEEL JHEEL       DREF PHASE       DRAD INFEQ SIINS XFLOW PRTAB  DENS
+ 'OP2' 'PROD'      4     4       2643   OIL         1*    1*  SHUT   YES    1*   SEG /
+/
+
+COMPDAT
+--WELL     I     J    K1    K2 OP/SH  SATN       TRAN      WBDIA         KH       SKIN DFACT   DIR      PEQVR
+--------------------------------------------------------------------------------------------------------------
+ 'OP2'     4     4    15    15  OPEN    1* 397.772162      0.248 24635.0747          0    1*     Y 3.42355664 /
+ 'OP2'     4     5    15    15  OPEN    1*  408.50499      0.248 25299.7858          0    1*     Y 3.42355614 /
+ 'OP2'     4     6    15    15  OPEN    1* 408.504745      0.248 25299.7802          0    1*     Y 3.42356042 /
+ 'OP2'     4     7    15    15  OPEN    1* 408.505053      0.248 25299.7908          0    1*     Y 3.42355664 /
+ 'OP2'     4     8    15    15  OPEN    1* 408.505024      0.248 25299.7891          0    1*     Y 3.42355664 /
+ 'OP2'     4     9    15    15  OPEN    1* 408.504802      0.248 25299.7837          0    1*     Y 3.42356042 /
+ 'OP2'     4    10    15    15  OPEN    1* 408.505031      0.248 25299.7894          0    1*     Y 3.42355664 /
+ 'OP2'     4    11    15    15  OPEN    1* 408.504922      0.248 25299.7827          0    1*     Y 3.42355664 /
+ 'OP2'     4    12    15    15  OPEN    1* 408.505055      0.248 25299.7904          0    1*     Y 3.42355639 /
+ 'OP2'     4    13    15    15  OPEN    1* 408.504994      0.248 25299.7872          0    1*     Y 3.42355664 /
+ 'OP2'     4    14    15    15  OPEN    1* 408.504946      0.248 25299.7842          0    1*     Y 3.42355664 /
+ 'OP2'     4    15    15    15  OPEN    1* 408.505053      0.248 25299.7908          0    1*     Y 3.42355664 /
+ 'OP2'     4    16    15    15  OPEN    1*  214.66929      0.248 13295.0368          0    1*     Y 3.42355992 /
+--------------------------------------------------------------------------------------------------------------
+/
+
+WELSEGS
+--WELL       TDEP       CLEN        VOL  TYPE DROPT MPMOD
+ 'OP2'       2643       2645         1*   ABS   HFA    1* /
+--SEGS  SEGE BRNCH  SEGJ       CLEN       NDEP       TDIA      ROUGH       AREA
+     2     2     1     1 2687.90045       2643      0.159    0.00015         1* /
+     3     3     1     2 2767.90542       2643      0.159    0.00015         1* /
+     4     4     1     3 2847.91036       2643      0.159    0.00015         1* /
+     5     5     1     4 2927.91531       2643      0.159    0.00015         1* /
+     6     6     1     5 3007.92027       2643      0.159    0.00015         1* /
+     7     7     1     6 3087.92522       2643      0.159    0.00015         1* /
+     8     8     1     7 3167.93016       2643      0.159    0.00015         1* /
+     9     9     1     8 3247.93511       2643      0.159    0.00015         1* /
+    10    10     1     9 3327.94006       2643      0.159    0.00015         1* /
+    11    11     1    10 3407.94502       2643      0.159    0.00015         1* /
+    12    12     1    11 3487.94997       2643      0.159    0.00015         1* /
+    13    13     1    12 3567.95492       2643      0.159    0.00015         1* /
+    14    14     1    13 3647.95988       2643      0.159    0.00015         1* /
+    15    15     1    14       3650       2643      0.159    0.00015         1* /
+-- ICD segments ----------------------------------------------------------------
+    16    16     2     2 2699.90045       2643      0.159    0.00015         1* /
+    17    17     3     3 2779.90542       2643      0.159    0.00015         1* /
+    18    18     4     4 2859.91036       2643      0.159    0.00015         1* /
+    19    19     5     5 2939.91531       2643      0.159    0.00015         1* /
+    20    20     6     6 3019.92027       2643      0.159    0.00015         1* /
+    21    21     7     7 3099.92522       2643      0.159    0.00015         1* /
+    22    22     8     8 3179.93016       2643      0.159    0.00015         1* /
+    23    23     9     9 3259.93511       2643      0.159    0.00015         1* /
+    24    24    10    10 3339.94006       2643      0.159    0.00015         1* /
+    25    25    11    11 3419.94502       2643      0.159    0.00015         1* /
+    26    26    12    12 3499.94997       2643      0.159    0.00015         1* /
+    27    27    13    13 3579.95492       2643      0.159    0.00015         1* /
+    28    28    14    14 3659.95988       2643      0.159    0.00015         1* /
+/
+
+WSEGAICD
+--WELL  SEGS  SEGE   STRENGTH      SCALE       DCAL       VCAL     WLFRAC     TWIDTH     VRATIO  CALC      RATMX     RATEXP
+--          VFEXP OP/SH      ODEXP      WDEXP      GDEXP      OVEXP      WVEXP      GWEXP
+-----------------------------------------------------------------------------------------------------------------------------------
+ 'OP2'    16    16      1e-06         12       1000          1        0.7       0.05          5     2         1*        3.5
+              0.3  OPEN         1*         1*         1*         1*         1*         1* /
+ 'OP2'    17    17      1e-06         12       1000          1        0.7       0.05          5     2         1*        3.5
+              0.3  OPEN         1*         1*         1*         1*         1*         1* /
+ 'OP2'    18    18      1e-06         12       1000          1        0.7       0.05          5     2         1*        3.5
+              0.3  OPEN         1*         1*         1*         1*         1*         1* /
+ 'OP2'    19    19      1e-06         12       1000          1        0.7       0.05          5     2         1*        3.5
+              0.3  OPEN         1*         1*         1*         1*         1*         1* /
+ 'OP2'    20    20      1e-06         12       1000          1        0.7       0.05          5     2         1*        3.5
+              0.3  OPEN         1*         1*         1*         1*         1*         1* /
+ 'OP2'    21    21      1e-06         12       1000          1        0.7       0.05          5     2         1*        3.5
+              0.3  OPEN         1*         1*         1*         1*         1*         1* /
+ 'OP2'    22    22      1e-06         12       1000          1        0.7       0.05          5     2         1*        3.5
+              0.3  OPEN         1*         1*         1*         1*         1*         1* /
+ 'OP2'    23    23      1e-06         12       1000          1        0.7       0.05          5     2         1*        3.5
+              0.3  OPEN         1*         1*         1*         1*         1*         1* /
+ 'OP2'    24    24      1e-06         12       1000          1        0.7       0.05          5     2         1*        3.5
+              0.3  OPEN         1*         1*         1*         1*         1*         1* /
+ 'OP2'    25    25      1e-06         12       1000          1        0.7       0.05          5     2         1*        3.5
+              0.3  OPEN         1*         1*         1*         1*         1*         1* /
+ 'OP2'    26    26      1e-06         12       1000          1        0.7       0.05          5     2         1*        3.5
+              0.3  OPEN         1*         1*         1*         1*         1*         1* /
+ 'OP2'    27    27      1e-06         12       1000          1        0.7       0.05          5     2         1*        3.5
+              0.3  OPEN         1*         1*         1*         1*         1*         1* /
+ 'OP2'    28    28      1e-06         12       1000          1        0.7       0.05          5     2         1*        3.5
+              0.3  OPEN         1*         1*         1*         1*         1*         1* /
+-----------------------------------------------------------------------------------------------------------------------------------
+/
+
+COMPSEGS
+ 'OP2' /
+--   I     J     K BRNCH       MD_S       MD_E   DIR IJK_E       CDEP  CLEN SEGNO
+     4     4    15     2 2647.89796 2727.90295    1*    1*       2643    1*    16 /
+     4     5    15     3 2727.90295 2807.90789    1*    1*       2643    1*    17 /
+     4     6    15     4 2807.90789 2887.91282    1*    1*       2643    1*    18 /
+     4     7    15     5 2887.91282 2967.91779    1*    1*       2643    1*    19 /
+     4     8    15     6 2967.91779 3047.92274    1*    1*       2643    1*    20 /
+     4     9    15     7 3047.92274 3127.92769    1*    1*       2643    1*    21 /
+     4    10    15     8 3127.92769 3207.93264    1*    1*       2643    1*    22 /
+     4    11    15     9 3207.93264 3287.93758    1*    1*       2643    1*    23 /
+     4    12    15    10 3287.93758 3367.94254    1*    1*       2643    1*    24 /
+     4    13    15    11 3367.94254  3447.9475    1*    1*       2643    1*    25 /
+     4    14    15    12  3447.9475 3527.95244    1*    1*       2643    1*    26 /
+     4    15    15    13 3527.95244  3607.9574    1*    1*       2643    1*    27 /
+     4    16    15    14  3607.9574 3687.96236    1*    1*       2643    1*    28 /
+/
+
+
+-- modified some connection lengths to test the scaling factor
+COMPSEGS
+ 'OP1' /
+--   I     J     K BRNCH       MD_S       MD_E   DIR IJK_E       CDEP  CLEN SEGNO
+     4     4    15     2 2647 2687    1*    1*       2643    1*    16 / -- modified connection length - 40
+     4     5    15     3 2687 2727    1*    1*       2643    1*    17 / -- modified connection length - 40
+     4     6    15     4 2727 2767    1*    1*       2643    1*    18 / -- modified connection length - 40
+     4     7    15     5 2767 2847    1*    1*       2643    1*    19 / -- modified connection length - 80
+     4     8    15     6 2847 3047    1*    1*       2643    1*    20 / -- modified connection length - 200
+     4     9    15     7 3047 3127    1*    1*       2643    1*    21 /
+     4    10    15     8 3127 3207    1*    1*       2643    1*    22 /
+     4    11    15     9 3207 3287    1*    1*       2643    1*    23 /
+     4    12    15    10 3287 3367    1*    1*       2643    1*    24 /
+     4    13    15    11 3367  3447    1*    1*       2643    1*    25 /
+     4    14    15    12  3447 3527    1*    1*       2643    1*    26 /
+     4    15    15    13 3527  3607    1*    1*       2643    1*    27 /
+     4    16    15    14  3607 3687    1*    1*       2643    1*    28 /
+/
+
+WCONPROD
+--WELL OP/SH   CTL       ORAT       WRAT       GRAT       LRAT       RRAT        BHP        THP   VFP        ALQ
+ 'OP2'  OPEN  ORAT       3000       3000     300000       3000         1*        120          3* /
+/
+
+DATES             -- 3
+ 11  JUL 2008 /
+/
+)");
+    const auto es    = ::Opm::EclipseState { deck };
+    const auto sched = ::Opm::Schedule { deck, es };// std::make_shared<const ::Opm::Python>() };
+    {
+        // check well OP1 at the first report step
+        const auto& well_op1 = sched.getWell("OP1", 1);
+        BOOST_CHECK(well_op1.isMultiSegment());
+        const auto& segment_set = well_op1.getSegments();
+        BOOST_CHECK_EQUAL(segment_set.size(), 28U);
+        {
+            const auto& segment = segment_set.getFromSegmentNumber(15);
+            BOOST_CHECK(!segment.isSpiralICD());
+        }
+        {
+            const auto& segment = segment_set.getFromSegmentNumber(16);
+            BOOST_CHECK(segment.isSpiralICD());
+            BOOST_CHECK_EQUAL(segment.spiralICD().scalingFactor(), 12./80.);
+            BOOST_CHECK(!segment.isAICD());
+        }
+        {
+            const auto& segment = segment_set.getFromSegmentNumber(17);
+            BOOST_CHECK(segment.isSpiralICD());
+            BOOST_CHECK_EQUAL(segment.spiralICD().scalingFactor(), 12./80.);
+            BOOST_CHECK(!segment.isAICD());
+        }
+        {
+            const auto& segment = segment_set.getFromSegmentNumber(27);
+            BOOST_CHECK(segment.isSpiralICD());
+            BOOST_CHECK_EQUAL(segment.spiralICD().scalingFactor(), 12./80.);
+            BOOST_CHECK(!segment.isAICD());
+        }
+        {
+            const auto& segment = segment_set.getFromSegmentNumber(28);
+            BOOST_CHECK(segment.isSpiralICD());
+            BOOST_CHECK_EQUAL(segment.spiralICD().scalingFactor(), 12./80.);
+            BOOST_CHECK(!segment.isAICD());
+        }
+    }
+
+
+    {
+        // check well OP2 at the second report step
+        const auto& well_op2 = sched.getWell("OP2", 2);
+        BOOST_CHECK(well_op2.isMultiSegment());
+        const auto& segment_set2 = well_op2.getSegments();
+        BOOST_CHECK_EQUAL(segment_set2.size(), 28U);
+        {
+            const auto& segment = segment_set2.getFromSegmentNumber(15);
+            BOOST_CHECK(!segment.isAICD());
+        }
+        {
+            const auto& segment = segment_set2.getFromSegmentNumber(16);
+            BOOST_CHECK(segment.isAICD());
+            BOOST_CHECK(!segment.isSpiralICD());
+        }
+        {
+            const auto& segment = segment_set2.getFromSegmentNumber(17);
+            BOOST_CHECK(segment.isAICD());
+            BOOST_CHECK(!segment.isSpiralICD());
+        }
+        {
+            const auto& segment = segment_set2.getFromSegmentNumber(27);
+            BOOST_CHECK(segment.isAICD());
+            BOOST_CHECK(!segment.isSpiralICD());
+        }
+        {
+            const auto& segment = segment_set2.getFromSegmentNumber(28);
+            BOOST_CHECK(segment.isAICD());
+            BOOST_CHECK(!segment.isSpiralICD());
+        }
+    }
+    {
+        // check well OP1 at the second report step
+        const auto& well_op1 = sched.getWell("OP1", 2);
+        BOOST_CHECK(well_op1.isMultiSegment());
+        const auto& segment_set = well_op1.getSegments();
+        BOOST_CHECK_EQUAL(segment_set.size(), 28U);
+        {
+            const auto& segment = segment_set.getFromSegmentNumber(15);
+            BOOST_CHECK(!segment.isSpiralICD());
+        }
+        {
+            const auto& segment = segment_set.getFromSegmentNumber(16);
+            BOOST_CHECK(segment.isSpiralICD());
+            BOOST_CHECK_EQUAL(segment.spiralICD().scalingFactor(), 12./40.);
+            BOOST_CHECK(!segment.isAICD());
+        }
+        {
+            const auto& segment = segment_set.getFromSegmentNumber(17);
+            BOOST_CHECK(segment.isSpiralICD());
+            BOOST_CHECK_EQUAL(segment.spiralICD().scalingFactor(), 12./40.);
+            BOOST_CHECK(!segment.isAICD());
+        }
+        {
+            const auto& segment = segment_set.getFromSegmentNumber(18);
+            BOOST_CHECK(segment.isSpiralICD());
+            BOOST_CHECK_EQUAL(segment.spiralICD().scalingFactor(), 12./40.);
+            BOOST_CHECK(!segment.isAICD());
+        }
+        {
+            const auto& segment = segment_set.getFromSegmentNumber(19);
+            BOOST_CHECK(segment.isSpiralICD());
+            BOOST_CHECK_EQUAL(segment.spiralICD().scalingFactor(), 12./80.);
+            BOOST_CHECK(!segment.isAICD());
+        }
+        {
+            const auto& segment = segment_set.getFromSegmentNumber(20);
+            BOOST_CHECK(segment.isSpiralICD());
+            BOOST_CHECK_EQUAL(segment.spiralICD().scalingFactor(), 12./200.);
+            BOOST_CHECK(!segment.isAICD());
+        }
+        {
+            const auto& segment = segment_set.getFromSegmentNumber(27);
+            BOOST_CHECK(segment.isSpiralICD());
+            BOOST_CHECK_EQUAL(segment.spiralICD().scalingFactor(), 12./80.);
+            BOOST_CHECK(!segment.isAICD());
+        }
+        {
+            const auto& segment = segment_set.getFromSegmentNumber(28);
+            BOOST_CHECK(segment.isSpiralICD());
+            BOOST_CHECK_EQUAL(segment.spiralICD().scalingFactor(), 12./80.);
+            BOOST_CHECK(!segment.isAICD());
+        }
+    }
 }
 
 BOOST_AUTO_TEST_CASE(WrongDistanceCOMPSEGS)
@@ -850,11 +1277,9 @@ COMPDAT
 
 WELSEGS
 'PROD01' 2512.5 2512.5 1.0e-5 'ABS' 'HF-' 'HO' 123.456 789.012 /
-2         2      1      1    2537.5 2537.5  0.3  0.00010 2* 123.456 789.012 /
+2         2      1      1    2537.5 2525.5  0.3  0.00010 2* 123.456 789.012 /
 3         3      1      2    2562.5 2562.5  0.2  0.00010 2* 123.456 789.012 /
-4         4      2      2    2737.5 2537.5  0.2  0.00010 2* 123.456 789.012 /
-6         6      2      4    3037.5 2539.5  0.2  0.00010 2* 123.456 789.012 /
-7         7      2      6    3337.5 2534.5  0.2  0.00010 2* 123.456 789.012 /
+4         7      2      2    2737.5 2537.5  0.2  0.00010 2* 123.456 789.012 /
 8         8      3      7    3337.6 2534.5  0.2  0.00015 2* 123.456 789.012 /
 /
 
@@ -877,6 +1302,14 @@ COMPSEGS
     for (const auto& segment : segments) {
         BOOST_CHECK_CLOSE(segment.node_X(), 123.456, 1.0e-8);
         BOOST_CHECK_CLOSE(segment.node_Y(), 789.012, 1.0e-8);
+    }
+    // checking the segments that input with multiple segments per record in WELSEGS
+    constexpr double inc_length = (2737.5 - 2537.5) / 4.;
+    constexpr double inc_depth = (2537.5 - 2525.5) / 4.;
+    for (int segment_number = 4; segment_number <= 7; ++segment_number) {
+        const auto& segment = segments.getFromSegmentNumber(segment_number);
+        BOOST_CHECK_CLOSE(segment.depth(), 2525.5 + (segment_number - 3) * inc_depth, 1.e-8);
+        BOOST_CHECK_CLOSE(segment.totalLength(), 2537.5 + (segment_number - 3) * inc_length, 1.e-8);
     }
 }
 
@@ -1156,4 +1589,49 @@ WELSEGS
 
     const auto es    = ::Opm::EclipseState { deck };
     BOOST_CHECK_THROW(::Opm::Schedule(deck, es, std::make_shared<const ::Opm::Python>()), ::Opm::OpmInputError);
+}
+
+
+BOOST_AUTO_TEST_CASE(loadCOMPTRAJTESTSPE1_MSW) {
+  Opm::Parser parser;
+
+  const auto deck = parser.parseFile("SPE1CASE1_WELTRAJ_MSW.DATA");
+  auto python = std::make_shared<Opm::Python>();
+  Opm::EclipseState state(deck);
+  Opm::Schedule sched(deck, state, python);
+  const auto& units = deck.getActiveUnitSystem();
+
+  const auto& prod = sched.getWell("PROD", 0);
+  const auto& connections = prod.getConnections();
+  const auto& segments = prod.getSegments();
+
+  /* Comparison values (CFs and intersected cells) are from ResInsight through importing a deviation file with contents
+        WELLNAME: 'PROD'
+        # X   Y    TVDMSL   MDMSL
+        3400.00     4500.00     8325.00     8325.00
+        3858.19     4688.67     8374.60     8825.00
+        5326.76     6005.95     8403.97     10825.00
+        6500.00     7300.00     8410.00     12571.74
+        -999
+     and adjusting the completion data in agreement with the COMPTRAJ data in the input file
+   */
+  const std::array<double, 9> connection_factor{
+    110.5461, 17.75799, 36.04859, 60.75019, 235.1933, 94.73938, 222.7472, 74.7769, 89.2022
+  };
+  const std::array<int, 9> global_index{11, 111, 211, 212, 222, 223, 233, 234, 244};
+  BOOST_CHECK_EQUAL(connections.size(), 9);
+  for (size_t i = 0 ; i < connections.size();  ++i ) {
+       BOOST_CHECK_CLOSE(connections[i].CF(), units.to_si(Opm::UnitSystem::measure::transmissibility, connection_factor[i]), 2e-2);
+       BOOST_CHECK_EQUAL(connections[i].global_index(), global_index[i]);
+  }
+
+  const std::array<double, 10> lengths{
+    8325.0, 8425.8, 8689.4, 8935.1, 9157.9, 9838.8, 10597.0, 11321.0, 11997.0, 12369.0
+  };
+  BOOST_CHECK_EQUAL(segments.size(), 10);
+  for (size_t i = 0; i < segments.size(); ++i) {
+    BOOST_CHECK_EQUAL(segments[i].segmentNumber(), i + 1);
+    BOOST_CHECK_EQUAL(segments[i].outletSegment(), i);
+    BOOST_CHECK_CLOSE(segments[i].totalLength(), units.to_si(Opm::UnitSystem::measure::length, lengths[i]), 2e-2);
+  }
 }

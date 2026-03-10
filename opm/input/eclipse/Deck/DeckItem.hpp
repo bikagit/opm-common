@@ -20,15 +20,14 @@
 #ifndef DECKITEM_HPP
 #define DECKITEM_HPP
 
-#include <string>
-#include <vector>
-#include <iosfwd>
-
 #include <opm/input/eclipse/Units/Dimension.hpp>
 #include <opm/input/eclipse/Utility/Typetools.hpp>
 #include <opm/input/eclipse/Deck/UDAValue.hpp>
 #include <opm/input/eclipse/Deck/value_status.hpp>
 
+#include <string>
+#include <vector>
+#include <iosfwd>
 
 namespace Opm {
     class DeckOutput;
@@ -73,7 +72,9 @@ namespace Opm {
         double getSIDouble( size_t ) const;
         std::string getTrimmedString( size_t ) const;
 
-        template< typename T > const std::vector< T >& getData() const;
+        template <typename T> std::vector<T>& getData();
+        template <typename T> const std::vector<T>& getData() const;
+
         const std::vector< double >& getSIDoubleData() const;
         const std::vector<value::status>& getValueStatus() const;
         const std::vector<Dimension>& getActiveDimensions() const
@@ -185,4 +186,3 @@ namespace Opm {
     };
 }
 #endif  /* DECKITEM_HPP */
-

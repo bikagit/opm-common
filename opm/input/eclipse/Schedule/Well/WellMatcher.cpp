@@ -153,6 +153,36 @@ Opm::WellMatcher& Opm::WellMatcher::operator=(WellMatcher&& rhs)
     return *this;
 }
 
+bool Opm::WellMatcher::hasWell(const std::string& pattern) const
+{
+    if (pattern.empty() || (this->m_well_order == nullptr)) {
+        return false;
+    }
+
+    if ((pattern.front() == '*') && (pattern.size() > 1)) {
+        // Well list ('*PROD') or well list template (*PROD*).  Check if any
+        // well lists match the pattern and, if so, whether the well list is
+        // non-empty.
+        return this->m_wlm.has_value()
+            ? this->m_wlm->get().hasWell(pattern)
+            : false;
+    }
+
+    // Normal pattern matching.  'Pattern' is a well name like 'PROD' or a
+    // well name template like 'PROD*'.
+    const auto patt = normalisePattern(pattern);
+
+    if (patt.find_first_of("*?") != std::string::npos) {
+        // Well name template.
+        return std::ranges::any_of(*this->m_well_order,
+                                  [&patt](const auto& wname)
+                                  { return shmatch(patt, wname); });
+    }
+
+    // Regular well name.
+    return this->m_well_order->has(patt);
+}
+
 std::vector<std::string>
 Opm::WellMatcher::sort(std::vector<std::string> wells) const
 {
@@ -185,15 +215,13 @@ Opm::WellMatcher::wells(const std::string& pattern) const
     const auto patt = normalisePattern(pattern);
 
     // Normal pattern matching
-    if (patt.find('*') != std::string::npos) {
+    if (patt.find_first_of("*?") != std::string::npos) {
         auto names = std::vector<std::string> {};
         names.reserve(this->m_well_order->size());
 
-        std::copy_if(this->m_well_order->begin(),
-                     this->m_well_order->end(),
-                     std::back_inserter(names),
-                     [&patt](const auto& wname)
-                     { return shmatch(patt, wname); });
+        std::ranges::copy_if(*this->m_well_order, std::back_inserter(names),
+                             [&patt](const auto& wname)
+                             { return shmatch(patt, wname); });
 
         names.shrink_to_fit();
         return names;

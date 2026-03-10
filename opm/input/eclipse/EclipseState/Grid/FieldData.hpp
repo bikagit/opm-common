@@ -130,21 +130,19 @@ namespace Opm::Fieldprops {
             // Object is "valid" if the 'value_status' of every element is
             // neither uninitialised nor empty.
             return this->all_set =
-                std::none_of(this->value_status.begin(), this->value_status.end(),
-                             [](const value::status& status)
-                             {
-                                 return (status == value::status::uninitialized)
-                                     || (status == value::status::empty_default);
-                             });
+                std::ranges::none_of(this->value_status,
+                                     [](const value::status& status)
+                                     {
+                                         return (status == value::status::uninitialized)
+                                             || (status == value::status::empty_default);
+                                     });
         }
 
         bool valid_default() const
         {
-            return std::all_of(this->value_status.begin(), this->value_status.end(),
-                               [](const value::status& status)
-                               {
-                                   return status == value::status::valid_default;
-                               });
+            return std::ranges::all_of(this->value_status,
+                                       [](const value::status& status)
+                                       { return status == value::status::valid_default; });
         }
 
         void compress(const std::vector<bool>& active_map)
@@ -162,18 +160,13 @@ namespace Opm::Fieldprops {
 
         void default_assign(T value)
         {
-            std::fill(this->data.begin(), this->data.end(), value);
-            std::fill(this->value_status.begin(),
-                      this->value_status.end(),
-                      value::status::valid_default);
+            std::ranges::fill(this->data, value);
+            std::ranges::fill(this->value_status, value::status::valid_default);
 
             if (this->global_data) {
-                std::fill(this->global_data->begin(),
-                          this->global_data->end(), value);
+                std::ranges::fill(*this->global_data, value);
 
-                std::fill(this->global_value_status->begin(),
-                          this->global_value_status->end(),
-                          value::status::valid_default);
+                std::ranges::fill(*this->global_value_status, value::status::valid_default);
             }
         }
 
@@ -186,9 +179,8 @@ namespace Opm::Fieldprops {
                 };
             }
 
-            std::copy(src.begin(), src.end(), this->data.begin());
-            std::fill(this->value_status.begin(), this->value_status.end(),
-                      value::status::valid_default);
+            std::ranges::copy(src, this->data.begin());
+            std::ranges::fill(this->value_status, value::status::valid_default);
         }
 
         void default_assign_global(const std::vector<T>& src)
@@ -206,9 +198,8 @@ namespace Opm::Fieldprops {
                 };
             }
 
-            std::copy(src.begin(), src.end(), this->global_data->begin());
-            std::fill(this->global_value_status->begin(), this->global_value_status->end(),
-                      value::status::valid_default);
+            std::ranges::copy(src, this->global_data->begin());
+            std::ranges::fill(*this->global_value_status, value::status::valid_default);
         }
 
         void update_local_from_global(std::function<std::size_t(std::size_t)> local_to_global)

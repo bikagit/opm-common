@@ -90,7 +90,14 @@
     },
     {
       "item": 13,
-      "name": "FLAG_SOMETHING",
+      "name": "fix_wetting_phase_killough",
+      "value_type": "INT",
+      "default": 0,
+      "comment": "Not used"
+    },
+    {
+      "item": 14,
+      "name": "enable_pc_scaling",
       "value_type": "INT",
       "default": 0,
       "comment": "Not used"

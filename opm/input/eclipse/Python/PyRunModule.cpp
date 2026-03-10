@@ -78,7 +78,12 @@ bool PyRunModule::executeInnerRunFunction(const std::function<void(const std::st
     auto cpp_callback = py_actionx_callback(actionx_callback);
     try {
         py::object result = this->run_function(this->opm_embedded.attr("current_ecl_state"), this->opm_embedded.attr("current_schedule"), this->opm_embedded.attr("current_report_step"), this->opm_embedded.attr("current_summary_state"), cpp_callback);
-        return result.cast<bool>();
+        if (!result.is_none()) {
+            return result.cast<bool>();
+        } else {
+            OpmLog::warning("The run function in the PYACTION script did not return a value. Assuming true to make sure changes are picked up.");
+            return true;
+        }
     } catch (const std::exception& e) {
         OpmLog::error(fmt::format("Exception thrown when calling run(ecl_state, schedule, report_step, summary_state, actionx_callback) function of {}: {}", this->module_name, e.what()));
         throw e;
@@ -135,7 +140,7 @@ bool PyRunModule::run(EclipseState& ecl_state,
 
         if (py::hasattr(this->module, "run")) {
             OpmLog::info(R"(PYACTION can be used without a run(ecl_state, schedule, report_step, summary_state, actionx_callback) function, its arguments are available as attributes of the module opm_embedded, try the following in your python script:
-                    
+
 import opm_embedded
 
 help(opm_embedded.current_ecl_state)
@@ -148,7 +153,7 @@ help(opm_embedded.current_summary_state)
         }
     } else { // Module has been loaded already
         if (!this->run_function.is_none()) {
-            return this->executeInnerRunFunction(actionx_callback);            
+            return this->executeInnerRunFunction(actionx_callback);
         } else {
             try {
                 this->module.reload();

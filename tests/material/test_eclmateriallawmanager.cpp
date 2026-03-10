@@ -30,10 +30,6 @@
  */
 #include "config.h"
 
-#if !HAVE_ECL_INPUT
-#error "The test for EclMaterialLawManager requires eclipse input support in opm-common"
-#endif
-
 #include <boost/mpl/list.hpp>
 
 #define BOOST_TEST_MODULE EclMaterialLawManager
@@ -592,10 +588,14 @@ struct Fixture {
     enum { waterPhaseIdx = 0 };
     enum { oilPhaseIdx = 1 };
     enum { gasPhaseIdx = 2 };
+    static constexpr bool enableHysteresis = true;
+    static constexpr bool enableEndpointScaling = true;
     using MaterialTraits = Opm::ThreePhaseMaterialTraits<Scalar,
                                                          waterPhaseIdx,
                                                          oilPhaseIdx,
-                                                         gasPhaseIdx>;
+                                                         gasPhaseIdx,
+                                                         enableHysteresis,
+                                                         enableEndpointScaling>;
 
     using FluidState = Opm::SimpleModularFluidState<Scalar,
                                                     /*numPhases=*/3,
@@ -609,7 +609,7 @@ struct Fixture {
                                                     /*storeDensity=*/false,
                                                     /*storeViscosity=*/false,
                                                     /*storeEnthalpy=*/false>;
-    using MaterialLawManager = Opm::EclMaterialLawManager<MaterialTraits>;
+    using MaterialLawManager = Opm::EclMaterialLaw::Manager<MaterialTraits>;
     using MaterialLaw = typename MaterialLawManager::MaterialLaw;
 };
 
@@ -742,7 +742,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(Fam1Fam2Hysteresis, Scalar, Types)
 
                 for (unsigned phasePairIdx = 0; phasePairIdx < 3; ++phasePairIdx) {
                     BOOST_CHECK_CLOSE(sowmax_in[phasePairIdx], sowmax_out[phasePairIdx], 1e-5);
-                    BOOST_CHECK_CLOSE(sgomax_in[phasePairIdx], sgomax_out[phasePairIdx], 1e-5);     
+                    BOOST_CHECK_CLOSE(sgomax_in[phasePairIdx], sgomax_out[phasePairIdx], 1e-5);
                 }
             }
         }

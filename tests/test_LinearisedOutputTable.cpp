@@ -192,9 +192,8 @@ BOOST_AUTO_TEST_CASE (SGFN)
         const auto primID  = std::size_t{0};
         const auto colID   = std::size_t{0};
 
-        std::copy(inputData.begin() + 0*tableRows,
-                  inputData.begin() + 1*tableRows,
-                  sgfn.column(tableID, primID, colID));
+        std::copy_n(inputData.begin(), tableRows,
+                    sgfn.column(tableID, primID, colID));
     }
 
     // Krg
@@ -203,8 +202,7 @@ BOOST_AUTO_TEST_CASE (SGFN)
         const auto primID  = std::size_t{0};
         const auto colID   = std::size_t{1};
 
-        std::copy(inputData.begin() + 1*tableRows,
-                  inputData.begin() + 2*tableRows,
+        std::copy_n(inputData.begin() + tableRows, tableRows,
                   sgfn.column(tableID, primID, colID));
     }
 
@@ -214,8 +212,7 @@ BOOST_AUTO_TEST_CASE (SGFN)
         const auto primID  = std::size_t{0};
         const auto colID   = std::size_t{2};
 
-        std::copy(inputData.begin() + 2*tableRows,
-                  inputData.begin() + 3*tableRows,
+        std::copy_n(inputData.begin() + 2*tableRows, tableRows,
                   sgfn.column(tableID, primID, colID));
     }
 
@@ -225,8 +222,7 @@ BOOST_AUTO_TEST_CASE (SGFN)
         const auto primID  = std::size_t{0};
         const auto colID   = std::size_t{3};
 
-        std::copy(inputData.begin() + 3*tableRows,
-                  inputData.begin() + 4*tableRows,
+        std::copy_n(inputData.begin() + 3*tableRows, tableRows,
                   sgfn.column(tableID, primID, colID));
     }
 
@@ -236,9 +232,8 @@ BOOST_AUTO_TEST_CASE (SGFN)
         const auto primID  = std::size_t{0};
         const auto colID   = std::size_t{4};
 
-        std::copy(inputData.begin() + 4*tableRows,
-                  inputData.begin() + 5*tableRows,
-                  sgfn.column(tableID, primID, colID));
+        std::copy_n(inputData.begin() + 4*tableRows, tableRows,
+                    sgfn.column(tableID, primID, colID));
     }
 
     const auto expect = makeTable(5,
@@ -309,8 +304,7 @@ BOOST_AUTO_TEST_CASE (PVTO)
                 const auto tableID = std::size_t{0};
                 const auto colID   = std::size_t{0};
 
-                std::copy(subTab.begin() + 0*tableRows,
-                          subTab.begin() + 1*tableRows,
+                std::copy_n(subTab.begin(), tableRows,
                           pvto.column(tableID, primID, colID));
             }
 
@@ -319,9 +313,8 @@ BOOST_AUTO_TEST_CASE (PVTO)
                 const auto tableID = std::size_t{0};
                 const auto colID   = std::size_t{1};
 
-                std::copy(subTab.begin() + 1*tableRows,
-                          subTab.begin() + 2*tableRows,
-                          pvto.column(tableID, primID, colID));
+                std::copy_n(subTab.begin() + 1*tableRows, tableRows,
+                            pvto.column(tableID, primID, colID));
             }
 
             // 1/(Bo*mu_o)
@@ -329,9 +322,8 @@ BOOST_AUTO_TEST_CASE (PVTO)
                 const auto tableID = std::size_t{0};
                 const auto colID   = std::size_t{2};
 
-                std::copy(subTab.begin() + 2*tableRows,
-                          subTab.begin() + 3*tableRows,
-                          pvto.column(tableID, primID, colID));
+                std::copy_n(subTab.begin() + 2*tableRows, tableRows,
+                            pvto.column(tableID, primID, colID));
             }
 
             // d[1/Bo]/dPo
@@ -339,8 +331,7 @@ BOOST_AUTO_TEST_CASE (PVTO)
                 const auto tableID = std::size_t{0};
                 const auto colID   = std::size_t{3};
 
-                std::copy(subTab.begin() + 3*tableRows,
-                          subTab.begin() + 4*tableRows,
+                std::copy_n(subTab.begin() + 3*tableRows, tableRows,
                           pvto.column(tableID, primID, colID));
             }
 
@@ -349,9 +340,8 @@ BOOST_AUTO_TEST_CASE (PVTO)
                 const auto tableID = std::size_t{0};
                 const auto colID   = std::size_t{4};
 
-                std::copy(subTab.begin() + 4*tableRows,
-                          subTab.begin() + 5*tableRows,
-                          pvto.column(tableID, primID, colID));
+                std::copy_n(subTab.begin() + 4*tableRows, tableRows,
+                            pvto.column(tableID, primID, colID));
             }
 
             primID += 1;
@@ -463,11 +453,9 @@ BOOST_AUTO_TEST_CASE (Constant_Function)
 
         auto y = std::vector<double>(x.size(), 1.25);
 
-        std::copy(x.begin(), x.end(),
-                  linTable.column(descr.tableID, descr.primID, 0));
+        std::ranges::copy(x, linTable.column(descr.tableID, descr.primID, 0));
 
-        std::copy(y.begin(), y.end(),
-                  linTable.column(descr.tableID, descr.primID, 1));
+        std::ranges::copy(y, linTable.column(descr.tableID, descr.primID, 1));
     }
 
     // Argument dependent symbol lookup.
@@ -515,11 +503,9 @@ BOOST_AUTO_TEST_CASE (Linear_Function)
 
         auto y = x;
 
-        std::copy(x.begin(), x.end(),
-                  linTable.column(descr.tableID, descr.primID, 0));
+        std::ranges::copy(x, linTable.column(descr.tableID, descr.primID, 0));
 
-        std::copy(y.begin(), y.end(),
-                  linTable.column(descr.tableID, descr.primID, 1));
+        std::ranges::copy(y, linTable.column(descr.tableID, descr.primID, 1));
     }
 
     // Argument dependent symbol lookup.
@@ -605,17 +591,10 @@ BOOST_AUTO_TEST_CASE (Nonlinear_Functions)
             1.839397205857212e-01,
         };
 
-        std::copy(x.begin(), x.end(),
-                  linTable.column(descr.tableID, descr.primID, 0));
-
-        std::copy(s.begin(), s.end(),
-                  linTable.column(descr.tableID, descr.primID, 1));
-
-        std::copy(c.begin(), c.end(),
-                  linTable.column(descr.tableID, descr.primID, 2));
-
-        std::copy(f.begin(), f.end(),
-                  linTable.column(descr.tableID, descr.primID, 3));
+        std::ranges::copy(x, linTable.column(descr.tableID, descr.primID, 0));
+        std::ranges::copy(s, linTable.column(descr.tableID, descr.primID, 1));
+        std::ranges::copy(c, linTable.column(descr.tableID, descr.primID, 2));
+        std::ranges::copy(f, linTable.column(descr.tableID, descr.primID, 3));
     }
 
     // Argument dependent symbol lookup.

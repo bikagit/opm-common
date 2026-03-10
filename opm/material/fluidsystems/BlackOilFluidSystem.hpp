@@ -19,12 +19,12 @@
 #define OPM_BLACK_OIL_FLUID_SYSTEM_HPP
 
 // Here we need to define certain macros before including the macrotemplate file.
-// 
+//
 // The idea is in essence the following:
 //   1) In the macrotemplate file, we have method declarations of the form
-//      
+//
 //        `STATIC_OR_DEVICE void foo();`
-//      
+//
 //      and member variable declarations of the form
 //
 //        `STATIC_OR_NOTHING int bar;`
@@ -38,7 +38,7 @@
 // Furthermore, we need to specify the class name of the fluid system, which is different for the
 // nonstatic and static versions of the fluid system. We also need to specify if we are compiling
 // the static version of the fluid system, since we will define certain constructors and singleton
-// functions only in the static or nonstatic case. 
+// functions only in the static or nonstatic case.
 
 // Is defined for the static version of the fluid system.
 #define COMPILING_STATIC_FLUID_SYSTEM
@@ -49,6 +49,12 @@
 // Make sure member variables are declared as static
 #define STATIC_OR_NOTHING static
 
+// Make sure member functions are const in non-static version of the fluid system
+#define NOTHING_OR_CONST
+
+// Functions defined outside of the class need OPM_HOST_DEVICE, but never static
+#define NOTHING_OR_DEVICE
+
 // Define the class names for the static and nonstatic versions of the fluid system
 #define FLUIDSYSTEM_CLASSNAME_NONSTATIC BlackOilFluidSystemNonStatic
 #define FLUIDSYSTEM_CLASSNAME_STATIC BlackOilFluidSystem
@@ -57,14 +63,13 @@
 #define FLUIDSYSTEM_CLASSNAME BlackOilFluidSystem
 
 
-// We need to forward-declare the nonstatic version of the fluid system, since we will 
+// We need to forward-declare the nonstatic version of the fluid system, since we will
 // make the nonstatic version a friend of the static version being defined here.
 namespace Opm
 {
 template <class Scalar,
           class IndexTraits,
-          template <typename> typename Storage,
-          template <typename> typename SmartPointer>
+          template <typename> typename Storage>
 class FLUIDSYSTEM_CLASSNAME_NONSTATIC;
 }
 
@@ -72,9 +77,11 @@ class FLUIDSYSTEM_CLASSNAME_NONSTATIC;
 #include <opm/material/fluidsystems/BlackOilFluidSystem_macrotemplate.hpp>
 
 // Undefine the macros we defined above
+#undef NOTHING_OR_DEVICE
 #undef STATIC_OR_DEVICE
 #undef COMPILING_STATIC_FLUID_SYSTEM
 #undef STATIC_OR_NOTHING
+#undef NOTHING_OR_CONST
 #undef FLUIDSYSTEM_CLASSNAME_STATIC
 #undef FLUIDSYSTEM_CLASSNAME_NONSTATIC
 #undef FLUIDSYSTEM_CLASSNAME

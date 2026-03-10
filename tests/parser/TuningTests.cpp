@@ -62,7 +62,7 @@ TSTEP
 TUNING
 2 300 0.3 0.30 6 0.6 0.2 2.25 2E20 /
 0.2 0.002 2E-7 0.0002 11 0.02 2.0E-6 0.002 0.002 0.035 66 0.02 2/
-13 2 26 2 9 9 4.0E6 4.0E6 4.0E6 1/
+13 2 26 2 9 9 4.0E6 4.0E6 4.0E6 1 3/
 DATES
  1 JAN 1982 /  -- 6
  1 JAN 1982 13:55:44 /  --7
@@ -224,6 +224,9 @@ BOOST_AUTO_TEST_CASE(TuningTest)
       double XXXDPR_default = tuning.XXXDPR;
       BOOST_CHECK_EQUAL(false, XXXDPR_has_value);
       BOOST_CHECK_CLOSE(XXXDPR_default, 0.0, diff);
+
+      int MNWRFP_default = tuning.MNWRFP;
+      BOOST_CHECK_EQUAL(MNWRFP_default, 4);
   }
 
 
@@ -338,6 +341,9 @@ BOOST_AUTO_TEST_CASE(TuningTest)
 
       BOOST_CHECK_EQUAL(true, tuning.XXXDPR_has_value);
       BOOST_CHECK_CLOSE(tuning.XXXDPR, 1.0 * Metric::Pressure, diff);
+
+      int MNWRFP = tuning.MNWRFP;
+      BOOST_CHECK_EQUAL(MNWRFP, 3);
   }
 
   /*** TIMESTEP 7 ***/
@@ -386,4 +392,171 @@ BOOST_AUTO_TEST_CASE(TuningTest)
       int NEWTMX = tuning.NEWTMX;
       BOOST_CHECK_EQUAL(NEWTMX, 13);
   }
+}
+
+const std::string& deckWithTUNINGDP = R"(
+START
+    1 JAN 2026 /
+
+SCHEDULE
+TSTEP
+    1 2 /
+
+TUNINGDP
+/
+
+TSTEP
+    3 4 /
+
+TUNINGDP
+    0.025 0.125 10.0 20.0 30.0 40.0 /
+
+TSTEP
+    5 6 /
+
+TUNINGDP
+    1* 1* 15.0 1* 1* 1* /
+
+TSTEP
+    7 8 /
+
+TUNINGDP
+    1* 1* 1* 25.0 1* 1* /
+
+TSTEP
+    9 10 /
+
+TUNINGDP
+    1* 1* 1* 1* 35.0 1* /
+
+TSTEP
+    11 12 /
+
+TUNINGDP
+    1* 1* 1* 1* 1* 45.0 /
+)";
+
+BOOST_AUTO_TEST_CASE(TuningDpTest)
+{
+    // Set up deck with schedule
+    const auto deck = createDeck(deckWithTUNINGDP);
+    EclipseGrid grid(10, 10, 10);
+    TableManager table (deck);
+    FieldPropsManager fp(deck, Phases{true, true, true}, grid, table);
+    Runspec runspec (deck);
+    const Schedule schedule {
+        deck, grid, fp, NumericalAquifers{},
+        runspec, std::make_shared<Python>()
+    };
+
+    // TUNINGDP_CHANGE events checks
+    {
+        for (std::size_t timestep = 1; timestep < 13; ++timestep) {
+            const auto& event = schedule[timestep].events();
+            bool tuning_change = event.hasEvent(ScheduleEvents::TUNINGDP_CHANGE);
+            bool expected_tuning_change = (timestep % 2 == 0);  // even time steps have tuning changes
+            BOOST_CHECK_MESSAGE(tuning_change == expected_tuning_change,
+                                "Unexpected TUNINGDP_CHANGE event = " << tuning_change << " for time step "
+                                << timestep);
+        }
+    }
+
+    // Test tolerance
+    const double tol = 1e-6;
+
+    // TIMESTEP 1:
+    {
+        // Check that values when TUNINGDP is not set
+        // For TRGLCV and XXXLCV defaults are equal to TUNING defaults, while TRGDDP and TRGDDS are 0.0
+        const std::size_t timestep = 1;
+        const auto& tuning_dp = schedule[timestep].tuning_dp();
+        const auto& tuning = schedule[timestep].tuning();
+
+        BOOST_CHECK_CLOSE(tuning_dp.TRGLCV, tuning.TRGLCV, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.XXXLCV, tuning.XXXLCV, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDP, 0.0 * Metric::Pressure, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDS, 0.0, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDRS, 0.0 * Metric::GasDissolutionFactor, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDRV, 0.0 * Metric::OilDissolutionFactor, tol);
+    }
+
+    // TIMESTEP 2
+    {
+        // Check defaults when TUNINGDP is set but defaulted in the deck, which should be the defaults set in TUNINGDP
+        // keyword
+        const std::size_t timestep = 2;
+        const auto& tuning_dp = schedule[timestep].tuning_dp();
+
+        BOOST_CHECK_CLOSE(tuning_dp.TRGLCV, 0.00001, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.XXXLCV, 0.001, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDP, 1.0 * Metric::Pressure, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDS, 0.01, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDRS, 0.0 * Metric::GasDissolutionFactor, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDRV, 0.0 * Metric::OilDissolutionFactor, tol);
+    }
+
+    // TIMESTEP 4:
+    {
+        const std::size_t timestep = 4;
+        const auto& tuning_dp = schedule[timestep].tuning_dp();
+
+        BOOST_CHECK_CLOSE(tuning_dp.TRGLCV, 0.025, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.XXXLCV, 0.125, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDP, 10.0 * Metric::Pressure, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDS, 20.0, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDRS, 30.0 * Metric::GasDissolutionFactor, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDRV, 40.0 * Metric::OilDissolutionFactor, tol);
+    }
+
+    // TIMESTEP 6:
+    {
+        const std::size_t timestep = 6;
+        const auto& tuning_dp = schedule[timestep].tuning_dp();
+
+        BOOST_CHECK_CLOSE(tuning_dp.TRGLCV, 0.025, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.XXXLCV, 0.125, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDP, 15.0 * Metric::Pressure, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDS, 20.0, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDRS, 30.0 * Metric::GasDissolutionFactor, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDRV, 40.0 * Metric::OilDissolutionFactor, tol);
+    }
+
+    // TIMESTEP 8:
+    {
+        const std::size_t timestep = 8;
+        const auto& tuning_dp = schedule[timestep].tuning_dp();
+
+        BOOST_CHECK_CLOSE(tuning_dp.TRGLCV, 0.025, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.XXXLCV, 0.125, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDP, 15.0 * Metric::Pressure, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDS, 25.0, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDRS, 30.0 * Metric::GasDissolutionFactor, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDRV, 40.0 * Metric::OilDissolutionFactor, tol);
+    }
+
+    // TIMESTEP 10:
+    {
+        const std::size_t timestep = 10;
+        const auto& tuning_dp = schedule[timestep].tuning_dp();
+
+        BOOST_CHECK_CLOSE(tuning_dp.TRGLCV, 0.025, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.XXXLCV, 0.125, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDP, 15.0 * Metric::Pressure, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDS, 25.0, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDRS, 35.0 * Metric::GasDissolutionFactor, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDRV, 40.0 * Metric::OilDissolutionFactor, tol);
+    }
+
+    // TIMESTEP 12:
+    {
+        const std::size_t timestep = 12;
+        const auto& tuning_dp = schedule[timestep].tuning_dp();
+
+        BOOST_CHECK_CLOSE(tuning_dp.TRGLCV, 0.025, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.XXXLCV, 0.125, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDP, 15.0 * Metric::Pressure, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDS, 25.0, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDRS, 35.0 * Metric::GasDissolutionFactor, tol);
+        BOOST_CHECK_CLOSE(tuning_dp.TRGDDRV, 45.0 * Metric::OilDissolutionFactor, tol);
+    }
 }

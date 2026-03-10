@@ -34,7 +34,7 @@ using namespace Opm::EclIO;
 template <typename T>
 bool operator==(const std::vector<T> & t1, const std::vector<T> & t2)
 {
-    return std::equal(t1.begin(), t1.end(), t2.begin(), t2.end());
+    return std::ranges::equal(t1, t2);
 }
 
 

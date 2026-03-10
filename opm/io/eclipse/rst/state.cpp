@@ -39,12 +39,14 @@
 #include <opm/output/eclipse/VectorItems/connection.hpp>
 #include <opm/output/eclipse/VectorItems/doubhead.hpp>
 #include <opm/output/eclipse/VectorItems/intehead.hpp>
+#include <opm/output/eclipse/VectorItems/logihead.hpp>
 #include <opm/output/eclipse/VectorItems/well.hpp>
 
 #include <opm/output/eclipse/WriteRestartHelpers.hpp>
 
 #include <opm/input/eclipse/Schedule/Action/Actdims.hpp>
 #include <opm/input/eclipse/Schedule/Action/Condition.hpp>
+#include <opm/input/eclipse/Schedule/OilVaporizationProperties.hpp>
 
 #include <opm/input/eclipse/Deck/Deck.hpp>
 
@@ -334,6 +336,32 @@ namespace {
 
         udq.commitValues();
     }
+
+    void restoreDRsDt(const std::vector<int>&         intehead,
+                      const std::vector<double>&      doubhead,
+                      const Opm::UnitSystem&          usys,
+                      Opm::OilVaporizationProperties& oilvap)
+    {
+        const auto dRsdt = usys.to_si(Opm::UnitSystem::measure::gas_oil_ratio_rate,
+                                      doubhead[VI::doubhead::dRsDt]);
+
+        const auto maximums = std::vector<double>(oilvap.numPvtRegions(), dRsdt);
+        const auto options  = std::vector<std::string>
+            (maximums.size(), (intehead[VI::intehead::DRSDT_FREE] == 1) ? "FREE" : "ALL");
+
+        Opm::OilVaporizationProperties::updateDRSDT(oilvap, maximums, options);
+    }
+
+    void restoreVapPars(const std::vector<double>&      doubhead,
+                        Opm::OilVaporizationProperties& oilvap)
+    {
+        // No unit conversion needed.  The propensities are dimensionless
+        // scalars.
+        Opm::OilVaporizationProperties::
+            updateVAPPARS(oilvap,
+                          doubhead[VI::doubhead::OilVapPropensity],
+                          doubhead[VI::doubhead::OilVapDensPropensity]);
+    }
 }
 
 namespace Opm::RestartIO {
@@ -349,17 +377,24 @@ RstState::RstState(std::shared_ptr<EclIO::RestartFileView> rstView,
     , oilvap(runspec.tabdims().getNumPVTTables())
 {
     this->load_tuning(rstView->intehead(), rstView->doubhead());
-    this->load_oil_vaporization(rstView->intehead(), rstView->doubhead());
+
+    this->load_oil_vaporization(rstView->intehead(),
+                                rstView->logihead(),
+                                rstView->doubhead());
 }
 
-void RstState::load_oil_vaporization(const std::vector<int>& intehead,
+void RstState::load_oil_vaporization(const std::vector<int>&    intehead,
+                                     const std::vector<bool>&   logihead,
                                      const std::vector<double>& doubhead)
 {
-    const std::size_t numPvtRegions = this->oilvap.numPvtRegions();
-    const auto tconv = this->unit_system.to_si(::Opm::UnitSystem::measure::time, 1.0);
-    std::vector<double> maximums(numPvtRegions, doubhead[VI::doubhead::dRsDt]/tconv);
-    std::vector<std::string> options(numPvtRegions, intehead[VI::intehead::DRSDT_FREE]==1 ? "FREE" : "ALL");
-    OilVaporizationProperties::updateDRSDT(this->oilvap, maximums, options);
+    if (doubhead[VI::doubhead::dRsDt] < 1.0e+20) {
+        // DRSDT is active.
+        restoreDRsDt(intehead, doubhead, this->unit_system, this->oilvap);
+    }
+    else if (logihead[VI::logihead::VapPars]) {
+        // VAPPARS is active.
+        restoreVapPars(doubhead, this->oilvap);
+    }
 }
 
 void RstState::load_tuning(const std::vector<int>& intehead,
@@ -523,17 +558,20 @@ void RstState::add_msw(const std::vector<std::string>& zwel,
 
 void RstState::add_udqs(std::shared_ptr<EclIO::RestartFileView> rstView)
 {
-    const auto& iudq = rstView->getKeyword<int>("IUDQ");
-    const auto& zudn = rstView->getKeyword<std::string>("ZUDN");
-    const auto& zudl = rstView->getKeyword<std::string>("ZUDL");
-
     if (rstView->hasKeyword<int>("IUAD")) {
+        const auto rstFileVersion = rstView->
+            getKeyword<int>("INTEHEAD")[VI::intehead::VERSION];
+
         const auto& iuad = rstView->getKeyword<int>("IUAD");
         const auto& iuap = rstView->getKeyword<int>("IUAP");
         const auto& igph = rstView->getKeyword<int>("IGPH");
 
-        this->udq_active = RstUDQActive(iuad, iuap, igph);
+        this->udq_active.emplace(rstFileVersion, iuad, iuap, igph);
     }
+
+    const auto& iudq = rstView->getKeyword<int>("IUDQ");
+    const auto& zudn = rstView->getKeyword<std::string>("ZUDN");
+    const auto& zudl = rstView->getKeyword<std::string>("ZUDL");
 
     auto udqValues = UDQVectors { std::move(rstView) };
 
@@ -653,11 +691,9 @@ void RstState::add_wlist(const std::vector<std::string>& zwls,
 
 const RstWell& RstState::get_well(const std::string& wname) const
 {
-    const auto well_iter = std::find_if(this->wells.begin(),
-                                        this->wells.end(),
-                                        [&wname] (const auto& well) {
-                                            return well.name == wname;
-                                        });
+    const auto well_iter = std::ranges::find_if(this->wells,
+                                                [&wname] (const auto& well)
+                                                { return well.name == wname; });
     if (well_iter == this->wells.end())
         throw std::out_of_range("No such well: " + wname);
 

@@ -52,7 +52,7 @@ BOOST_AUTO_TEST_CASE(Array)
     for (auto m = wa.numWindows(), i = 0*m; i < m; ++i) {
         auto w = wa[i];
 
-        std::fill(std::begin(w), std::end(w), 10*i);
+        std::ranges::fill(w, 10*i);
     }
 
     BOOST_CHECK_EQUAL(wa.numWindows(), Wa::Idx{5});
@@ -114,7 +114,7 @@ BOOST_AUTO_TEST_CASE(Matrix)
         for (auto n = wm.numCols(), j = 0*n; j < n; ++j) {
             auto w = wm(i, j);
 
-            std::fill(std::begin(w), std::end(w), 100*i + 10*j);
+            std::ranges::fill(w, 100*i + 10*j);
         }
     }
 

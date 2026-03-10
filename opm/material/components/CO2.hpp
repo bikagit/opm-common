@@ -53,7 +53,7 @@ namespace Opm {
  * is not a top priority, the much simpler component \c Opm::SimpleCO2 can be
  * used instead
  */
-template <class Scalar, class ParamsT = Opm::CO2Tables<double, std::vector<double>>>
+template <class Scalar, class ParamsT = Opm::CO2Tables<double, VectorWithDefaultAllocator>>
 class CO2 : public Component<Scalar, CO2<Scalar>>
 {
 public:
@@ -251,7 +251,7 @@ public:
                                    const Evaluation& pressure,
                                    bool extrapolate = false)
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         constexpr Scalar a0 = 0.235156;
         constexpr Scalar a1 = -0.491266;
         constexpr Scalar a2 = 5.211155e-2;
@@ -309,13 +309,16 @@ public:
      * This function uses the fact that heat capacity is the partial
      * derivative of enthalpy function with respect to temperature.
      *
+     * \param params Parameters to use
      * \param temperature Temperature of component \f$\mathrm{[K]}\f$
      * \param pressure Pressure of component \f$\mathrm{[Pa]}\f$
      */
     template <class Evaluation>
-    OPM_HOST_DEVICE static Evaluation gasHeatCapacity(const Params& params, const Evaluation& temperature, const Evaluation& pressure)
+    OPM_HOST_DEVICE static Evaluation gasHeatCapacity(const Params& params,
+                                                      const Evaluation& temperature,
+                                                      const Evaluation& pressure)
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         constexpr Scalar eps = 1e-6;
         // NB!! should be changed to using the derivative from the table (if piecwise linear double derivate is zero).
         // use central differences here because one-sided methods do

@@ -281,11 +281,12 @@ namespace Opm {
             || (this->m_definitions.find(keyword) != this->m_definitions.end());
     }
 
-    void UDQConfig::add_record(SegmentMatcherFactory                 create_segment_matcher,
-                               const DeckRecord&                     record,
-                               const KeywordLocation&                location,
-                               const std::size_t                     report_step,
-                               const std::optional<DynamicSelector>& dynamic_selector)
+    std::optional<std::string>
+    UDQConfig::add_record(SegmentMatcherFactory                 create_segment_matcher,
+                          const DeckRecord&                     record,
+                          const KeywordLocation&                location,
+                          const std::size_t                     report_step,
+                          const std::optional<DynamicSelector>& dynamic_selector)
     {
         using KW = ParserKeywords::UDQ;
 
@@ -309,12 +310,16 @@ namespace Opm {
         }
         else if (action == UDQAction::DEFINE) {
             this->add_define(quantity, location, data, report_step);
+
+            return { quantity };
         }
         else {
             throw std::runtime_error {
                 "Unknown UDQ Operation " + std::to_string(static_cast<int>(action))
             };
         }
+
+        return {};
     }
 
     void UDQConfig::add_unit(const std::string& keyword, const std::string& quoted_unit)
@@ -427,6 +432,18 @@ namespace Opm {
         return update;
     }
 
+    bool UDQConfig::clear_update_next_for_new_report_step()
+    {
+        auto update = false;
+
+        for (auto& def : this->m_definitions) {
+            const auto chng = def.second.clear_update_next_for_new_report_step();
+            update = update || chng;
+        }
+
+        return update;
+    }
+
     void UDQConfig::eval_assign(const WellMatcher&    wm,
                                 const GroupOrder&     go,
                                 SegmentMatcherFactory create_segment_matcher,
@@ -534,14 +551,14 @@ namespace Opm {
 
     std::size_t UDQConfig::size() const
     {
-        return std::count_if(this->input_index.begin(), this->input_index.end(),
-                             [](const auto& index_pair)
-                             {
-                                 const auto action = index_pair.second.action;
+        return std::ranges::count_if(this->input_index,
+                                     [](const auto& index_pair)
+                                     {
+                                         const auto action = index_pair.second.action;
 
-                                 return (action == UDQAction::DEFINE)
-                                     || (action == UDQAction::ASSIGN);
-                             });
+                                         return (action == UDQAction::DEFINE)
+                                             || (action == UDQAction::ASSIGN);
+                                     });
     }
 
     UDQInput UDQConfig::operator[](const std::string& keyword) const
@@ -568,11 +585,10 @@ namespace Opm {
 
     UDQInput UDQConfig::operator[](const std::size_t insert_index) const
     {
-        auto index_iter = std::find_if(this->input_index.begin(), this->input_index.end(),
-            [insert_index](const auto& name_index)
-        {
-            return name_index.second.insert_index == insert_index;
-        });
+        const auto index_iter =
+            std::ranges::find_if(this->input_index,
+                                 [insert_index](const auto& name_index)
+                                 { return name_index.second.insert_index == insert_index; });
 
         if (index_iter == this->input_index.end()) {
             throw std::invalid_argument("Insert index not recognized");
@@ -717,7 +733,7 @@ namespace Opm {
         this->pending_assignments_.swap(pending);
 
         {
-            std::sort(pending.begin(), pending.end());
+            std::ranges::sort(pending);
             auto u = std::unique(pending.begin(), pending.end());
             pending.erase(u, pending.end());
         }

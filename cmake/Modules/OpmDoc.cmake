@@ -54,7 +54,7 @@ macro (opm_doc opm doxy_dir)
 	# to direct where the install target should put the documentation. the names
 	# here are taken from GNUInstallDirs.cmake
 	set (CMAKE_INSTALL_DATAROOTDIR "share" CACHE STRING "Read-only arch.-indep. data root")
-	set (CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc${${opm}_VER_DIR}/${${opm}_NAME}" CACHE STRING "Documentation root")
+	set (CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/${${opm}_NAME}" CACHE STRING "Documentation root")
 	set (_formats html)
 	foreach (format IN LISTS _formats)
 	  string (TOUPPER ${format} FORMAT)
@@ -74,7 +74,7 @@ macro (opm_doc opm doxy_dir)
 	  add_dependencies (install-${format} doc)
 	endforeach (format)
   endif (DOXYGEN_FOUND)
-  
+
   # stylesheets must be specified with relative path in Doxyfile, or the
   # full path (to the source directory!) will be put in the output HTML.
   # thus, we'll need to copy the stylesheet to this path relative to where
@@ -87,5 +87,5 @@ macro (opm_doc opm doxy_dir)
   else ((NOT PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR) AND (EXISTS ${PROJECT_SOURCE_DIR}/${doxy_dir}/style.css))
 	set (${opm}_STYLESHEET_COPIED "")
   endif ((NOT PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR) AND (EXISTS ${PROJECT_SOURCE_DIR}/${doxy_dir}/style.css))
-  
+
 endmacro (opm_doc opm)

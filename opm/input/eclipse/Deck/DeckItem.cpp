@@ -216,19 +216,23 @@ void DeckItem::shrink_to_fit<double>() {
     this->dval.shrink_to_fit();
 }
 
-
-template< typename T >
-const std::vector< T >& DeckItem::getData() const {
-    return this->value_ref< T >();
+template <typename T>
+std::vector<T>& DeckItem::getData()
+{
+    return this->value_ref<T>();
 }
 
+template <typename T>
+const std::vector<T>& DeckItem::getData() const
+{
+    return this->value_ref<T>();
+}
 
-template< typename T >
-void DeckItem::push( T x ) {
-    auto& val = this->value_ref< T >();
-
-    val.push_back( std::move( x ) );
-    this->value_status.push_back( value::status::deck_value );
+template <typename T>
+void DeckItem::push(T x)
+{
+    this->value_ref<T>().push_back(std::move(x));
+    this->value_status.push_back(value::status::deck_value);
 }
 
 void DeckItem::push_back( int x ) {
@@ -504,7 +508,7 @@ bool DeckItem::operator!=(const DeckItem& other) const {
 
 
 bool DeckItem::to_bool(std::string string_value) {
-    std::transform(string_value.begin(), string_value.end(), string_value.begin(), toupper);
+    std::ranges::transform(string_value, string_value.begin(), toupper);
 
     if (string_value == "TRUE")
         return true;
@@ -560,8 +564,13 @@ template void DeckItem::push_backDummyDefault<std::string>( std::size_t );
 template void DeckItem::push_backDummyDefault<RawString>( std::size_t );
 template void DeckItem::push_backDummyDefault<UDAValue>( std::size_t );
 
-template const std::vector< int >& DeckItem::getData< int >() const;
-template const std::vector< UDAValue >& DeckItem::getData< UDAValue >() const;
-template const std::vector< std::string >& DeckItem::getData< std::string >() const;
+template std::vector<int>& DeckItem::getData<int>();
+template std::vector<double>& DeckItem::getData<double>();
+
+template const std::vector<int>& DeckItem::getData<int>() const;
+// Explicit instantiation for double is not needed since a template
+// specialization is defined above.
+template const std::vector<UDAValue>& DeckItem::getData<UDAValue>() const;
+template const std::vector<std::string>& DeckItem::getData<std::string>() const;
 template const std::vector<RawString>& DeckItem::getData<RawString>() const;
 }

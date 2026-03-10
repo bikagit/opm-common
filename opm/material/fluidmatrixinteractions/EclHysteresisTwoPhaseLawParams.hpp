@@ -94,8 +94,8 @@ public:
     /*!
      * \brief Set the hysteresis configuration object.
      */
-    void setConfig(std::shared_ptr<EclHysteresisConfig> value)
-    { config_ = *value; }
+    void setConfig(const EclHysteresisConfig& value)
+    { config_ = value; }
 
     /*!
      * \brief Returns the hysteresis configuration object.
@@ -128,6 +128,7 @@ public:
         drainageParams_ = value;
 
         oilWaterSystem_ = (twoPhaseSystem == EclTwoPhaseSystemType::OilWater);
+        gasWaterSystem_ = (twoPhaseSystem == EclTwoPhaseSystemType::GasWater);
         gasOilSystem_ = (twoPhaseSystem == EclTwoPhaseSystemType::GasOil);
 
         if (!config().enableHysteresis())
@@ -158,7 +159,7 @@ public:
         if (config().krHysteresisModel() == 4) {
             //Swco_ = info.Swl;
             if (twoPhaseSystem == EclTwoPhaseSystemType::GasOil) {
-                Swmaxd_ = 1.0 - info.Sgl - info.Swl; 
+                Swmaxd_ = 1.0 - info.Sgl - info.Swl;
                 KrwdMax_ = EffLawT::twoPhaseSatKrw(drainageParams(), Swmaxd_);
             }
             else if (twoPhaseSystem == EclTwoPhaseSystemType::GasWater) {
@@ -246,7 +247,7 @@ public:
                 Swmaxi_ = 1.0 - info.Sgl - info.Swl;
                 pcmaxi_ = info.maxPcgo;
             } else if (twoPhaseSystem == EclTwoPhaseSystemType::GasWater) {
-                Swmaxi_ = 1.0 - info.Sgl;
+                Swmaxi_ = info.Swu;
                 pcmaxi_ = info.maxPcgo + info.maxPcow;
             }
             else {
@@ -402,14 +403,14 @@ public:
     {
         if( config().krHysteresisModel() == 0 || config().krHysteresisModel() == 2)
             return Swcrd_;
-        
+
         if( config().krHysteresisModel() == 1 || config().krHysteresisModel() == 3)
             return Swcri_;
-        
+
         // For Killough the trapped saturation is already computed
         if( config().krHysteresisModel() == 4 )
             return Swcrt_;
-        
+
         return 0.0;
         //else // For Carlson we use the shift to compute it from the critial saturation
         //    return Swcri_ + deltaSwImbKrw_;
@@ -436,16 +437,17 @@ public:
     Scalar krnWght() const
     { return KrndHy_/KrndMax_; }
 
-    Scalar krwWght() const
+    template <class Evaluation>
+    Evaluation krwWght(const Evaluation& Krwd) const
     {
         // a = 1 (deltaKrw)^a Formulation according to KILLOUGH 1976
         Scalar deltaKrw = Krwi_snrmax() - Krwd_sncri();
         Scalar Krwi_snr = Krwd_sncrt() + deltaKrw * (Sncrt() / max(1e-12, Sncri()));
-        return (Krwi_snr - KrwdHy()) / ( Krwi_snrmax() - Krwi_snmax());
+        return (Krwi_snr - Krwd) / ( Krwi_snrmax() - Krwi_snmax());
     }
 
     Scalar krwdMax() const
-    { 
+    {
         return KrwdMax_; }
 
     Scalar KrwdHy() const
@@ -587,7 +589,7 @@ public:
         bool updateParams = false;
 
         if (config().pcHysteresisModel() == 0 && pcSw < pcSwMdc_) {
-            if (pcSwMdc_ == 2.0 && pcSw+1.0e-6 < Swcrd_ && oilWaterSystem_) {
+            if (pcSwMdc_ == 2.0 && pcSw+1.0e-6 < Swcrd_ && (oilWaterSystem_ || gasWaterSystem_)) {
                initialImb_ = true;
             }
             pcSwMdc_ = pcSw;
@@ -705,7 +707,7 @@ private:
             //Scalar krwMdcDrainage = EffLawT::twoPhaseSatKrw(drainageParams(), krwSwMdc_);
             //Scalar SwKrwMdcImbibition = EffLawT::twoPhaseSatKrwInv(imbibitionParams(), krwMdcDrainage);
             //deltaSwImbKrw_ = SwKrwMdcImbibition - krwSwMdc_;
-        //}   
+        //}
 
         if (config().krHysteresisModel() == 0 || config().krHysteresisModel() == 1) {
             Scalar krnMdcDrainage = EffLawT::twoPhaseSatKrn(drainageParams(), krnSwMdc_);
@@ -803,6 +805,7 @@ private:
 
     bool oilWaterSystem_{false};
     bool gasOilSystem_{false};
+    bool gasWaterSystem_{false};
 
 
     // offsets added to wetting phase saturation uf using the imbibition curves need to

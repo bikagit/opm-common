@@ -242,11 +242,9 @@ namespace {
         {
             const auto& wnames = sched.wellNames(reportStep);
 
-            return std::count_if(std::begin(wnames), std::end(wnames),
-                [&sched, reportStep](const std::string& wname) -> bool
-            {
-                return sched.getWell(wname, reportStep).isMultiSegment();
-            });
+            return std::ranges::count_if(wnames,
+                                        [&sched, reportStep](const std::string& wname) -> bool
+                                        { return sched.getWell(wname, reportStep).isMultiSegment(); });
         }
 
         int maxSegmentID(const Opm::Schedule& sched,

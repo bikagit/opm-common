@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if test -z "$BTYPES"
+then
+  source $TOOLCHAIN_DIR/build-configurations.sh
+fi
+
 declare -A configurations
 
 declare -A EXTRA_MODULE_FLAGS
@@ -96,7 +101,7 @@ function build_module {
   CMAKE_PARAMS="$1"
   DO_TEST_FLAG="$2"
   MOD_SRC_DIR="$3"
-  cmake "$MOD_SRC_DIR" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=$DO_TEST_FLAG -DCMAKE_TOOLCHAIN_FILE=${configurations[$configuration]} $CMAKE_PARAMS
+  cmake "$MOD_SRC_DIR" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=$DO_TEST_FLAG -DCMAKE_TOOLCHAIN_FILE=${configurations[$configuration]} -DOPM_DOXYGEN_LOG_FILE=$PWD/doc/doxygen/Warnings.log $CMAKE_PARAMS
   test $? -eq 0 || exit 1
   if test $DO_TEST_FLAG -eq 1
   then
@@ -121,12 +126,14 @@ function build_module {
     fi
     test $? -eq 0 || exit 2
     TESTTHREADS=${TESTTHREADS:-1}
-    if test -z "$CTEST_CONFIGURATION"
+    if test -n "${CTEST_TIMEOUT}"
     then
-      ctest -T Test --no-compress-output -j$TESTTHREADS -LE "gpu_.*"
+      TIMEOUT="--timeout ${CTEST_TIMEOUT}"
     else
-      ctest -j$TESTTHREADS -C $CTEST_CONFIGURATION --timeout 5000 -T Test --no-compress-output -LE "gpu_.*"
+      TIMEOUT=""
     fi
+
+    ctest -T Test --no-compress-output -j$TESTTHREADS -LE "gpu_.*" ${TIMEOUT}
 
     # Convert to junit format
     $WORKSPACE/deps/opm-common/jenkins/convert.py -x $WORKSPACE/deps/opm-common/jenkins/conv.xsl -t . > testoutput.xml
@@ -152,11 +159,11 @@ function build_module {
 function clone_module {
   # Already cloned by an earlier configuration
   test -d $WORKSPACE/deps/$1 && return 0
-  pushd .
+  local repo_root=${OPM_REPO_ROOT:-https://github.com/OPM}
   mkdir -p $WORKSPACE/deps/$1
-  cd $WORKSPACE/deps/$1
+  pushd $WORKSPACE/deps/$1
   git init .
-  git remote add origin https://github.com/OPM/$1
+  git remote add origin ${repo_root}/$1
   git fetch --depth 1 origin $2:branch_to_build
   git checkout branch_to_build
   git log HEAD -1 | cat
@@ -164,19 +171,17 @@ function clone_module {
   popd
 }
 
-# $1 = Module to clone
+# $1 = Name of module
 # $2 = Additional cmake parameters
-# $3 = git-rev to use for module
-# $4 = Build root
-function clone_and_build_module {
-  clone_module $1 $3
-  pushd .
-  mkdir -p $4/build-$1
-  cd $4/build-$1
+# $3 = Build root
+# $4 = 1 to run tests
+function init_and_build_module {
+  mkdir -p $3/build-$1
+  pushd $3/build-$1
   test_build=0
-  if test -n "$5"
+  if test -n "$4"
   then
-    test_build=$5
+    test_build=$4
   fi
   build_module "$2" $test_build $WORKSPACE/deps/$1
   test $? -eq 0 || exit 1
@@ -190,7 +195,7 @@ function build_upstreams {
   do
     echo "Building upstream $upstream=${upstreamRev[$upstream]} configuration=$configuration"
     # Build upstream and execute installation
-    clone_and_build_module $upstream "-DCMAKE_PREFIX_PATH=$WORKSPACE/$configuration/install -DCMAKE_INSTALL_PREFIX=$WORKSPACE/$configuration/install ${EXTRA_MODULE_FLAGS[$upstream]}" ${upstreamRev[$upstream]} $WORKSPACE/$configuration
+    init_and_build_module $upstream "-DCMAKE_PREFIX_PATH=$WORKSPACE/$configuration/install -DCMAKE_INSTALL_PREFIX=$WORKSPACE/$configuration/install ${EXTRA_MODULE_FLAGS[$upstream]}" $WORKSPACE/$configuration
     test $? -eq 0 || exit 1
   done
   test $? -eq 0 || exit 1
@@ -205,7 +210,7 @@ function build_downstreams {
   do
     echo "Building downstream $downstream=${downstreamRev[$downstream]} configuration=$configuration"
     # Build downstream and execute installation
-    clone_and_build_module $downstream "-DCMAKE_PREFIX_PATH=$WORKSPACE/$configuration/install -DCMAKE_INSTALL_PREFIX=$WORKSPACE/$configuration/install -DOPM_TESTS_ROOT=$OPM_TESTS_ROOT ${EXTRA_MODULE_FLAGS[$downstream]}" ${downstreamRev[$downstream]} $WORKSPACE/$configuration 1
+    init_and_build_module $downstream "-DCMAKE_PREFIX_PATH=$WORKSPACE/$configuration/install -DCMAKE_INSTALL_PREFIX=$WORKSPACE/$configuration/install -DOPM_TESTS_ROOT=$OPM_TESTS_ROOT ${EXTRA_MODULE_FLAGS[$downstream]}" $WORKSPACE/$configuration 1
     test $? -eq 0 || exit 1
 
     # Installation for downstream
@@ -231,6 +236,28 @@ function build_downstreams {
 }
 
 # $1 = Name of main module
+function clone_repositories {
+  mkdir -p $WORKSPACE/deps
+  for upstream in ${upstreams[*]}
+  do
+    if test "$upstream" != "opm-common"
+    then
+      clone_module ${upstream} ${upstreamRev[$upstream]}
+    fi
+  done
+
+  if grep -q "with downstreams" <<< $ghprbCommentBody
+  then
+    for downstream in ${downstreams[*]}
+    do
+      clone_module ${downstream} ${downstreamRev[$downstream]}
+    done
+  fi
+
+  ln -sf $WORKSPACE $WORKSPACE/deps/$1
+}
+
+# $1 = Name of main module
 function build_module_full {
   PY_MAJOR=`python3 --version | awk -F ' ' '{print $2}' | awk -F '.' '{print $1}'`
   PY_MINOR=`python3 --version | awk -F ' ' '{print $2}' | awk -F '.' '{print $2}'`
@@ -242,9 +269,8 @@ function build_module_full {
     build_upstreams
 
     # Build main module
-    pushd .
-    mkdir -p $configuration/build-$1
-    cd $configuration/build-$1
+    mkdir -p $WORKSPACE/$configuration/build-$1
+    pushd $WORKSPACE/$configuration/build-$1
     echo "Building main module $1=$sha1 configuration=$configuration"
     build_module "-DCMAKE_INSTALL_PREFIX=$WORKSPACE/$configuration/install -DOPM_TESTS_ROOT=$OPM_TESTS_ROOT ${EXTRA_MODULE_FLAGS[$1]}" 1 $WORKSPACE
     test $? -eq 0 || exit 1
@@ -259,4 +285,76 @@ function build_module_full {
       test $? -eq 0 || exit 1
     fi
   done
+
+  # Optionally generate a failure report.
+  # The report is always generated from the 'default' configuration data
+  # since that is the configuration we have reference data for.
+  if grep -q "failure_report" <<< $ghprbCommentBody
+  then
+    $WORKSPACE/deps/opm-simulators/tests/make_failure_report.sh \
+    $WORKSPACE/deps/opm-tests \
+    $WORKSPACE/default/build-opm-simulators \
+    $WORKSPACE/default/build-opm-simulators
+    test $? -eq 0 || exit 1
+  fi
+
+  if grep -q -i " run " <<< $ghprbCommentBody
+  then
+    $WORKSPACE/deps/opm-common/jenkins/handle-run-trigger.sh
+    test $? -eq 0 || exit 1
+  fi
+
+  if grep -q -i "update_data" <<< $ghprbCommentBody
+  then
+    export configuration=default
+    export OPM_TESTS_ROOT=$WORKSPACE/deps/opm-tests
+    $WORKSPACE/deps/opm-common/jenkins/update-opm-tests.sh $1
+    test $? -eq 0 || exit 1
+  fi
+}
+
+# Run static analysis checks for a given module
+# Assumes coverage_gcov, debug_iterator and clang_lto build configurations
+# has been built.
+# $1 - Name of main module
+function run_static_analysis {
+  if test -d $WORKSPACE/coverage_gcov
+  then
+    pushd $WORKSPACE/coverage_gcov/build-$1
+    gcovr -j$TESTTHREADS --xml -r /build -o /build/coverage.xml
+    popd
+  fi
+
+  if test -d $WORKSPACE/debug_iterator
+  then
+    pushd $WORKSPACE/debug_iterator/build-$1
+    ninja doc
+    popd
+  fi
+
+  COMPILE_COMMANDS=$WORKSPACE/clang_lto/build-$1/compile_commands.json
+  if test -d $WORKSPACE/clang_lto
+  then
+    pushd $WORKSPACE
+    infer run \
+          --compilation-database $COMPILE_COMMANDS \
+          --keep-going \
+          --pmd-xml \
+          -j $TESTTHREADS
+    popd
+
+    run-clang-tidy -checks='clang-analyzer.*' \
+                   -p $WORKSPACE/clang_lto/build-$1/ \
+                   -j$TESTTHREADS | tee $WORKSPACE/clang-tidy-report.log
+
+    cppcheck --project=${COMPILE_COMMANDS} \
+             -q \
+              --force \
+              --enable=all \
+              --xml \
+              --xml-version=2 \
+              $CPPCHECK_IGNORE_LIST \
+              -j$TESTTHREADS \
+              --output-file=$WORKSPACE/cppcheck-result.xml
+  fi
 }

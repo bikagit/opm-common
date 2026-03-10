@@ -188,7 +188,7 @@ void ESmry::write_block(std::ostream& os,
     for (const auto& vector : vectors) {
         const auto& vector_data { this->get(vector) } ;
 
-        auto max = *std::max_element(vector_data.begin(), vector_data.end());
+        const auto max = *std::ranges::max_element(vector_data);
         // log10 for 0 is undefined and log10 for negative values yields nan.
         // We skip the scale factor in these cases to prevent undefined behavior
         int scale_factor {
@@ -249,7 +249,9 @@ void ESmry::write_rsm(std::ostream& os) const
       principle embark on a more general sorting here.
     */
     if (data_vectors[0].keyword != "YEARS") {
-        auto years_iter = std::find_if(data_vectors.begin(), data_vectors.end(), [](const SummaryNode& node) { return (node.keyword == "YEARS"); });
+        auto years_iter = std::ranges::find_if(data_vectors,
+                                               [](const SummaryNode& node)
+                                               { return (node.keyword == "YEARS"); });
         if (years_iter != data_vectors.end())
             std::swap(data_vectors[0], *years_iter);
     }
@@ -266,20 +268,14 @@ void ESmry::write_rsm(std::ostream& os) const
     if (this->hasKey("DAY") && this->hasKey("MONTH") && this->hasKey("YEAR")) {
         write_dates = true;
         const auto dates = this->dates();
-        std::transform(dates.begin(), dates.end(),
-                       std::back_inserter(time_column),
-                       [](const auto& t)
-                       {
-                           return format_date(t);
-                       });
+        std::ranges::transform(dates, std::back_inserter(time_column),
+                               [](const auto& t)
+                               { return format_date(t); });
     } else {
         const auto& time_data = this->get("TIME");
-        std::transform(time_data.begin(), time_data.end(),
-                       std::back_inserter(time_column),
-                       [](const auto& t)
-                       {
-                           return format_float_element(t);
-                       });
+        std::ranges::transform(time_data, std::back_inserter(time_column),
+                               [](const auto& t)
+                               { return format_float_element(t); });
     }
 
     for (const auto& data_vector_block : data_vector_blocks) {

@@ -8,7 +8,7 @@
 include(CheckCXXSourceCompiles)
 
 # __attribute__((always_inline))
-CHECK_CXX_SOURCE_COMPILES("
+check_cxx_source_compiles("
    void __attribute__((always_inline)) foo(void) {}
    int main(void)
    {
@@ -19,7 +19,7 @@ CHECK_CXX_SOURCE_COMPILES("
 )
 
 # __attribute__((unused))
-CHECK_CXX_SOURCE_COMPILES("
+check_cxx_source_compiles("
    int main(void)
    {
      int __attribute__((unused)) foo;
@@ -29,7 +29,7 @@ CHECK_CXX_SOURCE_COMPILES("
 )
 
 # __attribute__((deprecated))
-CHECK_CXX_SOURCE_COMPILES("
+check_cxx_source_compiles("
 #define DEP __attribute__((deprecated))
    class bar
    {
@@ -61,7 +61,7 @@ CHECK_CXX_SOURCE_COMPILES("
 )
 
 # __attribute__((deprecated("msg")))
-CHECK_CXX_SOURCE_COMPILES("
+check_cxx_source_compiles("
 #define DEP __attribute__((deprecated(\"message\")))
    class bar {
      bar() DEP;
@@ -91,14 +91,3 @@ CHECK_CXX_SOURCE_COMPILES("
    };
 "  HAS_ATTRIBUTE_DEPRECATED_MSG
 )
-
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
-    list(APPEND ${project}_LIBRARIES stdc++fs)
-  endif()
-endif()
-
-option(OPM_CLANG_WITH_STDC++FS "Using libstdc++ with clang and we want to link to stdc++fs" OFF)
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND OPM_CLANG_WITH_STDC++FS)
-  list(APPEND ${project}_LIBRARIES stdc++fs)
-endif()

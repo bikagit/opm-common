@@ -21,10 +21,9 @@
 
 #include <opm/io/eclipse/EclIOdata.hpp>
 
-#include <ios>
+#include <algorithm>
 #include <map>
 #include <string>
-#include <stdexcept>
 #include <tuple>
 #include <unordered_map>
 #include <vector>

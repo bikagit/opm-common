@@ -42,6 +42,8 @@ void EclHysteresisConfig::initFromState(const Runspec& runspec)
     modParamTrapped_ = runspec.hysterPar().modParamTrapped();
     curvatureCapPrs_ = runspec.hysterPar().curvatureCapPrs();
     enableWagHyst_ = runspec.hysterPar().activeWag();
+    enablePcScalingHyst_ = runspec.hysterPar().doPcScaling();
+    enableWettingPhaseKilloughFix_ = runspec.hysterPar().fixWettingPhaseKillough();
 
 }
 

@@ -41,14 +41,21 @@ along with OPM.  If not, see <http://www.gnu.org/licenses/>.
 #include <opm/input/eclipse/Deck/DeckItem.hpp>
 #include <opm/input/eclipse/Deck/Deck.hpp>
 
+#include <filesystem>
+
 using namespace Opm;
 
 inline std::string prepath() {
+    int idx;
 #if BOOST_VERSION / 100000 == 1 && BOOST_VERSION / 100 % 1000 < 71
-    return boost::unit_test::framework::master_test_suite().argv[2];
+    idx = 2;
 #else
-    return boost::unit_test::framework::master_test_suite().argv[1];
+    idx = 1;
 #endif
+    const std::filesystem::path path {
+        boost::unit_test::framework::master_test_suite().argv[idx]
+    };
+    return std::filesystem::canonical(path).generic_string();
 }
 
 static Deck createDeckTOP() {
@@ -448,11 +455,11 @@ BOOST_AUTO_TEST_CASE(WithGridOptsDefaultRegion) {
 
 BOOST_AUTO_TEST_CASE(TestIOConfigBaseName) {
     Parser parser;
-    auto deck = parser.parseFile(prepath() + "IOConfig/SPE1CASE2.DATA");
+    auto deck = parser.parseFile(prepath() + "/IOConfig/SPE1CASE2.DATA");
     EclipseState state(deck);
     const auto& io = state.cfg().io();
     BOOST_CHECK_EQUAL(io.getBaseName(), "SPE1CASE2");
-    BOOST_CHECK_EQUAL(io.getOutputDir(), prepath() + "IOConfig");
+    BOOST_CHECK_EQUAL(io.getOutputDir(), prepath() + "/IOConfig");
 
     Parser parser2;
     auto deck2 = createDeckWithGridOpts();
@@ -504,25 +511,25 @@ DIMENS
 
 GRID
 
-DX 
+DX
  4*1 /
 DY
  4*1 /
-DZ 
+DZ
  4*1 /
-TOPS 
+TOPS
  4*0.0 /
 
 PORO
  4*0.3 /
- 
+
 PROPS
 
 THCO2MIX
   NONE IDEAL IDEAL  /
 
 )";
-    
+
     Parser parser;
     const auto& deck = parser.parseString(deck_string);
     EclipseState state(deck);
@@ -544,13 +551,13 @@ BOOST_AUTO_TEST_CASE(EzrokhiTablesTest) {
 
         GRID
 
-        DX 
+        DX
         4*1 /
         DY
         4*1 /
-        DZ 
+        DZ
         4*1 /
-        TOPS 
+        TOPS
         4*0.0 /
 
         PORO
@@ -585,7 +592,7 @@ BOOST_AUTO_TEST_CASE(EzrokhiTablesTest) {
     BOOST_CHECK_CLOSE(1.0, denaqa[0].getC0("H2O"), epsilon);
     BOOST_CHECK_CLOSE(2.0, denaqa[0].getC1("H2O"), epsilon);
     BOOST_CHECK_CLOSE(3.0, denaqa[0].getC2("H2O"), epsilon);
-    
+
     BOOST_CHECK_CLOSE(4.0, denaqa[0].getC0("CO2"), epsilon);
     BOOST_CHECK_CLOSE(5.0, denaqa[0].getC1("CO2"), epsilon);
     BOOST_CHECK_CLOSE(6.0, denaqa[0].getC2("CO2"), epsilon);
@@ -598,11 +605,11 @@ BOOST_AUTO_TEST_CASE(EzrokhiTablesTest) {
     BOOST_CHECK_CLOSE(11.0, viscaqa[0].getC0("H2O"), epsilon);
     BOOST_CHECK_CLOSE(12.0, viscaqa[0].getC1("H2O"), epsilon);
     BOOST_CHECK_CLOSE(13.0, viscaqa[0].getC2("H2O"), epsilon);
-    
+
     BOOST_CHECK_CLOSE(14.0, viscaqa[0].getC0("CO2"), epsilon);
     BOOST_CHECK_CLOSE(15.0, viscaqa[0].getC1("CO2"), epsilon);
     BOOST_CHECK_CLOSE(16.0, viscaqa[0].getC2("CO2"), epsilon);
-    
+
     BOOST_CHECK_CLOSE(17.0, viscaqa[0].getC0("NACL"), epsilon);
     BOOST_CHECK_CLOSE(18.0, viscaqa[0].getC1("NACL"), epsilon);
     BOOST_CHECK_CLOSE(19.0, viscaqa[0].getC2("NACL"), epsilon);
@@ -617,13 +624,13 @@ BOOST_AUTO_TEST_CASE(SALTMFTest) {
 
         GRID
 
-        DX 
+        DX
         4*1 /
         DY
         4*1 /
-        DZ 
+        DZ
         4*1 /
-        TOPS 
+        TOPS
         4*0.0 /
 
         PORO
@@ -642,13 +649,13 @@ BOOST_AUTO_TEST_CASE(SALTMFTest) {
 
         GRID
 
-        DX 
+        DX
         4*1 /
         DY
         4*1 /
-        DZ 
+        DZ
         4*1 /
-        TOPS 
+        TOPS
         4*0.0 /
 
         PORO

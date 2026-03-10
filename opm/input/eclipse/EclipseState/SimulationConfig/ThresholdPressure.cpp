@@ -99,7 +99,7 @@ namespace Opm {
             const auto& eqlnum = fp.get_int("EQLNUM");
 
             //Find max of eqlnum
-            int maxEqlnum = *std::max_element(eqlnum.begin(), eqlnum.end());
+            const int maxEqlnum = *std::ranges::max_element(eqlnum);
 
             if (0 == maxEqlnum) {
                 throw std::runtime_error("Error in EQLNUM data: all values are 0");

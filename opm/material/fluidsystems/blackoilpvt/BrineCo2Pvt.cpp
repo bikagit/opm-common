@@ -35,8 +35,8 @@
 
 namespace Opm {
 
-template<class Scalar, class Params, class ContainerT>
-BrineCo2Pvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+BrineCo2Pvt<Scalar, Storage>::
 BrineCo2Pvt(const ContainerT& salinity,
             int activityModel,
             int thermalMixingModelSalt,
@@ -62,9 +62,8 @@ BrineCo2Pvt(const ContainerT& salinity,
     }
 }
 
-#if HAVE_ECL_INPUT
-template<class Scalar, class Params, class ContainerT>
-void BrineCo2Pvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+void BrineCo2Pvt<Scalar, Storage>::
 initFromState(const EclipseState& eclState, const Schedule&)
 {
     using Meas = UnitSystem::measure;
@@ -108,11 +107,11 @@ initFromState(const EclipseState& eclState, const Schedule&)
     if (T_ref != Scalar(288.71) || P_ref != Scalar(1.01325e5)) {
         OPM_THROW(std::runtime_error, "CO2STORE can only be used with default values for STCOND!");
     }
-   
+
     // Check for Ezrokhi tables DENAQA and VISCAQA
     setEzrokhiDenCoeff(eclState.getCo2StoreConfig().getDenaqaTables());
     setEzrokhiViscCoeff(eclState.getCo2StoreConfig().getViscaqaTables());
-    
+
     std::size_t regions = eclState.runspec().tabdims().getNumPVTTables();
     setNumRegions(regions);
     for (std::size_t regionIdx = 0; regionIdx < regions; ++regionIdx) {
@@ -143,13 +142,12 @@ initFromState(const EclipseState& eclState, const Schedule&)
     }
     if (enableEzrokhiViscosity_) {
        OpmLog::info(fmt::format("Ezrokhi viscosity coefficients : \n\tNaCl = {:.3E} {:.3E} {:.3E}",
-                    ezrokhiViscNaClCoeff_[0], ezrokhiViscNaClCoeff_[1], ezrokhiViscNaClCoeff_[2])); 
+                    ezrokhiViscNaClCoeff_[0], ezrokhiViscNaClCoeff_[1], ezrokhiViscNaClCoeff_[2]));
     }
 }
-#endif
 
-template<class Scalar, class Params, class ContainerT>
-void BrineCo2Pvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+void BrineCo2Pvt<Scalar, Storage>::
 setNumRegions(std::size_t numRegions)
 {
     brineReferenceDensity_.resize(numRegions);
@@ -157,8 +155,8 @@ setNumRegions(std::size_t numRegions)
     salinity_.resize(numRegions);
 }
 
-template<class Scalar, class Params, class ContainerT>
-void BrineCo2Pvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+void BrineCo2Pvt<Scalar, Storage>::
 setReferenceDensities(unsigned regionIdx,
                       Scalar rhoRefBrine,
                       Scalar rhoRefCO2,
@@ -168,8 +166,8 @@ setReferenceDensities(unsigned regionIdx,
     co2ReferenceDensity_[regionIdx] = rhoRefCO2;
 }
 
-template<class Scalar, class Params, class ContainerT>
-void BrineCo2Pvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+void BrineCo2Pvt<Scalar, Storage>::
 setActivityModelSalt(int activityModel)
 {
     switch (activityModel) {
@@ -180,8 +178,8 @@ setActivityModelSalt(int activityModel)
     }
 }
 
-template<class Scalar, class Params, class ContainerT>
-void BrineCo2Pvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+void BrineCo2Pvt<Scalar, Storage>::
 setThermalMixingModel(int thermalMixingModelSalt, int thermalMixingModelLiquid)
 {
     switch (thermalMixingModelSalt) {
@@ -198,8 +196,8 @@ setThermalMixingModel(int thermalMixingModelSalt, int thermalMixingModelLiquid)
     }
 }
 
-template<class Scalar, class Params, class ContainerT>
-void BrineCo2Pvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+void BrineCo2Pvt<Scalar, Storage>::
 setEzrokhiDenCoeff(const std::vector<EzrokhiTable>& denaqa)
 {
     if (denaqa.empty())
@@ -214,8 +212,8 @@ setEzrokhiDenCoeff(const std::vector<EzrokhiTable>& denaqa)
                            static_cast<Scalar>(denaqa[0].getC2("CO2"))};
 }
 
-template<class Scalar, class Params, class ContainerT>
-void BrineCo2Pvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+void BrineCo2Pvt<Scalar, Storage>::
 setEzrokhiViscCoeff(const std::vector<EzrokhiTable>& viscaqa)
 {
     if (viscaqa.empty())

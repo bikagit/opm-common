@@ -34,10 +34,8 @@
 
 namespace Opm {
 
-#if HAVE_ECL_INPUT
 class EclipseState;
 class Schedule;
-#endif
 
 /*!
  * \brief This class represents the Pressure-Volume-Temperature relations of the oil phase
@@ -49,12 +47,10 @@ class DeadOilPvt
 public:
     using TabulatedOneDFunction = Tabulated1DFunction<Scalar>;
 
-#if HAVE_ECL_INPUT
     /*!
      * \brief Initialize the oil parameters via the data specified by the PVDO ECL keyword.
      */
     void initFromState(const EclipseState& eclState, const Schedule&);
-#endif // HAVE_ECL_INPUT
 
     void setNumRegions(std::size_t numRegions);
 
@@ -157,6 +153,20 @@ public:
                                             const Evaluation& pressure,
                                             const Evaluation& /*Rs*/) const
     { return inverseOilB_[regionIdx].eval(pressure, /*extrapolate=*/true); }
+
+    /*!
+     * \brief Returns the formation volume factor [-] and viscosity [Pa s] of the fluid phase.
+     */
+    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    std::pair<LhsEval, LhsEval>
+    inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState, unsigned regionIdx)
+    {
+        const LhsEval& p = decay<LhsEval>(fluidState.pressure(FluidState::oilPhaseIdx));
+        const auto segIdx = this->inverseOilB_[regionIdx].findSegmentIndex(p, /*extrapolate=*/ true);
+        const auto& invBo = this->inverseOilB_[regionIdx].eval(p, SegmentIndex{segIdx});
+        const auto& invMuoBo = this->inverseOilBMu_[regionIdx].eval(p, SegmentIndex{segIdx});
+        return { invBo, invBo / invMuoBo };
+    }
 
     /*!
      * \brief Returns the formation volume factor [-] of saturated oil.

@@ -38,8 +38,9 @@
 #include <opm/input/eclipse/Schedule/Action/Actions.hpp>
 #include <opm/input/eclipse/Schedule/GasLiftOpt.hpp>
 #include <opm/input/eclipse/Schedule/Group/GConSump.hpp>
-#include <opm/input/eclipse/Schedule/Group/GSatProd.hpp>
 #include <opm/input/eclipse/Schedule/Group/Group.hpp>
+#include <opm/input/eclipse/Schedule/Group/GroupSatelliteInjection.hpp>
+#include <opm/input/eclipse/Schedule/Group/GSatProd.hpp>
 #include <opm/input/eclipse/Schedule/MSW/Segment.hpp>
 #include <opm/input/eclipse/Schedule/MSW/WellSegments.hpp>
 #include <opm/input/eclipse/Schedule/Schedule.hpp>
@@ -88,6 +89,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <fmt/format.h>
@@ -199,11 +201,21 @@ namespace {
     }
 
     std::vector<Opm::EclIO::SummaryNode>
-    requiredRestartVectors(const ::Opm::Schedule& sched)
+    requiredRestartVectors(const ::Opm::Schedule& sched, const ::Opm::TracerConfig& trConfig)
     {
         auto entities = std::vector<Opm::EclIO::SummaryNode> {};
 
         const auto vectors = requiredRestartVectors();
+
+        const auto required_tracer_vectors = std::vector<ParamCTorArgs> {
+            { "TPR", Opm::EclIO::SummaryNode::Type::Rate     },
+            { "TIR", Opm::EclIO::SummaryNode::Type::Rate     },
+            { "TPT", Opm::EclIO::SummaryNode::Type::Total    },
+            { "TIT", Opm::EclIO::SummaryNode::Type::Total    },
+            { "TPC", Opm::EclIO::SummaryNode::Type::Ratio    },
+            { "TIC", Opm::EclIO::SummaryNode::Type::Ratio    },
+        };
+
         const auto extra_well_vectors = std::vector<ParamCTorArgs> {
             { "WTHP",  Opm::EclIO::SummaryNode::Type::Pressure },
             { "WBHP",  Opm::EclIO::SummaryNode::Type::Pressure },
@@ -216,6 +228,45 @@ namespace {
             { "WWIGR", Opm::EclIO::SummaryNode::Type::Rate     },
             { "WMCTL", Opm::EclIO::SummaryNode::Type::Mode     },
             { "WGLIR", Opm::EclIO::SummaryNode::Type::Rate     },
+
+            { "WOPP",  Opm::EclIO::SummaryNode::Type::Pressure },
+            { "WWPP",  Opm::EclIO::SummaryNode::Type::Pressure },
+
+            { "WOPR",  Opm::EclIO::SummaryNode::Type::Rate     },
+            { "WWPR",  Opm::EclIO::SummaryNode::Type::Rate     },
+            { "WGPR",  Opm::EclIO::SummaryNode::Type::Rate     },
+            { "WVPR",  Opm::EclIO::SummaryNode::Type::Rate     },
+
+            { "WWCT",  Opm::EclIO::SummaryNode::Type::Ratio    },
+            { "WGOR",  Opm::EclIO::SummaryNode::Type::Ratio    },
+            { "WGIR", Opm::EclIO::SummaryNode::Type::Rate },
+            //{ "WGCR",  Opm::EclIO::SummaryNode::Type::Ratio    },
+            //{ "WGCT",  Opm::EclIO::SummaryNode::Type::Ratio    },
+
+            { "WOPT",  Opm::EclIO::SummaryNode::Type::Total    },
+            { "WWPT",  Opm::EclIO::SummaryNode::Type::Total    },
+            { "WGPT",  Opm::EclIO::SummaryNode::Type::Total    },
+            { "WVPT",  Opm::EclIO::SummaryNode::Type::Total    },
+
+            { "WOPTS", Opm::EclIO::SummaryNode::Type::Total    },
+            { "WGPTS", Opm::EclIO::SummaryNode::Type::Total    },
+
+            { "WWIT",  Opm::EclIO::SummaryNode::Type::Total    },
+            { "WGIT",  Opm::EclIO::SummaryNode::Type::Total    },
+            { "WVIT",  Opm::EclIO::SummaryNode::Type::Total    },
+
+            //{ "WGIMR", Opm::EclIO::SummaryNode::Type::Rate     },
+            //{ "WGIMT", Opm::EclIO::SummaryNode::Type::Total    },
+
+            { "WOPTH", Opm::EclIO::SummaryNode::Type::Total    },
+            { "WWPTH", Opm::EclIO::SummaryNode::Type::Total    },
+            { "WGPTH", Opm::EclIO::SummaryNode::Type::Total    },
+
+            { "WWITH", Opm::EclIO::SummaryNode::Type::Total    },
+            { "WGITH", Opm::EclIO::SummaryNode::Type::Total    },
+
+
+
         };
         const auto extra_group_vectors = std::vector<ParamCTorArgs> {
             { "GOPGR", Opm::EclIO::SummaryNode::Type::Rate },
@@ -282,29 +333,58 @@ namespace {
                 };
 
             // Recall: Cannot use emplace_back() for PODs.
-            std::transform(vectors.begin(), vectors.end(),
-                           std::back_inserter(entities), toNode);
+            std::ranges::transform(vectors, std::back_inserter(entities), toNode);
 
             kwp = "";
-            std::transform(extra_vectors.begin(), extra_vectors.end(),
-                           std::back_inserter(entities), toNode);
+            std::ranges::transform(extra_vectors, std::back_inserter(entities), toNode);
         };
 
+        auto makeTracerEntities = [&entities, &trConfig]
+            (   const char kwpref,
+                const Cat cat,
+                const std::vector<ParamCTorArgs>& tracer_vectors,
+                const std::string& name,
+                const bool isTemp
+            )
+        {
+            const auto dflt_num = Opm::EclIO::SummaryNode::default_number;
+            std::string kwp(1, kwpref);
+            for (const auto& tvec : tracer_vectors) {
+                if (isTemp) {
+                    entities.push_back(Opm::EclIO::SummaryNode({kwp + tvec.kw + "HEA", cat,
+                                                                tvec.type, name, dflt_num, {}, {}}));
+                }
+                for (const auto& tracer : trConfig) {
+                    entities.push_back(Opm::EclIO::SummaryNode({kwp + tvec.kw + tracer.name, cat,
+                                                                tvec.type, name, dflt_num, {}, {}}));
+                    if (tracer.phase == ::Opm::Phase::OIL || tracer.phase == ::Opm::Phase::GAS) {
+                        entities.push_back(Opm::EclIO::SummaryNode({kwp + tvec.kw + "F" + tracer.name, cat,
+                                                                    tvec.type, name, dflt_num, {}, {}}));
+                        entities.push_back(Opm::EclIO::SummaryNode({kwp + tvec.kw + "S" + tracer.name, cat,
+                                                                    tvec.type, name, dflt_num, {}, {}}));
+                    }
+                }
+            }
+        };
+
+        const bool isTemp = sched.runspec().temp();
         for (const auto& well_name : sched.wellNames()) {
             makeEntities('W', Cat::Well, extra_well_vectors, well_name);
+            makeTracerEntities('W', Cat::Well, required_tracer_vectors, well_name, isTemp);
 
             const auto& well = sched.getWellatEnd(well_name);
             for (const auto& conn : well.getConnections()) {
-                std::transform(extra_connection_vectors.begin(), extra_connection_vectors.end(),
-                               std::back_inserter(entities),
-                               [&well, &conn](const auto& conn_vector) -> Opm::EclIO::SummaryNode
-                               {
-                                   return {conn_vector.kw,
-                                           Cat::Connection,
-                                           conn_vector.type,
-                                           well.name(),
-                                           static_cast<int>(conn.global_index() + 1), {}, {}};
-                               });
+                std::ranges::transform(extra_connection_vectors, std::back_inserter(entities),
+                                       [&well, &conn](const auto& conn_vector) -> Opm::EclIO::SummaryNode
+                                       {
+                                           return {
+                                               conn_vector.kw,
+                                               Cat::Connection,
+                                               conn_vector.type,
+                                               well.name(),
+                                               static_cast<int>(conn.global_index() + 1), {}, {}
+                                           };
+                                       });
             }
         }
 
@@ -348,13 +428,19 @@ namespace {
             const auto  nSeg  = static_cast<int>(well.getSegments().size());
 
             for (auto segID = 0*nSeg + 1; segID <= nSeg; ++segID) {
-                std::transform(vectors.begin(), vectors.end(),
-                               std::back_inserter(entities),
-                               [&wname, &segID](const auto& vector) -> Opm::EclIO::SummaryNode
-                               {
-                                   return {vector.kw, Cat::Segment,
-                                           vector.type, wname, segID, {}, {} };
-                               });
+                std::ranges::transform(vectors, std::back_inserter(entities),
+                                       [&wname, &segID](const auto& vector) -> Opm::EclIO::SummaryNode
+                                       {
+                                           return {
+                                               vector.kw,
+                                               Cat::Segment,
+                                               vector.type,
+                                               wname,
+                                               segID,
+                                               {},
+                                               {}
+                                           };
+                                       });
             }
         };
 
@@ -388,13 +474,19 @@ namespace {
         using Cat = Opm::EclIO::SummaryNode::Category;
 
         for (const auto& aquiferID : aquiferIDs) {
-            std::transform(vectors.begin(), vectors.end(),
-                           std::back_inserter(entities),
-                           [&aquiferID](const auto& vector) -> Opm::EclIO::SummaryNode
-                           {
-                               return {vector.kw, Cat::Aquifer,
-                                       vector.type, "", aquiferID, {}, {}};
-                           });
+            std::ranges::transform(vectors, std::back_inserter(entities),
+                                   [&aquiferID](const auto& vector) -> Opm::EclIO::SummaryNode
+                                   {
+                                       return {
+                                           vector.kw,
+                                           Cat::Aquifer,
+                                           vector.type,
+                                           "",
+                                           aquiferID,
+                                           {},
+                                           {}
+                                       };
+                                   });
         }
 
         return entities;
@@ -414,13 +506,19 @@ namespace {
         using Cat = Opm::EclIO::SummaryNode::Category;
 
         for (const auto& aquiferID : aquiferIDs) {
-            std::transform(vectors.begin(), vectors.end(),
-                           std::back_inserter(entities),
-                           [&aquiferID](const auto& vector) -> Opm::EclIO::SummaryNode
-                           {
-                               return {vector.kw, Cat::Aquifer,
-                                       vector.type, "", aquiferID, {}, {}};
-                           });
+            std::ranges::transform(vectors, std::back_inserter(entities),
+                                   [&aquiferID](const auto& vector) -> Opm::EclIO::SummaryNode
+                                   {
+                                       return {
+                                           vector.kw,
+                                           Cat::Aquifer,
+                                           vector.type,
+                                           "",
+                                           aquiferID,
+                                           {},
+                                           {}
+                                       };
+                                   });
         }
 
         return entities;
@@ -451,38 +549,38 @@ constexpr const bool producer = false;
  * unit conversion. This removes a lot of boilerplate. ad-hoc solution to poor
  * unit support in general.
  */
-measure div_unit( measure denom, measure div ) {
-    if( denom == measure::gas_surface_rate &&
-        div   == measure::liquid_surface_rate )
+measure div_unit( measure numer, measure denom ) {
+    if( numer == measure::gas_surface_rate &&
+        denom == measure::liquid_surface_rate )
         return measure::gas_oil_ratio;
 
-    if( denom == measure::liquid_surface_rate &&
-        div   == measure::gas_surface_rate )
+    if( numer == measure::liquid_surface_rate &&
+        denom == measure::gas_surface_rate )
         return measure::oil_gas_ratio;
 
-    if( denom == measure::liquid_surface_rate &&
-        div   == measure::liquid_surface_rate )
+    if( numer == measure::liquid_surface_rate &&
+        denom == measure::liquid_surface_rate )
         return measure::water_cut;
 
-    if( denom == measure::liquid_surface_rate &&
-        div   == measure::time )
-        return measure::liquid_surface_volume;
+    if( numer == measure::liquid_surface_volume &&
+        denom == measure::time )
+        return measure::liquid_surface_rate;
 
-    if( denom == measure::gas_surface_rate &&
-        div   == measure::time )
-        return measure::gas_surface_volume;
+    if( numer == measure::gas_surface_volume &&
+        denom == measure::time )
+        return measure::gas_surface_rate;
 
-    if( denom == measure::mass_rate &&
-        div   == measure::time )
-        return measure::mass;
+    if( numer == measure::mass &&
+        denom == measure::time )
+        return measure::mass_rate;
 
-    if( denom == measure::mass_rate &&
-        div   == measure::liquid_surface_rate )
-        return measure::polymer_density;
+    if( numer == measure::mass_rate &&
+        denom == measure::liquid_surface_rate )
+        return measure::concentration;
 
-    if( denom == measure::energy_rate &&
-        div   == measure::time )
-        return measure::energy;
+    if( numer == measure::energy &&
+        denom == measure::time )
+        return measure::energy_rate;
 
     return measure::identity;
 }
@@ -575,8 +673,8 @@ struct fn_args
     const Opm::out::RegionCache& regionCache;
     const Opm::EclipseGrid& grid;
     const Opm::Schedule& schedule;
-    const std::vector< std::pair< std::string, double > > eff_factors;
-    const std::optional<Opm::Inplace>& initial_inplace;
+    const std::vector<std::pair<std::string, double>> eff_factors{};
+    const Opm::Inplace* initial_inplace{nullptr};
     const Opm::Inplace& inplace;
     const Opm::UnitSystem& unit_system;
 };
@@ -618,6 +716,9 @@ template<> constexpr
 measure rate_unit< rt::mass_gas >() { return measure::mass_rate; }
 
 template<> constexpr
+measure rate_unit< rt::mass_wat >() { return measure::mass_rate; }
+
+template<> constexpr
 measure rate_unit< rt::microbial >() { return measure::mass_rate; }
 
 template<> constexpr
@@ -643,6 +744,9 @@ measure rate_unit< rt::well_potential_oil >() { return measure::liquid_surface_r
 
 template<> constexpr
 measure rate_unit< rt::well_potential_gas >() { return measure::gas_surface_rate; }
+
+template<> constexpr
+measure rate_unit< rt::energy >() { return measure::energy_rate; }
 
 template <> constexpr
 measure rate_unit<Opm::data::GuideRateValue::Item::Gas>() { return measure::gas_surface_rate; }
@@ -676,11 +780,9 @@ template <>
 
 double efac( const std::vector<std::pair<std::string,double>>& eff_factors, const std::string& name)
 {
-    auto it = std::find_if(eff_factors.begin(), eff_factors.end(),
-        [&name](const std::pair<std::string, double>& elem)
-    {
-        return elem.first == name;
-    });
+    const auto it = std::ranges::find_if(eff_factors,
+                                         [&name](const auto& elem)
+                                         { return elem.first == name; });
 
     return (it != eff_factors.end()) ? it->second : 1.0;
 }
@@ -699,31 +801,160 @@ alq_type(const Opm::ScheduleState&            sched_state,
     return sched_state.vfpprod(vfp_table_number).getALQType();
 }
 
-inline double accum_groups(const rt phase,
-                           const Opm::Schedule& schedule,
-                           const std::size_t sim_step,
-                           const std::string& gr_name)
+template <rt phase>
+double satellite_prod(const Opm::SummaryState&  st,
+                      const Opm::ScheduleState& sched,
+                      const std::string&        group)
 {
-    if (!schedule.hasGroup(gr_name, sim_step)) {
+    using Rate = Opm::GSatProd::GSatProdGroupProp::Rate;
+
+    const auto& gsatprod = sched.gsatprod();
+
+    if (! gsatprod.has(group)) {
         return 0.0;
     }
-    const auto& top_group = schedule.getGroup(gr_name, sim_step);
-    double sum = std::accumulate(top_group.groups().begin(),
-                                 top_group.groups().end(), 0.0,
-                                 [&schedule, phase, sim_step](const double acc, const auto& child)
-                                 { return acc + accum_groups(phase, schedule, sim_step, child); });
-    const auto& gsatprod = schedule[sim_step].gsatprod.get();
-    if (gsatprod.has(gr_name)) {
-        const auto& gs = gsatprod.get(gr_name);
-        using Rate = Opm::GSatProd::GSatProdGroup::Rate;
-        if (phase == rt::oil)
-            sum += gs.rate[Rate::Oil];
-        else if (phase == rt::gas)
-            sum += gs.rate[Rate::Gas];
-        else if (phase == rt::wat)
-            sum += gs.rate[Rate::Water];
+
+    const auto gs = gsatprod.get(group, st);
+
+    if constexpr (phase == rt::oil) {
+        return gs.rate[Rate::Oil];
     }
-    return sum;
+    else if constexpr (phase == rt::gas) {
+        return gs.rate[Rate::Gas];
+    }
+    else if constexpr (phase == rt::wat) {
+        return gs.rate[Rate::Water];
+    }
+    else if constexpr (phase == rt::alq) {
+        return gs.rate[Rate::GLift];
+    }
+
+    return 0.0;
+}
+
+template <rt phase>
+double satellite_inj(const Opm::ScheduleState& sched, const std::string& group)
+{
+    if (! sched.satelliteInjection.has(group)) {
+        return 0.0;
+    }
+
+    auto irate = [&gsatinje = sched.satelliteInjection(group)](const Opm::Phase p)
+    {
+        const auto ix = gsatinje.rateIndex(p);
+        if (! ix.has_value()) { return 0.0; }
+
+        const auto& q = gsatinje[*ix].surface();
+
+        return q.has_value() ? *q : 0.0;
+    };
+
+    if constexpr (phase == rt::oil) {
+        return irate(Opm::Phase::OIL);
+    }
+    else if constexpr (phase == rt::gas) {
+        return irate(Opm::Phase::GAS);
+    }
+    else if constexpr (phase == rt::wat) {
+        return irate(Opm::Phase::WATER);
+    }
+
+    return 0.0;
+}
+
+inline double cumulativeSatelliteEffFactor(const Opm::ScheduleState& sched,
+                                           const std::string&        gr_name)
+{
+    if (!sched.groups.has(gr_name)) { return 1.0; }
+
+    auto isField = [](const std::string& group)
+    { return group.empty() || (group == "FIELD"); };
+
+    if (isField(gr_name)) { return 1.0; }
+
+    const auto* grp = &sched.groups(gr_name);
+
+    auto efac = grp->getGroupEfficiencyFactor();
+
+    while (true) {
+        const auto& parent = grp->flow_group();
+
+        if (!parent.has_value() || isField(*parent)) {
+            // No efficiency factor on FIELD.
+            break;
+        }
+
+        grp = &sched.groups(*parent);
+
+        efac *= grp->getGroupEfficiencyFactor();
+    }
+
+    return efac;
+}
+
+template <typename SatelliteRate>
+double accum_groups(const Opm::ScheduleState& sched,
+                    const std::string&        gr_name,
+                    const double              efac,
+                    SatelliteRate&&           sat_rate)
+{
+    if (! sched.groups.has(gr_name)) {
+        return 0.0;
+    }
+
+    const auto& children = sched.groups(gr_name).groups();
+
+    return efac * std::accumulate(children.begin(), children.end(),
+                                  sat_rate(gr_name),
+                                  [&sched, &sat_rate]
+                                  (const double acc, const auto& child)
+                                  {
+                                      const auto efacDowntree = sched.groups(child)
+                                          .getGroupEfficiencyFactor();
+
+                                      return acc + accum_groups(sched, child,
+                                                                efacDowntree,
+                                                                sat_rate);
+                                  });
+}
+
+template <rt phase, bool injection, bool cumulativeSatellite>
+double satellite_rate(const fn_args& args)
+{
+    const auto& sched = args.schedule[args.sim_step];
+
+    const auto satRate = [is_cumulative = cumulativeSatellite,
+                          &sched, &gname = args.group_name]
+        (const auto& group_sat_rate)
+    {
+        // Distinguish between the rate and cumulative cases when including
+        // rates from satellite groups.  In particular, when computing
+        // cumulatives, we need to include all efficiency factors imposed at
+        // higher levels in the group tree.  Otherwise, we need only include
+        // down-tree efficiency factors.
+
+        const auto efac = !is_cumulative
+            ? 1.0
+            : cumulativeSatelliteEffFactor(sched, gname);
+
+        return accum_groups(sched, gname, efac, group_sat_rate);
+    };
+
+    if (!injection && !sched.gsatprod().empty()) {
+        // Down-tree satellite production rates.
+
+        return satRate([&st = args.st, &sched](const std::string& gname)
+        { return satellite_prod<phase>(st, sched, gname); });
+    }
+    else if (injection && (sched.satelliteInjection.size() > 0)) {
+        // Down-tree satellite injection rates.
+
+        return satRate([&sched](const std::string& gname)
+        { return satellite_inj<phase>(sched, gname); });
+    }
+
+    // Neither satellite injection nor satellite production.  Rate is zero.
+    return 0.0;
 }
 
 inline quantity artificial_lift_quantity( const fn_args& args ) {
@@ -776,9 +1007,6 @@ inline quantity artificial_lift_quantity( const fn_args& args ) {
 }
 
 inline quantity glir( const fn_args& args ) {
-    if (args.schedule_wells.empty()) {
-        return { 0.0, measure::gas_surface_rate };
-    }
 
     const auto& sched_state = args.schedule[args.sim_step];
 
@@ -816,12 +1044,14 @@ inline quantity glir( const fn_args& args ) {
             alq_rate -= eff_fac * glr * (wpr + opr);
         }
     }
+    alq_rate += satellite_rate<rt::alq, false, true>(args);
 
     return { alq_rate, measure::gas_surface_rate };
 }
 
-template< rt phase, bool injection = true >
-inline quantity rate( const fn_args& args ) {
+template <rt phase, bool injection = true, bool cumulativeSatellite = false>
+inline quantity rate(const fn_args& args)
+{
     double sum = 0.0;
 
     for (const auto* sched_well : args.schedule_wells) {
@@ -846,113 +1076,67 @@ inline quantity rate( const fn_args& args ) {
         sum *= -1.0;
     }
 
-    const auto& gsatprod = args.schedule[args.sim_step].gsatprod.get();
-    // If gsatprod is given for a group we need to add the satelite production
-    // This is only done for production groups i.e. !args.group_name.empty() and
-    // !injection
-    if (!injection && gsatprod.size() > 0 && !args.group_name.empty()) {
-        sum += accum_groups(phase, args.schedule, args.sim_step, args.group_name);
+    if (! args.group_name.empty()) {
+        sum += satellite_rate<phase, injection, cumulativeSatellite>(args);
     }
 
-    if (phase == rt::polymer || phase == rt::brine) {
+    if ((phase == rt::polymer) || (phase == rt::brine)) {
         return { sum, measure::mass_rate };
     }
 
     return { sum, rate_unit< phase >() };
 }
 
-
-template <bool injection = true>
-inline quantity filtrate_connection_quantities( const fn_args& args ) {
-
-    static const auto conn_quant =
-            std::unordered_map<std::string, std::pair<measure, double Opm::data::ConnectionFiltrate::*> >{
-                    {"CINJFVR",  {measure::geometric_volume_rate, &Opm::data::ConnectionFiltrate::rate}},
-                    {"CINJFVT",  {measure::geometric_volume,      &Opm::data::ConnectionFiltrate::total}},
-                    {"CFCWIDTH", {measure::length,                &Opm::data::ConnectionFiltrate::thickness}},
-                    {"CFCSKIN",  {measure::identity,              &Opm::data::ConnectionFiltrate::skin_factor}},
-                    {"CFCPORO",  {measure::identity,              &Opm::data::ConnectionFiltrate::poro}},
-                    {"CFCPERM",  {measure::permeability,          &Opm::data::ConnectionFiltrate::perm}},
-                    {"CFCRAD",   {measure::length,                &Opm::data::ConnectionFiltrate::radius}},
-                    {"CFCAOF",   {measure::area,                  &Opm::data::ConnectionFiltrate::area_of_flow}}
-            };
-
-    auto quant_pos = conn_quant.find(args.keyword_name);
-
-    if (quant_pos == conn_quant.end()) {
-        throw std::logic_error{
-                fmt::format("Unsupported connection summary keyword {} "
-                            "for filtrate injection modeling", args.keyword_name)
-        };
-    }
-
-    const auto& [unit, quant_ptr] = quant_pos->second;
-
-    const quantity zero = { 0., unit };
-
+template <bool injection>
+const Opm::data::Connection* findConnectionResults(const fn_args& args)
+{
     if (args.schedule_wells.empty()) {
-        return zero;
+        // Typically in the first call which configures the summary nodes.
+        return nullptr;
     }
 
-    const auto& name = args.schedule_wells.front()->name();
-    auto xwPos = args.wells.find(name);
+    const auto xwPos = args.wells.find(args.schedule_wells.front()->name());
     if ((xwPos == args.wells.end()) ||
         (xwPos->second.dynamicStatus == Opm::Well::Status::SHUT) ||
         (xwPos->second.current_control.isProducer == injection))
     {
-        return zero;
+        return nullptr;
     }
 
-    // The args.num value is the literal value which will go to the
-    // NUMS array in the eclipse SMSPEC file; the values in this array
-    // are offset 1 - whereas we need to use this index here to look
-    // up a connection with offset 0.
-    const size_t global_index = args.num - 1;
-    const auto& well_data = xwPos->second;
-    const auto& connection =
-            std::find_if(well_data.connections.begin(),
-                         well_data.connections.end(),
-                         [global_index](const Opm::data::Connection& c)
-                         {
-                             return c.index == global_index;
-                         });
-
-    if (connection == well_data.connections.end()) {
-        return zero;
-    }
-
-    return {connection->filtrate.*quant_ptr, unit };
+    return xwPos->second.find_connection(args.num - 1);
 }
 
-template <bool injection = true>
-inline quantity filtrate_well_quantities( const fn_args& args ) {
+template <double Opm::data::ConnectionFracture::* q, measure unit, bool injection = true>
+inline quantity fracture_connection_quantities(const fn_args& args)
+{
+    const auto* connection = findConnectionResults<injection>(args);
 
-    static const auto well_quant =
-            std::unordered_map<std::string, std::pair<measure, double Opm::data::WellFiltrate::*> > {
-                    {"WINJFVR", {measure::geometric_volume_rate, &Opm::data::WellFiltrate::rate}},
-                    {"WINJFVT", {measure::geometric_volume,      &Opm::data::WellFiltrate::total}},
-                    {"WINJFC",  {measure::ppm,                   &Opm::data::WellFiltrate::concentration}}
-            };
+    return (connection == nullptr)
+        ? quantity { 0.0, unit }
+        : quantity { connection->fracture.*q, unit };
+}
 
-    auto quant_pos = well_quant.find(args.keyword_name);
+template <double Opm::data::ConnectionFiltrate::* q, measure unit, bool injection = true>
+inline quantity filtrate_connection_quantities(const fn_args& args)
+{
+    const auto* connection = findConnectionResults<injection>(args);
 
-    if (quant_pos == well_quant.end()) {
-        throw std::logic_error{
-                fmt::format("Unsupported well summary keyword {} "
-                            "for filtrate injection modeling", args.keyword_name)
-        };
-    }
+    return (connection == nullptr)
+        ? quantity { 0.0, unit }
+        : quantity { connection->filtrate.*q, unit };
+}
 
-
-    const auto& [unit, quant_ptr] = quant_pos->second;
-    const quantity zero {0., unit};
+template <double Opm::data::WellFiltrate::* q, measure unit, bool injection = true>
+inline quantity filtrate_well_quantities(const fn_args& args)
+{
+    const auto zero = quantity { 0.0, unit };
 
     if (args.schedule_wells.empty()) {
+        // Typically in the first call which configures the summary nodes.
         return zero;
     }
 
-    const auto& name = args.schedule_wells.front()->name();
-    auto xwPos = args.wells.find(name);
+    auto xwPos = args.wells.find(args.schedule_wells.front()->name());
     if ((xwPos == args.wells.end()) ||
         (xwPos->second.dynamicStatus == Opm::Well::Status::SHUT) ||
         (xwPos->second.current_control.isProducer == injection))
@@ -960,14 +1144,13 @@ inline quantity filtrate_well_quantities( const fn_args& args ) {
         return zero;
     }
 
-    const auto& well_filtrate = xwPos->second.filtrate;
-    return {well_filtrate.*quant_ptr, unit};
+    return { xwPos->second.filtrate.*q, unit };
 }
 
 template< rt tracer, rt phase, bool injection = true >
 inline quantity ratetracer( const fn_args& args ) {
     double sum = 0.0;
-    
+
     // All well-related tracer keywords, e.g. WTPCxx, WTPRxx, FTPTxx, have a 4-letter prefix length
     constexpr auto prefix_len = 4;
     std::string tracer_name = args.keyword_name.substr(prefix_len);
@@ -1026,12 +1209,9 @@ inline quantity ratel( const fn_args& args ) {
     for (const auto* conn_ptr : connections) {
         const size_t global_index = conn_ptr->global_index();
         const auto& conn_data =
-            std::find_if(well_data.connections.begin(),
-                         well_data.connections.end(),
-                [global_index](const Opm::data::Connection& cdata)
-            {
-                return cdata.index == global_index;
-            });
+            std::ranges::find_if(well_data.connections,
+                                 [global_index](const Opm::data::Connection& cdata)
+                                 { return cdata.index == global_index; });
 
         if (conn_data != well_data.connections.end()) {
             sum += conn_data->rates.get(phase, 0.0) * eff_fac;
@@ -1063,12 +1243,9 @@ inline quantity cpr( const fn_args& args ) {
 
     const auto& well_data = xwPos->second;
     const auto& connection =
-        std::find_if(well_data.connections.begin(),
-                     well_data.connections.end(),
-            [global_index](const Opm::data::Connection& c)
-        {
-            return c.index == global_index;
-        });
+        std::ranges::find_if(well_data.connections,
+                             [global_index](const Opm::data::Connection& c)
+                             { return c.index == global_index; });
 
     if (connection == well_data.connections.end())
         return zero;
@@ -1105,28 +1282,25 @@ inline quantity cratel( const fn_args& args ) {
     const auto& well_data = xwPos->second;
     const double eff_fac = efac(args.eff_factors, name);
 
-    double sum = 0;
+    double lsum = 0.0;
     const auto& connections = well->getConnections(*complnum);
     for (const auto& conn_ptr : connections) {
         const size_t global_index = conn_ptr->global_index();
         const auto& conn_data =
-            std::find_if(well_data.connections.begin(),
-                         well_data.connections.end(),
-                [global_index] (const Opm::data::Connection& cdata)
-            {
-                return cdata.index == global_index;
-            });
+            std::ranges::find_if(well_data.connections,
+                                 [global_index] (const Opm::data::Connection& cdata)
+                                 { return cdata.index == global_index; });
 
         if (conn_data != well_data.connections.end()) {
-            sum += conn_data->rates.get( phase, 0.0 ) * eff_fac;
+            lsum += conn_data->rates.get( phase, 0.0 ) * eff_fac;
         }
     }
 
     if (! injection) {
-        sum *= -1;
+        lsum *= -1;
     }
 
-    return { sum, unit };
+    return { lsum, unit };
 }
 
 template <Opm::data::ConnectionFracturing::Statistics Opm::data::ConnectionFracturing::* q,
@@ -1152,12 +1326,9 @@ quantity connFracStatistics(const fn_args& args)
 
     const auto& well_data = xwPos->second;
     const auto connPos =
-        std::find_if(well_data.connections.begin(),
-                     well_data.connections.end(),
-            [global_index](const Opm::data::Connection& c)
-        {
-            return c.index == global_index;
-        });
+        std::ranges::find_if(well_data.connections,
+                             [global_index](const Opm::data::Connection& c)
+                             { return c.index == global_index; });
 
     if ((connPos == well_data.connections.end()) ||
         (connPos->fract.numCells == 0))
@@ -1180,10 +1351,10 @@ inline quantity flowing( const fn_args& args ) {
             && xwPos->second.flowing();
     };
 
-    return { double( std::count_if( args.schedule_wells.begin(),
-                                    args.schedule_wells.end(),
-                                    pred ) ),
-             measure::identity };
+    return {
+        double( std::ranges::count_if(args.schedule_wells, pred)),
+        measure::identity
+    };
 }
 
 template< rt phase, bool injection = true>
@@ -1208,12 +1379,9 @@ inline quantity crate( const fn_args& args ) {
 
     const auto& well_data = xwPos->second;
     const auto& completion =
-        std::find_if(well_data.connections.begin(),
-                     well_data.connections.end(),
-            [global_index](const Opm::data::Connection& c)
-        {
-            return c.index == global_index;
-        });
+        std::ranges::find_if(well_data.connections,
+                             [global_index](const Opm::data::Connection& c)
+                             { return c.index == global_index; });
 
     if (completion == well_data.connections.end())
         return zero;
@@ -1252,12 +1420,9 @@ quantity crate_resv( const fn_args& args ) {
 
     const auto& well_data = xwPos->second;
     const auto completion =
-        std::find_if(well_data.connections.begin(),
-                     well_data.connections.end(),
-            [global_index](const Opm::data::Connection& c)
-        {
-            return c.index == global_index;
-        });
+        std::ranges::find_if(well_data.connections,
+                             [global_index](const Opm::data::Connection& c)
+                             { return c.index == global_index; });
 
     if (completion == well_data.connections.end())
         return zero;
@@ -1328,13 +1493,13 @@ inline quantity srate(const fn_args& args)
 template< rt tracer, rt phase>
 inline quantity sratetracer(const fn_args& args)
 {
-    return segment_quantity(args, rate_unit<phase>(), 
+    return segment_quantity(args, rate_unit<phase>(),
         [&args](const Opm::data::Segment& segment)
     {
         // Tracer-related keywords, STFRx and STFCx, have a 4-letter prefix length
         constexpr auto prefix_len = 4;
         std::string tracer_name = args.keyword_name.substr(prefix_len);
-        
+
         return - segment.rates.get(tracer, 0.0, tracer_name)
             * efac(args.eff_factors, args.schedule_wells.front()->name());
     });
@@ -1403,11 +1568,10 @@ inline quantity trans_factors ( const fn_args& args ) {
     // Like connection rate we need to look up a connection with offset 0.
     const size_t global_index = args.num - 1;
     const auto& connections = xwPos->second.connections;
-    auto connPos = std::find_if(connections.begin(), connections.end(),
-        [global_index](const Opm::data::Connection& c)
-    {
-        return c.index == global_index;
-    });
+    const auto connPos =
+            std::ranges::find_if(connections,
+                                 [global_index](const Opm::data::Connection& c)
+                                 { return c.index == global_index; });
 
     if (connPos == connections.end())
         // No dynamic results for this connection.
@@ -1487,24 +1651,64 @@ inline quantity bhp( const fn_args& args ) {
   hack in SummaryConfig which should ensure that this is safe.
 */
 
-quantity roew(const fn_args& args) {
-    const quantity zero = { 0, measure::identity };
-    const auto& region_name = std::get<std::string>(*args.extra_data);
-    if (!args.initial_inplace.has_value())
-        return zero;
+quantity roew(const fn_args& args)
+{
+    const auto zero = quantity { 0.0, measure::identity };
 
-    const auto& initial_inplace = args.initial_inplace.value();
-    if (!initial_inplace.has( region_name, Opm::Inplace::Phase::OIL, args.num))
+    if ((args.initial_inplace == nullptr) ||
+        ! args.extra_data.has_value() ||
+        ! std::holds_alternative<std::string>(*args.extra_data))
+    {
         return zero;
+    }
+
+    const auto& region_name = std::get<std::string>(*args.extra_data);
+
+    if (! args.initial_inplace->has(region_name, Opm::Inplace::Phase::OIL, args.num)) {
+        return zero;
+    }
 
     double oil_prod = 0;
     for (const auto& [well, global_index] : args.regionCache.connections(region_name, args.num)) {
-        const auto copt_key = fmt::format("COPT:{}:{}" , well, global_index + 1);
-        if (args.st.has(copt_key))
+        const auto copt_key = fmt::format("COPT:{}:{}", well, global_index + 1);
+
+        if (args.st.has(copt_key)) {
             oil_prod += args.st.get(copt_key);
+        }
     }
+
     oil_prod = args.unit_system.to_si(Opm::UnitSystem::measure::volume, oil_prod);
-    return { oil_prod / initial_inplace.get( region_name, Opm::Inplace::Phase::OIL, args.num ) , measure::identity };
+
+    return {
+        oil_prod / args.initial_inplace->get(region_name, Opm::Inplace::Phase::OIL, args.num),
+        measure::identity
+    };
+}
+
+quantity roe(const fn_args& args)
+{
+    const auto zero = quantity { 0.0, measure::identity };
+
+    if ((args.initial_inplace == nullptr) ||
+        ! args.extra_data.has_value() ||
+        ! std::holds_alternative<std::string>(*args.extra_data))
+    {
+        return zero;
+    }
+
+    const auto& region_name = std::get<std::string>(*args.extra_data);
+
+    if (! args.initial_inplace->has(region_name, Opm::Inplace::Phase::OIL, args.num)) {
+        return zero;
+    }
+
+    const auto initial = args.initial_inplace->get(region_name, Opm::Inplace::Phase::OIL, args.num);
+    if (initial < 1.0e-15) {
+        return zero;
+    }
+
+    const auto current = args.inplace.get(region_name, Opm::Inplace::Phase::OIL, args.num);
+    return { (initial - current) / initial, measure::identity };
 }
 
 template <bool injection = true>
@@ -1813,8 +2017,16 @@ inline quantity duration( const fn_args& args ) {
 }
 
 template<rt phase , bool injection>
-quantity region_rate( const fn_args& args ) {
+quantity region_rate( const fn_args& args )
+{
     double sum = 0;
+
+    if (! args.extra_data.has_value() ||
+        ! std::holds_alternative<std::string>(*args.extra_data))
+    {
+        return { sum, rate_unit<phase>() };
+    }
+
     const auto& well_connections = args.regionCache.connections( std::get<std::string>(*args.extra_data), args.num );
 
     for (const auto& pair : well_connections) {
@@ -1838,8 +2050,16 @@ quantity region_rate( const fn_args& args ) {
         return { -sum, rate_unit< phase >() };
 }
 
-quantity rhpv(const fn_args& args) {
+quantity rhpv(const fn_args& args)
+{
+    if (! args.extra_data.has_value() ||
+        ! std::holds_alternative<std::string>(*args.extra_data))
+    {
+        return { 0.0, measure::volume };
+    }
+
     const auto& inplace = args.inplace;
+
     const auto& region_name = std::get<std::string>(*args.extra_data);
     if (inplace.has( region_name, Opm::Inplace::Phase::HydroCarbonPV, args.num ))
         return { inplace.get( region_name, Opm::Inplace::Phase::HydroCarbonPV, args.num ), measure::volume };
@@ -1881,30 +2101,43 @@ quantity well_block_average_prod_index(const fn_args& args)
     // Note: This WPIn evaluation function is supported only at the well
     // level.  There is intentionally no loop over args.schedule_wells.
 
-    const auto unit = rate_unit<rt::productivity_index_oil>();
-    const quantity zero = { 0.0, unit };
+    const auto zero = quantity { 0.0, rate_unit<rt::productivity_index_oil>() };
 
     if (args.schedule_wells.empty()) {
         return zero;
     }
 
-    const auto& name = args.schedule_wells.front()->name();
+    const auto* well = args.schedule_wells.front();
 
-    auto xwPos = args.wells.find(name);
+    auto xwPos = args.wells.find(well->name());
     if ((xwPos == args.wells.end()) ||
         (xwPos->second.dynamicStatus == Opm::Well::Status::SHUT))
     {
         return zero;
     }
 
-    auto p = args.wbp.values.find(args.schedule_wells.front()->name());
+    auto p = args.wbp.values.find(well->name());
     if (p == args.wbp.values.end()) {
         return zero;
     }
 
-    // Rt::oil is intentional.
-    const auto eff_fac = efac(args.eff_factors, name);
-    const auto q  = xwPos->second.rates.get(rt::oil, 0.0) * eff_fac;
+    const auto& [rate_quant, unit] = [preferred_phase = well->getPreferredPhase()]()
+    {
+        switch (preferred_phase) {
+        case Opm::Phase::GAS:
+            return std::pair { rt::gas, rate_unit<rt::productivity_index_gas>() };
+
+        case Opm::Phase::WATER:
+            return std::pair { rt::wat, rate_unit<rt::productivity_index_water>() };
+
+        default:
+            return std::pair { rt::oil, rate_unit<rt::productivity_index_oil>() };
+        }
+    }();
+
+    const auto q = xwPos->second.rates.get(rate_quant, 0.0)
+        * efac(args.eff_factors, well->name());
+
     const auto dp = p->second[wbp_quantity] - xwPos->second.bhp;
 
     return { - q / dp, unit };
@@ -1975,12 +2208,10 @@ inline quantity connection_productivity_index(const fn_args& args)
     const auto global_index = static_cast<std::size_t>(args.num) - 1;
 
     const auto& xcon = xwPos->second.connections;
-    const auto& completion =
-        std::find_if(xcon.begin(), xcon.end(),
-            [global_index](const Opm::data::Connection& c)
-        {
-            return c.index == global_index;
-        });
+    const auto completion =
+        std::ranges::find_if(xcon,
+                             [global_index](const Opm::data::Connection& c)
+                             { return c.index == global_index; });
 
     if (completion == xcon.end())
         return zero;
@@ -2354,6 +2585,7 @@ static const auto funs = std::unordered_map<std::string, ofun> {
     { "WEPR", rate< rt::energy, producer > },
     { "WTPRHEA", rate< rt::energy, producer > },
     { "WGLIR", glir},
+    { "WGLIT", mul ( glir, duration ) },
     { "WALQ", artificial_lift_quantity },
     { "WNPR", rate< rt::solvent, producer > },
     { "WCPR", rate< rt::polymer, producer > },
@@ -2435,9 +2667,15 @@ static const auto funs = std::unordered_map<std::string, ofun> {
     { "WSTAT", wstat },
     { "WBHP", bhp },
     { "WTHP", thp },
-    { "WINJFVR", filtrate_well_quantities<injector> },
-    { "WINJFVT", filtrate_well_quantities<injector> },
-    { "WINJFC", filtrate_well_quantities<injector> },
+
+    // Well level filter cake quantities (OPM extension)
+    { "WINJFVR", filtrate_well_quantities<&Opm::data::WellFiltrate::rate,
+      measure::geometric_volume_rate, injector> },
+    { "WINJFVT", filtrate_well_quantities<&Opm::data::WellFiltrate::total,
+      measure::geometric_volume, injector> },
+    { "WINJFC", filtrate_well_quantities<&Opm::data::WellFiltrate::concentration,
+      measure::ppm, injector> },
+
     { "WBP" , well_block_average_pressure<Opm::data::WellBlockAvgPress::Quantity::WBP>  },
     { "WBP4", well_block_average_pressure<Opm::data::WellBlockAvgPress::Quantity::WBP4> },
     { "WBP5", well_block_average_pressure<Opm::data::WellBlockAvgPress::Quantity::WBP5> },
@@ -2474,9 +2712,10 @@ static const auto funs = std::unordered_map<std::string, ofun> {
     { "GGIGR", group_guiderate<injector, Opm::data::GuideRateValue::Item::Gas> },
     { "GWIGR", group_guiderate<injector, Opm::data::GuideRateValue::Item::Water> },
 
-    { "GWIT", mul( rate< rt::wat, injector >, duration ) },
-    { "GOIT", mul( rate< rt::oil, injector >, duration ) },
-    { "GGIT", mul( rate< rt::gas, injector >, duration ) },
+    { "GWIT", mul(rate<rt::wat, injector, /* cumulativeSatellite = */ true>, duration) },
+    { "GOIT", mul(rate<rt::oil, injector, /* cumulativeSatellite = */ true>, duration) },
+    { "GGIT", mul(rate<rt::gas, injector, /* cumulativeSatellite = */ true>, duration) },
+
     { "GEIT", mul( rate< rt::energy, injector >, duration ) },
     { "GTITHEA", mul( rate< rt::energy, injector >, duration ) },
     { "GNIT", mul( rate< rt::solvent, injector >, duration ) },
@@ -2491,6 +2730,7 @@ static const auto funs = std::unordered_map<std::string, ofun> {
     { "GEPR", rate< rt::energy, producer > },
     { "GTPRHEA", rate< rt::energy, producer > },
     { "GGLIR", glir },
+    { "GGLIT", mul( glir, duration) },
     { "GNPR", rate< rt::solvent, producer > },
     { "GCPR", rate< rt::polymer, producer > },
     { "GSPR", rate< rt::brine, producer > },
@@ -2512,13 +2752,24 @@ static const auto funs = std::unordered_map<std::string, ofun> {
     { "GGIMR", gas_import_rate },
     { "GGIMT", mul( mul( gas_import_rate, group_efficiency_factor ), duration ) },
 
+    { "GSGR", sum(  sub( rate< rt::gas, producer >, rate< rt::gas, injector > ),
+                    sub( gas_import_rate, gas_consumption_rate ) ) },
+    { "GGSR", sum(  sub( rate< rt::gas, producer >, rate< rt::gas, injector > ),
+                    sub( gas_import_rate, gas_consumption_rate ) ) },
+    { "GSGT", mul( mul( sum(  sub( rate< rt::gas, producer >, rate< rt::gas, injector > ),
+                    sub( gas_import_rate, gas_consumption_rate ) ), group_efficiency_factor ), duration ) },
+    { "GGST", mul( mul( sum(  sub( rate< rt::gas, producer >, rate< rt::gas, injector > ),
+                    sub( gas_import_rate, gas_consumption_rate ) ), group_efficiency_factor ), duration ) },
+
+
     { "GPR", node_pressure },
     { "NPR", converged_node_pressure },
     { "GNETPR", converged_node_pressure },
 
-    { "GWPT", mul( rate< rt::wat, producer >, duration ) },
-    { "GOPT", mul( rate< rt::oil, producer >, duration ) },
-    { "GGPT", mul( rate< rt::gas, producer >, duration ) },
+    { "GWPT", mul(rate<rt::wat, producer, /* cumulativeSatellite = */ true>, duration) },
+    { "GOPT", mul(rate<rt::oil, producer, /* cumulativeSatellite = */ true>, duration) },
+    { "GGPT", mul(rate<rt::gas, producer, /* cumulativeSatellite = */ true>, duration) },
+
     { "GEPT", mul( rate< rt::energy, producer >, duration ) },
     { "GTPTHEA", mul( rate< rt::energy, producer >, duration ) },
     { "GNPT", mul( rate< rt::solvent, producer >, duration ) },
@@ -2651,18 +2902,52 @@ static const auto funs = std::unordered_map<std::string, ofun> {
     { "CVIR", crate_resv<injector> },
     { "CCIR", crate< rt::polymer, injector > },
     { "CSIR", crate< rt::brine, injector > },
-    { "CINJFVR", filtrate_connection_quantities<injector> },
-    { "CINJFVT", filtrate_connection_quantities<injector> },
-    { "CFCSKIN",  filtrate_connection_quantities<injector> },
-    { "CFCWIDTH",  filtrate_connection_quantities<injector> },
-    { "CFCPERM",  filtrate_connection_quantities<injector> },
-    { "CFCPORO",  filtrate_connection_quantities<injector> },
-    { "CFCRAD",  filtrate_connection_quantities<injector> },
-    { "CFCAOF",  filtrate_connection_quantities<injector> },
+
+    // Filter cake quantities (OPM extension)
+    { "CINJFVR", filtrate_connection_quantities<&Opm::data::ConnectionFiltrate::rate,
+      measure::geometric_volume_rate, injector> },
+    { "CINJFVT", filtrate_connection_quantities<&Opm::data::ConnectionFiltrate::total,
+      measure::geometric_volume, injector> },
+    { "CFCWIDTH", filtrate_connection_quantities<&Opm::data::ConnectionFiltrate::thickness,
+      measure::length, injector> },
+    { "CFCSKIN", filtrate_connection_quantities<&Opm::data::ConnectionFiltrate::skin_factor,
+      measure::identity, injector> },
+    { "CFCPORO", filtrate_connection_quantities<&Opm::data::ConnectionFiltrate::poro,
+      measure::identity, injector> },
+    { "CFCPERM", filtrate_connection_quantities<&Opm::data::ConnectionFiltrate::perm,
+      measure::permeability, injector> },
+    { "CFCRAD", filtrate_connection_quantities<&Opm::data::ConnectionFiltrate::radius,
+      measure::length, injector> },
+    { "CFCAOF", filtrate_connection_quantities<&Opm::data::ConnectionFiltrate::area_of_flow,
+      measure::area, injector> },
+    { "CFCFFRAC", filtrate_connection_quantities<&Opm::data::ConnectionFiltrate::flow_factor,
+      measure::identity, injector> },
+    { "CFCFRATE", filtrate_connection_quantities<&Opm::data::ConnectionFiltrate::fracture_rate,
+      measure::geometric_volume_rate, injector> },
 
     // Hydraulic fracturing (OPM extension)
     //
-    // Fracture pressure
+    // Per fracture characteristics
+    { "CFRAREA", fracture_connection_quantities<&Opm::data::ConnectionFracture::area,
+      measure::area, injector> },
+    { "CFRFLUX", fracture_connection_quantities<&Opm::data::ConnectionFracture::flux,
+      measure::geometric_volume_rate, injector> },
+    { "CFRHEIGH", fracture_connection_quantities<&Opm::data::ConnectionFracture::height,
+      measure::length, injector> },
+    { "CFRLENGT", fracture_connection_quantities<&Opm::data::ConnectionFracture::length,
+      measure::length, injector> },
+    { "CFRWI", fracture_connection_quantities<&Opm::data::ConnectionFracture::WI,
+      measure::transmissibility, injector> },
+    { "CFRVOLUM", fracture_connection_quantities<&Opm::data::ConnectionFracture::volume,
+      measure::geometric_volume, injector> },
+    { "CFRFVOLU", fracture_connection_quantities<&Opm::data::ConnectionFracture::filter_volume,
+      measure::geometric_volume, injector> },
+    { "CFRAVGW", fracture_connection_quantities<&Opm::data::ConnectionFracture::avg_width,
+      measure::length, injector> },
+    { "CFRAVGFW", fracture_connection_quantities<&Opm::data::ConnectionFracture::avg_filter_width,
+      measure::length, injector> },
+
+    // Fracture pressure statistics
     { "CFRPMAX", connFracStatistics<&Opm::data::ConnectionFracturing::press,
       &Opm::data::ConnectionFracturing::Statistics::max, measure::pressure> },
     { "CFRPMIN", connFracStatistics<&Opm::data::ConnectionFracturing::press,
@@ -2672,7 +2957,7 @@ static const auto funs = std::unordered_map<std::string, ofun> {
     { "CFRPSTD", connFracStatistics<&Opm::data::ConnectionFracturing::press,
       &Opm::data::ConnectionFracturing::Statistics::stdev, measure::pressure> },
 
-    // Fracture injection rate
+    // Fracture injection rate statistics
     { "CFRIRMAX", connFracStatistics<&Opm::data::ConnectionFracturing::rate,
       &Opm::data::ConnectionFracturing::Statistics::max, measure::rate> },
     { "CFRIRMIN", connFracStatistics<&Opm::data::ConnectionFracturing::rate,
@@ -2682,7 +2967,7 @@ static const auto funs = std::unordered_map<std::string, ofun> {
     { "CFRIRSTD", connFracStatistics<&Opm::data::ConnectionFracturing::rate,
       &Opm::data::ConnectionFracturing::Statistics::stdev, measure::rate> },
 
-    // Fracture width
+    // Fracture width statistics
     { "CFRWDMAX", connFracStatistics<&Opm::data::ConnectionFracturing::width,
       &Opm::data::ConnectionFracturing::Statistics::max, measure::length> },
     { "CFRWDMIN", connFracStatistics<&Opm::data::ConnectionFracturing::width,
@@ -2734,6 +3019,7 @@ static const auto funs = std::unordered_map<std::string, ofun> {
     { "FEPR", rate< rt::energy, producer > },
     { "FTPRHEA", rate< rt::energy, producer > },
     { "FGLIR", glir },
+    { "FGLIT", mul( glir, duration ) },
     { "FNPR", rate< rt::solvent, producer > },
     { "FCPR", rate< rt::polymer, producer > },
     { "FSPR", rate< rt::brine, producer > },
@@ -2765,9 +3051,11 @@ static const auto funs = std::unordered_map<std::string, ofun> {
     { "FOPRF", sub (rate < rt::oil, producer >, rate< rt::vaporized_oil, producer > ) },
 
     { "FLPR", sum( rate< rt::wat, producer >, rate< rt::oil, producer > ) },
-    { "FWPT", mul( rate< rt::wat, producer >, duration ) },
-    { "FOPT", mul( rate< rt::oil, producer >, duration ) },
-    { "FGPT", mul( rate< rt::gas, producer >, duration ) },
+
+    { "FWPT", mul(rate<rt::wat, producer, /* cumSatProd = */ true>, duration) },
+    { "FOPT", mul(rate<rt::oil, producer, /* cumSatProd = */ true>, duration) },
+    { "FGPT", mul(rate<rt::gas, producer, /* cumSatProd = */ true>, duration) },
+
     { "FEPT", mul( rate< rt::energy, producer >, duration ) },
     { "FTPTHEA", mul( rate< rt::energy, producer >, duration ) },
     { "FNPT", mul( rate< rt::solvent, producer >, duration ) },
@@ -2850,6 +3138,16 @@ static const auto funs = std::unordered_map<std::string, ofun> {
     { "FGIMR", gas_import_rate },
     { "FGIMT", mul( gas_import_rate, duration ) },
 
+    { "FSGR", sum(  sub( rate< rt::gas, producer >, rate< rt::gas, injector > ),
+                    sub( gas_import_rate, gas_consumption_rate ) ) },
+    { "FGSR", sum(  sub( rate< rt::gas, producer >, rate< rt::gas, injector > ),
+                    sub( gas_import_rate, gas_consumption_rate ) ) },
+    { "FSGT", mul( sum(  sub( rate< rt::gas, producer >, rate< rt::gas, injector > ),
+                    sub( gas_import_rate, gas_consumption_rate ) ), duration ) },
+    { "FGST", mul( sum(  sub( rate< rt::gas, producer >, rate< rt::gas, injector > ),
+                    sub( gas_import_rate, gas_consumption_rate ) ), duration ) },
+
+
     // Field potential
     { "FWPP", potential_rate< rt::well_potential_water , true, false>},
     { "FOPP", potential_rate< rt::well_potential_oil , true, false>},
@@ -2926,6 +3224,7 @@ static const auto funs = std::unordered_map<std::string, ofun> {
     { "RGPT"  , mul( region_rate< rt::gas, producer >, duration ) },
     { "RWPT"  , mul( region_rate< rt::wat, producer >, duration ) },
     { "RHPV"  , rhpv },
+    { "ROE"   , roe },
 
     // Segment summary vectors for multi-segmented wells.
     { "SDENM", segment_density<Opm::data::SegmentPhaseDensity::Item::Mixture> },
@@ -2996,6 +3295,28 @@ static const auto funs = std::unordered_map<std::string, ofun> {
     {"GEFF" , group_efficiency_factor},
     {"WEFF" , well_efficiency_factor},
     {"WEFFG", well_efficiency_factor_grouptree},
+
+    // Mass water
+    { "FAMIR",  rate< rt::mass_wat, injector > },
+    { "GAMIR",  rate< rt::mass_wat, injector > },
+    { "WAMIR",  rate< rt::mass_wat, injector > },
+    { "CAMIR",  crate< rt::mass_wat, injector > },
+    { "CAMIRL", cratel< rt::mass_wat, injector > },
+    { "FAMIT",  mul( rate< rt::mass_wat, injector >, duration ) },
+    { "GAMIT",  mul( rate< rt::mass_wat, injector >, duration ) },
+    { "WAMIT",  mul( rate< rt::mass_wat, injector >, duration ) },
+    { "CAMIT",  mul( crate< rt::mass_wat, injector >, duration ) },
+    { "CAMITL", mul( cratel< rt::mass_wat, injector >, duration ) },
+    { "FAMPR",  rate< rt::mass_wat, producer > },
+    { "GAMPR",  rate< rt::mass_wat, producer > },
+    { "WAMPR",  rate< rt::mass_wat, producer > },
+    { "CAMPR",  crate< rt::mass_wat, producer > },
+    { "CAMPRL", cratel< rt::mass_wat, producer > },
+    { "FAMPT",  mul( rate< rt::mass_wat, producer >, duration ) },
+    { "GAMPT",  mul( rate< rt::mass_wat, producer >, duration ) },
+    { "WAMPT",  mul( rate< rt::mass_wat, producer >, duration ) },
+    { "CAMPT",  mul( crate< rt::mass_wat, producer >, duration ) },
+    { "CAMPTL", mul( cratel< rt::mass_wat, producer >, duration ) },
 
     // co2/h2store
     { "FGMIR",  rate< rt::mass_gas, injector > },
@@ -3130,6 +3451,7 @@ static const auto single_values_units = UnitTable {
     {"FMUIP"    , Opm::UnitSystem::measure::mass },
     {"FMBIP"    , Opm::UnitSystem::measure::mass },
     {"FMCIP"    , Opm::UnitSystem::measure::mass },
+    {"FAMIP"    , Opm::UnitSystem::measure::mass },
 };
 
 static const auto region_units = UnitTable {
@@ -3166,6 +3488,7 @@ static const auto region_units = UnitTable {
     {"RMUIP" , Opm::UnitSystem::measure::mass },
     {"RMBIP" , Opm::UnitSystem::measure::mass },
     {"RMCIP" , Opm::UnitSystem::measure::mass },
+    {"RAMIP" , Opm::UnitSystem::measure::mass },
 };
 
 static const auto interregion_units = UnitTable {
@@ -3200,6 +3523,12 @@ static const auto block_units = UnitTable {
     // Gas quantities
     {"BGDEN"    , Opm::UnitSystem::measure::density},
     {"BDENG"    , Opm::UnitSystem::measure::density},
+    {"BFLOGI"   , Opm::UnitSystem::measure::gas_surface_rate},
+    {"BFLOGI-"  , Opm::UnitSystem::measure::gas_surface_rate},
+    {"BFLOGJ"   , Opm::UnitSystem::measure::gas_surface_rate},
+    {"BFLOGJ-"  , Opm::UnitSystem::measure::gas_surface_rate},
+    {"BFLOGK"   , Opm::UnitSystem::measure::gas_surface_rate},
+    {"BFLOGK-"  , Opm::UnitSystem::measure::gas_surface_rate},
     {"BGIP"     , Opm::UnitSystem::measure::gas_surface_volume},
     {"BGIPG"    , Opm::UnitSystem::measure::gas_surface_volume},
     {"BGIPL"    , Opm::UnitSystem::measure::gas_surface_volume},
@@ -3212,10 +3541,22 @@ static const auto block_units = UnitTable {
     {"BSGAS"    , Opm::UnitSystem::measure::identity},
     {"BGVIS"    , Opm::UnitSystem::measure::viscosity},
     {"BVGAS"    , Opm::UnitSystem::measure::viscosity},
+    {"BVELGI"   , Opm::UnitSystem::measure::velocity},
+    {"BVELGI-"  , Opm::UnitSystem::measure::velocity},
+    {"BVELGJ"   , Opm::UnitSystem::measure::velocity},
+    {"BVELGJ-"  , Opm::UnitSystem::measure::velocity},
+    {"BVELGK"   , Opm::UnitSystem::measure::velocity},
+    {"BVELGK-"  , Opm::UnitSystem::measure::velocity},
 
     // Oil quantities
     {"BODEN"    , Opm::UnitSystem::measure::density},
     {"BDENO"    , Opm::UnitSystem::measure::density},
+    {"BFLOOI"   , Opm::UnitSystem::measure::liquid_surface_rate},
+    {"BFLOOI-"  , Opm::UnitSystem::measure::liquid_surface_rate},
+    {"BFLOOJ"   , Opm::UnitSystem::measure::liquid_surface_rate},
+    {"BFLOOJ-"  , Opm::UnitSystem::measure::liquid_surface_rate},
+    {"BFLOOK"   , Opm::UnitSystem::measure::liquid_surface_rate},
+    {"BFLOOK-"  , Opm::UnitSystem::measure::liquid_surface_rate},
     {"BOKR"     , Opm::UnitSystem::measure::identity},
     {"BKRO"     , Opm::UnitSystem::measure::identity},
     {"BKROG"    , Opm::UnitSystem::measure::identity},
@@ -3228,13 +3569,22 @@ static const auto block_units = UnitTable {
     {"BSOIL"    , Opm::UnitSystem::measure::identity},
     {"BOVIS"    , Opm::UnitSystem::measure::viscosity},
     {"BVOIL"    , Opm::UnitSystem::measure::viscosity},
+    {"BVELOI"   , Opm::UnitSystem::measure::velocity},
+    {"BVELOI-"  , Opm::UnitSystem::measure::velocity},
+    {"BVELOJ"   , Opm::UnitSystem::measure::velocity},
+    {"BVELOJ-"  , Opm::UnitSystem::measure::velocity},
+    {"BVELOK"   , Opm::UnitSystem::measure::velocity},
+    {"BVELOK-"  , Opm::UnitSystem::measure::velocity},
 
     // Water quantities
     {"BWDEN"    , Opm::UnitSystem::measure::density},
     {"BDENW"    , Opm::UnitSystem::measure::density},
     {"BFLOWI"   , Opm::UnitSystem::measure::liquid_surface_rate},
+    {"BFLOWI-"  , Opm::UnitSystem::measure::liquid_surface_rate},
     {"BFLOWJ"   , Opm::UnitSystem::measure::liquid_surface_rate},
+    {"BFLOWJ-"  , Opm::UnitSystem::measure::liquid_surface_rate},
     {"BFLOWK"   , Opm::UnitSystem::measure::liquid_surface_rate},
+    {"BFLOWK-"  , Opm::UnitSystem::measure::liquid_surface_rate},
     {"BWIP"     , Opm::UnitSystem::measure::liquid_surface_volume},
     {"BWKR"     , Opm::UnitSystem::measure::identity},
     {"BKRW"     , Opm::UnitSystem::measure::identity},
@@ -3244,6 +3594,13 @@ static const auto block_units = UnitTable {
     {"BWSAT"    , Opm::UnitSystem::measure::identity},
     {"BSWAT"    , Opm::UnitSystem::measure::identity},
     {"BWVIS"    , Opm::UnitSystem::measure::viscosity},
+    {"BAMIP"    , Opm::UnitSystem::measure::mass},
+    {"BVELWI"   , Opm::UnitSystem::measure::velocity},
+    {"BVELWI-"  , Opm::UnitSystem::measure::velocity},
+    {"BVELWJ"   , Opm::UnitSystem::measure::velocity},
+    {"BVELWJ-"  , Opm::UnitSystem::measure::velocity},
+    {"BVELWK"   , Opm::UnitSystem::measure::velocity},
+    {"BVELWK-"  , Opm::UnitSystem::measure::velocity},
     {"BVWAT"    , Opm::UnitSystem::measure::viscosity},
 
     // Pressure quantities
@@ -3313,11 +3670,9 @@ static const auto aquifer_units = UnitTable {
 
 void sort_wells_by_insert_index(std::vector<const Opm::Well*>& wells)
 {
-    std::sort(wells.begin(), wells.end(),
-        [](const Opm::Well* w1, const Opm::Well* w2)
-    {
-        return w1->seqIndex() < w2->seqIndex();
-    });
+    std::ranges::sort(wells,
+                      [](const Opm::Well* w1, const Opm::Well* w2)
+                      { return w1->seqIndex() < w2->seqIndex(); });
 }
 
 std::vector<const Opm::Well*>
@@ -3377,12 +3732,9 @@ find_group_wells(const Opm::Schedule& schedule,
         const auto& group = schedState.groups.get(downtree[i]);
 
         if (group.wellgroup()) {
-            std::transform(group.wells().begin(), group.wells().end(),
-                           std::back_inserter(groupwells),
-                           [&schedState](const auto& wname)
-                           {
-                               return &schedState.wells.get(wname);
-                           });
+            std::ranges::transform(group.wells(), std::back_inserter(groupwells),
+                                   [&schedState](const auto& wname)
+                                   { return &schedState.wells.get(wname); });
         }
         else {
             const auto& children = group.groups();
@@ -3403,12 +3755,9 @@ find_field_wells(const Opm::Schedule& schedule,
 
     const auto& wells = schedule[sim_step].wells;
     const auto keys = wells.keys();
-    std::transform(keys.begin(), keys.end(),
-                   std::back_inserter(fieldwells),
-                   [&wells](const auto& well)
-                   {
-                       return &wells.get(well);
-                   });
+    std::ranges::transform(keys, std::back_inserter(fieldwells),
+                           [&wells](const auto& well)
+                           { return &wells.get(well); });
 
     sort_wells_by_insert_index(fieldwells);
 
@@ -3500,11 +3849,11 @@ void updateValue(const Opm::EclIO::SummaryNode& node, const double value, Opm::S
 
     case Cat::Group:
     case Cat::Node:
-        st.update_group_var(node.wgname, node.keyword, value);
+        st.update_group_var(node.wgname, node.keyword, node.type, value);
         break;
 
     case Cat::Connection:
-        st.update_conn_var(node.wgname, node.keyword, node.number, value);
+        st.update_conn_var(node.wgname, node.keyword, node.type, node.number, value);
         break;
 
     case Cat::Segment:
@@ -3513,7 +3862,8 @@ void updateValue(const Opm::EclIO::SummaryNode& node, const double value, Opm::S
 
     case Cat::Region:
         st.update_region_var(node.fip_region.value_or("FIPNUM"),
-                             node.keyword, node.number, value);
+                             node.keyword.substr(0, 5),
+                             node.number, value);
         break;
 
     default:
@@ -3606,7 +3956,7 @@ namespace Evaluator {
         const Opm::Schedule& sched;
         const Opm::EclipseGrid& grid;
         const Opm::out::RegionCache& reg;
-        const std::optional<Opm::Inplace>& initial_inplace;
+        const Opm::Inplace* initial_inplace;
     };
 
     struct SimulatorResults
@@ -3615,7 +3965,7 @@ namespace Evaluator {
         const Opm::data::WellBlockAveragePressures& wbp;
         const Opm::data::GroupAndNetworkValues& grpNwrkSol;
         const std::map<std::string, double>& single;
-        const Opm::Inplace inplace;
+        const Opm::Inplace& inplace;
         const std::map<std::string, std::vector<double>>& region;
         const std::map<std::pair<std::string, int>, double>& block;
         const Opm::data::Aquifers& aquifers;
@@ -3739,7 +4089,7 @@ namespace Evaluator {
         Opm::EclIO::SummaryNode  node_;
         Opm::UnitSystem::measure m_;
 
-        Opm::out::Summary::BlockValues::key_type lookupKey() const
+        Opm::out::Summary::DynamicSimulatorState::BlockValues::key_type lookupKey() const
         {
             return { this->node_.keyword, this->node_.number };
         }
@@ -4458,11 +4808,9 @@ namespace Evaluator {
         // Check for tracer names twice to allow for tracers starting with S or F
         auto istart = 4;
         auto tracer_name = normKw.substr(istart);
-        auto trPos = std::find_if(tracers.begin(), tracers.end(),
-                                  [&tracer_name](const auto& tracer)
-                                  {
-                                      return tracer.name == tracer_name;
-                                  });
+        auto trPos = std::ranges::find_if(tracers,
+                                          [&tracer_name](const auto& tracer)
+                                          { return tracer.name == tracer_name; });
 
         if (trPos == tracers.end()) {
             if ((normKw[4] == 'F') || (normKw[4] == 'S'))
@@ -4470,10 +4818,9 @@ namespace Evaluator {
             else
                 return false;
             tracer_name = normKw.substr(istart);
-            trPos = std::find_if(tracers.begin(), tracers.end(),
-                                    [&tracer_name](const auto& tracer)
-                                    {
-                                        return tracer.name == tracer_name;
+            trPos = std::ranges::find_if(tracers,
+                                         [&tracer_name](const auto& tracer)
+                                         {       return tracer.name == tracer_name;
                                     });
 
             if (trPos == tracers.end())
@@ -4565,7 +4912,7 @@ void reportUnsupportedKeywords(std::vector<Opm::SummaryConfigNode> keywords)
         }
         return n1.location().filename < n2.location().filename;
     };
-    std::sort(keywords.begin(), keywords.end(), loc_kw_ordering);
+    std::ranges::sort(keywords, loc_kw_ordering);
 
     // Reorder to remove duplicate { keyword, location } pairs, since
     // that will give duplicate and therefore useless warnings.
@@ -4776,21 +5123,16 @@ public:
     SummaryImplementation& operator=(const SummaryImplementation& rhs) = delete;
     SummaryImplementation& operator=(SummaryImplementation&& rhs) = default;
 
-    void eval(const int                              sim_step,
-              const double                           secs_elapsed,
-              const data::Wells&                     well_solution,
-              const data::WellBlockAveragePressures& wbp,
-              const data::GroupAndNetworkValues&     grp_nwrk_solution,
-              GlobalProcessParameters                single_values,
-              const std::optional<Inplace>&          initial_inplace,
-              const Opm::Inplace&                    inplace,
-              const RegionParameters&                region_values,
-              const BlockValues&                     block_values,
-              const data::Aquifers&                  aquifer_values,
-              const InterRegFlowValues&              interreg_flows,
-              SummaryState&                          st) const;
+    void eval(const int                    sim_step,
+              const double                 secs_elapsed,
+              const DynamicSimulatorState& values,
+              SummaryState&                st) const;
 
-    void internal_store(const SummaryState& st, const int report_step, bool isSubstep);
+    void internal_store(const SummaryState& st,
+                        const int           report_step,
+                        const int           ministep_id,
+                        const bool          isSubstep);
+
     void write(const bool is_final_summary);
 
 private:
@@ -4815,9 +5157,6 @@ private:
     Opm::EclIO::OutputStream::Formatted fmt_;
     Opm::EclIO::OutputStream::Unified   unif_;
 
-    mutable int miniStepID_{0};
-    mutable double prevEvalTime_{std::numeric_limits<double>::lowest()};
-
     int prevCreate_{-1};
     int prevReportStepID_{-1};
     std::vector<MiniStep>::size_type numUnwritten_{0};
@@ -4841,6 +5180,7 @@ private:
 
     void configureRequiredRestartParameters(const SummaryConfig& sumcfg,
                                             const AquiferConfig& aqConfig,
+                                            const TracerConfig&  trConfig,
                                             const Schedule&      sched,
                                             Evaluator::Factory&  evaluatorFactory);
 
@@ -4849,7 +5189,10 @@ private:
                       Evaluator::Factory& evaluatorFactory,
                       SummaryConfig&      summary_config);
 
-    MiniStep& getNextMiniStep(const int report_step, bool isSubstep);
+    MiniStep& getNextMiniStep(const int  report_step,
+                              const int  ministep_id,
+                              const bool isSubstep);
+
     const MiniStep& lastUnwritten() const;
 
     void write(const MiniStep& ms);
@@ -4884,7 +5227,7 @@ SummaryImplementation(SummaryConfig&      sumcfg,
 
     this->configureTimeVectors(es, sumcfg);
     this->configureSummaryInput(sumcfg, evaluatorFactory);
-    this->configureRequiredRestartParameters(sumcfg, es.aquifer(),
+    this->configureRequiredRestartParameters(sumcfg, es.aquifer(), es.tracer(),
                                              sched, evaluatorFactory);
 
     this->configureUDQ(es, sched, evaluatorFactory, sumcfg);
@@ -4911,9 +5254,12 @@ SummaryImplementation(SummaryConfig&      sumcfg,
 }
 
 void Opm::out::Summary::SummaryImplementation::
-internal_store(const SummaryState& st, const int report_step, bool isSubstep)
+internal_store(const SummaryState& st,
+               const int           report_step,
+               const int           ministep_id,
+               const bool          isSubstep)
 {
-    auto& ms = this->getNextMiniStep(report_step, isSubstep);
+    auto& ms = this->getNextMiniStep(report_step, ministep_id, isSubstep);
 
     const auto nParam = this->valueKeys_.size();
 
@@ -4929,34 +5275,63 @@ internal_store(const SummaryState& st, const int report_step, bool isSubstep)
 
 void
 Opm::out::Summary::SummaryImplementation::
-eval(const int                              sim_step,
-     const double                           secs_elapsed,
-     const data::Wells&                     well_solution,
-     const data::WellBlockAveragePressures& wbp,
-     const data::GroupAndNetworkValues&     grp_nwrk_solution,
-     GlobalProcessParameters                single_values,
-     const std::optional<Inplace>&          initial_inplace,
-     const Opm::Inplace&                    inplace,
-     const RegionParameters&                region_values,
-     const BlockValues&                     block_values,
-     const data::Aquifers&                  aquifer_values,
-     const InterRegFlowValues&              interreg_flows,
-     Opm::SummaryState&                     st) const
+eval(const int                    sim_step,
+     const double                 secs_elapsed,
+     const DynamicSimulatorState& values,
+     Opm::SummaryState&           st) const
 {
     validateElapsedTime(secs_elapsed, this->es_, st);
 
     const auto duration = secs_elapsed - st.get_elapsed();
 
-    single_values["TIMESTEP"] = duration;
-    st.update("TIMESTEP", this->es_.get().getUnits().from_si(Opm::UnitSystem::measure::time, duration));
+    auto single_values = (values.single_values != nullptr)
+        ? *values.single_values
+        : DynamicSimulatorState::GlobalProcessParameters{};
+
+    single_values.insert_or_assign("TIMESTEP", duration);
+
+    st.update("TIMESTEP", this->es_.get().getUnits()
+              .from_si(Opm::UnitSystem::measure::time, duration));
 
     const Evaluator::InputData input {
-        this->es_, this->sched_, this->grid_, this->regCache_, initial_inplace
+        this->es_, this->sched_, this->grid_, this->regCache_,
+        values.inplace.initial
     };
 
+    const auto& well_solution = (values.well_solution != nullptr)
+        ? *values.well_solution : data::Wells{};
+
+    const auto& wbp = (values.wbp != nullptr)
+        ? *values.wbp : data::WellBlockAveragePressures{};
+
+    const auto& group_and_nwrk_solution = (values.group_and_nwrk_solution != nullptr)
+        ? *values.group_and_nwrk_solution : data::GroupAndNetworkValues{};
+
+    const auto& inplace = (values.inplace.current != nullptr)
+        ? *values.inplace.current : Inplace{};
+
+    const auto& region_values = (values.region_values != nullptr)
+        ? *values.region_values : DynamicSimulatorState::RegionParameters{};
+
+    const auto& block_values = (values.block_values != nullptr)
+        ? *values.block_values : DynamicSimulatorState::BlockValues{};
+
+    const auto& aquifer_values = (values.aquifer_values != nullptr)
+        ? *values.aquifer_values : data::Aquifers{};
+
+    const auto& interreg_flows = (values.interreg_flows != nullptr)
+        ? *values.interreg_flows : DynamicSimulatorState::InterRegFlowValues{};
+
     const Evaluator::SimulatorResults simRes {
-        well_solution, wbp, grp_nwrk_solution, single_values, inplace,
-        region_values, block_values, aquifer_values, interreg_flows
+        well_solution,
+        wbp,
+        group_and_nwrk_solution,
+        single_values,
+        inplace,
+        region_values,
+        block_values,
+        aquifer_values,
+        interreg_flows
     };
 
     for (auto& evalPtr : this->outputParameters_.getEvaluators()) {
@@ -4969,11 +5344,6 @@ eval(const int                              sim_step,
     }
 
     st.update_elapsed(duration);
-
-    if (secs_elapsed > this->prevEvalTime_) {
-        this->prevEvalTime_ = secs_elapsed;
-        ++this->miniStepID_;
-    }
 }
 
 void Opm::out::Summary::SummaryImplementation::write(const bool is_final_summary)
@@ -5000,7 +5370,7 @@ void Opm::out::Summary::SummaryImplementation::write(const bool is_final_summary
     if (this->esmry_ != nullptr) {
         for (auto i = 0*this->numUnwritten_; i < this->numUnwritten_; ++i) {
             this->esmry_->write(this->unwritten_[i].params,
-                                !this->unwritten_[i].isSubstep,
+                                this->unwritten_[i].seq,
                                 is_final_summary);
         }
     }
@@ -5206,20 +5576,16 @@ namespace {
         auto extraKeys = std::vector<std::string>{};
         extraKeys.reserve(summary_keys.size());
 
-        std::copy_if(summary_keys.begin(), summary_keys.end(),
-                     std::back_inserter(extraKeys),
-                     [](const std::string& key)
-                     { return ! Opm::TimeService::valid_month(key); });
+        std::ranges::copy_if(summary_keys, std::back_inserter(extraKeys),
+                             [](const std::string& key)
+                             { return ! Opm::TimeService::valid_month(key); });
 
         const auto newNodes = smcfg
             .registerRequisiteUDQorActionSummaryKeys(extraKeys, es, sched);
 
-        std::transform(newNodes.begin(), newNodes.end(),
-                       std::back_inserter(nodes),
-                       [](const auto& newNode)
-                       {
-                           return translate_node(newNode);
-                       });
+        std::ranges::transform(newNodes, std::back_inserter(nodes),
+                               [](const auto& newNode)
+                               { return translate_node(newNode); });
 
         return nodes;
     }
@@ -5238,9 +5604,7 @@ configureUDQ(const EclipseState& es,
 
     auto has_evaluator = [this](const auto& key)
     {
-        return std::find(this->valueKeys_.begin(),
-                         this->valueKeys_.end(), key)
-            != this->valueKeys_.end();
+        return std::ranges::find(this->valueKeys_, key) != this->valueKeys_.end();
     };
 
     for (const auto& node : requisite_udq_and_action_summary_nodes(es, sched, summary_config)) {
@@ -5283,6 +5647,7 @@ void
 Opm::out::Summary::SummaryImplementation::
 configureRequiredRestartParameters(const SummaryConfig& sumcfg,
                                    const AquiferConfig& aqConfig,
+                                   const TracerConfig&  trConfig,
                                    const Schedule&      sched,
                                    Evaluator::Factory&  evaluatorFactory)
 {
@@ -5303,7 +5668,7 @@ configureRequiredRestartParameters(const SummaryConfig& sumcfg,
             .emplace(node.unique_key(), std::move(descriptor.evaluator));
     };
 
-    for (const auto& node : requiredRestartVectors(sched)) {
+    for (const auto& node : requiredRestartVectors(sched, trConfig)) {
         makeEvaluator(node);
     }
 
@@ -5329,7 +5694,10 @@ configureRequiredRestartParameters(const SummaryConfig& sumcfg,
 }
 
 Opm::out::Summary::SummaryImplementation::MiniStep&
-Opm::out::Summary::SummaryImplementation::getNextMiniStep(const int report_step, bool isSubstep)
+Opm::out::Summary::SummaryImplementation::
+getNextMiniStep(const int  report_step,
+                const int  ministep_id,
+                const bool isSubstep)
 {
     if (this->numUnwritten_ == this->unwritten_.size()) {
         this->unwritten_.emplace_back();
@@ -5340,13 +5708,13 @@ Opm::out::Summary::SummaryImplementation::getNextMiniStep(const int report_step,
 
     auto& ms = this->unwritten_[this->numUnwritten_++];
 
-    ms.id  = this->miniStepID_ - 1;  // MINISTEP IDs start at zero.
+    ms.id  = ministep_id;
     ms.seq = report_step;
     ms.isSubstep = isSubstep;
 
     ms.params.resize(this->valueKeys_.size(), 0.0f);
 
-    std::fill(ms.params.begin(), ms.params.end(), 0.0f);
+    std::ranges::fill(ms.params, 0.0f);
 
     return ms;
 }
@@ -5393,7 +5761,11 @@ createSmryStreamIfNecessary(const int report_step)
     }
 }
 
-namespace Opm { namespace out {
+// ===========================================================================
+// Public Interface Below Separator
+// ===========================================================================
+
+namespace Opm::out {
 
 Summary::Summary(SummaryConfig&       sumcfg,
                  const EclipseState&  es,
@@ -5404,19 +5776,10 @@ Summary::Summary(SummaryConfig&       sumcfg,
     : pImpl_ { std::make_unique<SummaryImplementation>(sumcfg, es, grid, sched, basename, writeEsmry) }
 {}
 
-void Summary::eval(SummaryState&                          st,
-                   const int                              report_step,
-                   const double                           secs_elapsed,
-                   const data::Wells&                     well_solution,
-                   const data::WellBlockAveragePressures& wbp,
-                   const data::GroupAndNetworkValues&     grp_nwrk_solution,
-                   const GlobalProcessParameters&         single_values,
-                   const std::optional<Inplace>&          initial_inplace,
-                   const Inplace&                         inplace,
-                   const RegionParameters&                region_values,
-                   const BlockValues&                     block_values,
-                   const Opm::data::Aquifers&             aquifer_values,
-                   const InterRegFlowValues&              interreg_flows) const
+void Summary::eval(const int                    report_step,
+                   const double                 secs_elapsed,
+                   const DynamicSimulatorState& values,
+                   SummaryState&                st) const
 {
     // Report_step is the one-based sequence number of the containing report.
     // Report_step = 0 for the initial condition, before simulation starts.
@@ -5429,19 +5792,15 @@ void Summary::eval(SummaryState&                          st,
     // wells, groups, connections &c in the Schedule object.
     const auto sim_step = std::max(0, report_step - 1);
 
-    auto process_values = single_values;
-
-    this->pImpl_->eval(sim_step, secs_elapsed,
-                       well_solution, wbp, grp_nwrk_solution,
-                       std::move(process_values),
-                       initial_inplace, inplace,
-                       region_values, block_values,
-                       aquifer_values, interreg_flows, st);
+    this->pImpl_->eval(sim_step, secs_elapsed, values, st);
 }
 
-void Summary::add_timestep(const SummaryState& st, const int report_step, bool isSubstep)
+void Summary::add_timestep(const SummaryState& st,
+                           const int           report_step,
+                           const int           ministep_id,
+                           const bool          isSubstep)
 {
-    this->pImpl_->internal_store(st, report_step, isSubstep);
+    this->pImpl_->internal_store(st, report_step, ministep_id, isSubstep);
 }
 
 void Summary::write(const bool is_final_summary) const
@@ -5451,4 +5810,4 @@ void Summary::write(const bool is_final_summary) const
 
 Summary::~Summary() {}
 
-}} // namespace Opm::out
+} // namespace Opm::out

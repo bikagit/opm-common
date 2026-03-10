@@ -411,7 +411,7 @@ public:
 
     /// Assign coalesced/global contributions
     ///
-    /// \param[in] avg Buffer of coalesced global contributions.
+    /// \param[in] a Buffer of coalesced global contributions.
     void assignRunningAverages(const LocalRunningAverages& a)
     {
         auto j = 0*a.size();
@@ -642,8 +642,8 @@ void PAvgCalculator<Scalar>::pruneInactiveWBPCells(const std::vector<bool>& isAc
 
     auto activeIx = std::vector<ContrIndexType>{};
     activeIx.reserve(allIx.size());
-    std::copy_if(allIx.begin(), allIx.end(), std::back_inserter(activeIx),
-                 [&isActive](const auto i) { return isActive[i]; });
+    std::ranges::copy_if(allIx, std::back_inserter(activeIx),
+                         [&isActive](const auto i) { return isActive[i]; });
 
     if (activeIx.size() == allIx.size()) {
         // All cells active.  Nothing else to do here.
@@ -655,12 +655,9 @@ void PAvgCalculator<Scalar>::pruneInactiveWBPCells(const std::vector<bool>& isAc
         auto newWBPCells = std::vector<std::size_t>{};
         newWBPCells.reserve(activeIx.size());
 
-        std::transform(activeIx.begin(), activeIx.end(),
-                       std::back_inserter(newWBPCells),
-                       [this](const auto& origCell)
-                       {
-                           return this->contributingCells_[origCell];
-                       });
+        std::ranges::transform(activeIx, std::back_inserter(newWBPCells),
+                               [this](const auto& origCell)
+                               { return this->contributingCells_[origCell]; });
 
         this->contributingCells_.swap(newWBPCells);
     }
@@ -832,12 +829,9 @@ void PAvgCalculator<Scalar>::pruneInactiveConnections(const std::vector<bool>& i
         auto keepOpen = std::vector<typename std::vector<PAvgConnection>::size_type>{};
         keepOpen.reserve(this->openConns_.size());
 
-        std::copy_if(this->openConns_.begin(),this->openConns_.end(),
-                     std::back_inserter(keepOpen),
-                     [this, &isActive](const auto& openConn)
-                     {
-                         return isActive[this->connections_[openConn].cell];
-                     });
+        std::ranges::copy_if(this->openConns_, std::back_inserter(keepOpen),
+                             [this, &isActive](const auto& openConn)
+                             { return isActive[this->connections_[openConn].cell]; });
 
         this->openConns_.swap(keepOpen);
     }
@@ -864,12 +858,9 @@ void PAvgCalculator<Scalar>::pruneInactiveConnections(const std::vector<bool>& i
 
     // 3. Renumber set of open connections to match new sequence of active
     // connections_.
-    std::transform(this->openConns_.begin(), this->openConns_.end(),
-                   this->openConns_.begin(),
-                   [&newConnIDs](const auto& openConnID)
-                   {
-                       return newConnIDs[openConnID];
-                   });
+    std::ranges::transform(this->openConns_, this->openConns_.begin(),
+                           [&newConnIDs](const auto& openConnID)
+                           { return newConnIDs[openConnID]; });
 }
 
 template<class Scalar>
@@ -1217,13 +1208,9 @@ PAvgCalculatorResult<Scalar>
 linearCombination(const Scalar alpha, PAvgCalculatorResult<Scalar>        x,
                   const Scalar beta , const PAvgCalculatorResult<Scalar>& y)
 {
-    std::transform(x.wbp_.begin(), x.wbp_.end(),
-                   y.wbp_.begin(),
-                   x.wbp_.begin(),
-                   [alpha, beta](const Scalar xi, const Scalar yi)
-                   {
-                       return alpha*xi + beta*yi;
-                   });
+    std::ranges::transform(x.wbp_, y.wbp_, x.wbp_.begin(),
+                           [alpha, beta](const Scalar xi, const Scalar yi)
+                           { return alpha * xi + beta * yi; });
 
     return x;
 }

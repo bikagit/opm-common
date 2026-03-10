@@ -209,13 +209,12 @@ namespace {
                            ? rptRstCompositionalMnemonics()
                            : rptRstBaseMnemonics() }
         {
-            std::sort(mnemonics_.begin(), mnemonics_.end());
+            std::ranges::sort(mnemonics_);
         }
 
         bool operator()(const std::string& mnemonic) const
         {
-            return std::binary_search(this->mnemonics_.begin(),
-                                      this->mnemonics_.end(), mnemonic);
+            return std::ranges::binary_search(this->mnemonics_, mnemonic);
         }
 
     private:
@@ -484,9 +483,9 @@ void RSTConfig::handleRPTSCHED(const DeckKeyword&  keyword,
 {
     auto mnemonic_list = normaliseRptSchedKeyword(keyword, parseContext, errors);
 
-    auto nothingPos = std::find_if(mnemonic_list.begin(), mnemonic_list.end(),
-                                   [](const auto& mnemonicPair)
-                                   { return mnemonicPair.first == "NOTHING"; });
+    auto nothingPos = std::ranges::find_if(mnemonic_list,
+                                           [](const auto& mnemonicPair)
+                                           { return mnemonicPair.first == "NOTHING"; });
 
     if (nothingPos != mnemonic_list.end()) {
         this->basic = {};

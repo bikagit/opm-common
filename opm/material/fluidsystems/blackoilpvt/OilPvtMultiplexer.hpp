@@ -36,10 +36,8 @@
 
 namespace Opm {
 
-#if HAVE_ECL_INPUT
 class EclipseState;
 class Schedule;
-#endif
 
 #define OPM_OIL_PVT_MULTIPLEXER_CALL(codeToCall, ...)                             \
     switch (approach_) {                                                          \
@@ -126,17 +124,20 @@ public:
     {
         return approach_ == OilPvtApproach::ThermalOil;
     }
-#if HAVE_ECL_INPUT
+
     /*!
      * \brief Initialize the parameters for water using an ECL state.
      *
      * This method assumes that the deck features valid DENSITY and PVTO/PVDO/PVCDO keywords.
      */
     void initFromState(const EclipseState& eclState, const Schedule& schedule);
-#endif // HAVE_ECL_INPUT
-
 
     void initEnd();
+
+    bool isActive() const
+    {
+        return approach_ != OilPvtApproach::NoOil;
+    }
 
     /*!
      * \brief Return the number of PVT regions which are considered by this PVT-object.
@@ -190,6 +191,14 @@ public:
                                             const Evaluation& pressure,
                                             const Evaluation& Rs) const
     { OPM_OIL_PVT_MULTIPLEXER_CALL(return pvtImpl.inverseFormationVolumeFactor(regionIdx, temperature, pressure, Rs)); }
+
+    /*!
+     * \brief Returns the formation volume factor [-] and viscosity [Pa s] of the fluid phase.
+     */
+    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    std::pair<LhsEval, LhsEval>
+    inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState, unsigned regionIdx)
+    { OPM_OIL_PVT_MULTIPLEXER_CALL(return pvtImpl.inverseFormationVolumeFactorAndViscosity(fluidState, regionIdx)); }
 
     /*!
      * \brief Returns the formation volume factor [-] of the fluid phase.

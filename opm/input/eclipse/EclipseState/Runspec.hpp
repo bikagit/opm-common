@@ -336,6 +336,16 @@ public:
      */
     bool activeWag() const;
 
+    /*!
+     * \brief Do Pc scaling for scanning curves.
+     */
+    bool doPcScaling() const;
+
+    /*!
+     * \brief Activate fix for wetting phase killough
+     */
+    bool fixWettingPhaseKillough() const;
+
     bool operator==(const EclHysterConfig& data) const;
 
     template<class Serializer>
@@ -347,6 +357,8 @@ public:
         serializer(modParamTrappedValue);
         serializer(curvatureCapPrsValue);
         serializer(activeWagHyst);
+        serializer(enablePcScaling);
+        serializer(enableKilloughWettingFix);
     }
 
 private:
@@ -363,6 +375,12 @@ private:
 
     // enable WAG hysteresis
     bool activeWagHyst  { false };
+
+    // flag to enable Pc scaling
+    bool enablePcScaling { false };
+
+    // flag to enable Fix for wetting phase Killough
+    bool enableKilloughWettingFix { false };
 };
 
 class SatFuncControls {
@@ -449,6 +467,8 @@ public:
 
     explicit Tracers(const Deck& );
     int water_tracers() const;
+    int gas_tracers() const;
+    int oil_tracers() const;
 
     template<class Serializer>
     void serializeOp(Serializer& serializer) {
@@ -508,8 +528,10 @@ public:
     bool h2Storage() const noexcept;
     bool micp() const noexcept;
     bool mech() const noexcept;
+    bool frac() const noexcept;
     bool temp() const noexcept;
     bool compositional() const noexcept;
+    bool biof() const noexcept;
 
     bool operator==(const Runspec& data) const;
     static bool rst_cmp(const Runspec& full_state, const Runspec& rst_state);
@@ -539,7 +561,9 @@ public:
         serializer(m_h2storage);
         serializer(m_micp);
         serializer(m_mech);
+        serializer(m_frac);
         serializer(m_temp);
+        serializer(m_biof);
     }
 
 private:
@@ -565,7 +589,9 @@ private:
     bool m_h2storage{false};
     bool m_micp{false};
     bool m_mech{false};
+    bool m_frac{false};
     bool m_temp{false};
+    bool m_biof{false};
 };
 
 std::size_t declaredMaxRegionID(const Runspec& rspec);

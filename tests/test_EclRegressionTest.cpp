@@ -245,7 +245,7 @@ void makeSmryFile(const std::string &fileName,
     int nSteps = params.size();
 
     for (int i = 0; i < nSteps; i++) {
-        auto search = std::find(seqhdr.begin(), seqhdr.end(), i);
+        const auto search = std::ranges::find(seqhdr, i);
 
         if (search != seqhdr.end()) {
             eclUnsmryTest.write<int>("SEQHDR", {1});
@@ -308,7 +308,7 @@ void makeRftFile(const std::string &fileName,
 }
 
 } // Anonymous namespace
- 
+
 BOOST_AUTO_TEST_CASE(gridCompare)
 {
     const std::vector<float> coord = {2000,2000,2000,1999.9127,1999.8691,2009.9951,2099.9849,2000,2001.7452,2099.8975,1999.8691,2011.7404,2199.9695,2000,2003.4905,2199.8823,

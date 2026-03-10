@@ -33,8 +33,8 @@
 
 namespace Opm {
 
-template<class Scalar, class Params, class ContainerT>
-Co2GasPvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+Co2GasPvt<Scalar, Storage>::
 Co2GasPvt(const ContainerT& salinity,
           int activityModel,
           int thermalMixingModel,
@@ -63,9 +63,8 @@ Co2GasPvt(const ContainerT& salinity,
     }
 }
 
-#if HAVE_ECL_INPUT
-template<class Scalar, class Params, class ContainerT>
-void Co2GasPvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+void Co2GasPvt<Scalar, Storage>::
 initFromState(const EclipseState& eclState, const Schedule&)
 {
     setEnableVaporizationWater(eclState.getSimulationConfig().hasVAPOIL() || eclState.getSimulationConfig().hasVAPWAT());
@@ -95,7 +94,7 @@ initFromState(const EclipseState& eclState, const Schedule&)
         // Currently we only support constant salinity converted to mass fraction
         salinity_[regionIdx] = eclState.getCo2StoreConfig().salinity();
         // For consistency we compute the reference density the same way as in BrineCo2Pvt.cpp
-        if (enableEzrokhiDensity_) { 
+        if (enableEzrokhiDensity_) {
             const Scalar& rho_pure = H2O::liquidDensity(T_ref, P_ref, extrapolate);
             const Scalar& nacl_exponent = ezrokhiExponent_(T_ref, ezrokhiDenNaClCoeff_);
             brineReferenceDensity_[regionIdx] = rho_pure * pow(10.0, nacl_exponent * salinity_[regionIdx]);
@@ -108,10 +107,9 @@ initFromState(const EclipseState& eclState, const Schedule&)
 
     initEnd();
 }
-#endif
 
-template<class Scalar, class Params, class ContainerT>
-OPM_HOST_DEVICE void Co2GasPvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+OPM_HOST_DEVICE void Co2GasPvt<Scalar, Storage>::
 setNumRegions(std::size_t numRegions)
 {
     gasReferenceDensity_.resize(numRegions);
@@ -119,8 +117,8 @@ setNumRegions(std::size_t numRegions)
     salinity_.resize(numRegions);
 }
 
-template<class Scalar, class Params, class ContainerT>
-OPM_HOST_DEVICE void Co2GasPvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+OPM_HOST_DEVICE void Co2GasPvt<Scalar, Storage>::
 setReferenceDensities(unsigned regionIdx,
                       Scalar rhoRefBrine,
                       Scalar rhoRefGas,
@@ -130,8 +128,8 @@ setReferenceDensities(unsigned regionIdx,
     brineReferenceDensity_[regionIdx] = rhoRefBrine;;
 }
 
-template<class Scalar, class Params, class ContainerT>
-OPM_HOST_DEVICE void Co2GasPvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+OPM_HOST_DEVICE void Co2GasPvt<Scalar, Storage>::
 setActivityModelSalt(int activityModel)
 {
     switch (activityModel) {
@@ -147,8 +145,8 @@ setActivityModelSalt(int activityModel)
     }
 }
 
-template<class Scalar, class Params, class ContainerT>
-OPM_HOST_DEVICE void Co2GasPvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+OPM_HOST_DEVICE void Co2GasPvt<Scalar, Storage>::
 setThermalMixingModel(int thermalMixingModel)
 {
     switch (thermalMixingModel) {
@@ -165,8 +163,8 @@ setThermalMixingModel(int thermalMixingModel)
     }
 }
 
-template<class Scalar, class Params, class ContainerT>
-void Co2GasPvt<Scalar, Params, ContainerT>::
+template<class Scalar, template<class> class Storage>
+void Co2GasPvt<Scalar, Storage>::
 setEzrokhiDenCoeff(const std::vector<EzrokhiTable>& denaqa)
 {
     if (denaqa.empty()) {

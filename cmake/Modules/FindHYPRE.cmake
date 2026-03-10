@@ -49,11 +49,11 @@ find_package_handle_standard_args(HYPRE
 
 if(HYPRE_FOUND AND NOT TARGET HYPRE::HYPRE)
   file(STRINGS ${HYPRE_INCLUDE_DIRS}/HYPRE_config.h HYPRE_CONFIG)
-  string(FIND "${HYPRE_CONFIG}" "#define HYPRE_USING_CUDA" CUDA_POS)
+  string(FIND "${HYPRE_CONFIG}" "#define HYPRE_USING_CUDA 1" CUDA_POS)
   if(NOT CUDA_POS EQUAL -1)
     set(HYPRE_USING_CUDA ON)
   endif()
-  string(FIND "${HYPRE_CONFIG}" "#define HYPRE_USING_HIP" HIP_POS)
+  string(FIND "${HYPRE_CONFIG}" "#define HYPRE_USING_HIP 1" HIP_POS)
   if(NOT HIP_POS EQUAL -1)
     set(HYPRE_USING_HIP ON)
   endif()
@@ -70,10 +70,12 @@ if(HYPRE_FOUND AND NOT TARGET HYPRE::HYPRE)
       INTERFACE_COMPILE_DEFINITIONS HYPRE_USING_CUDA)
     set_property(TARGET HYPRE::HYPRE APPEND PROPERTY
       INTERFACE_LINK_LIBRARIES
+        CUDA::cublas
         CUDA::cudart
-        CUDA::cusparse
         CUDA::curand
-        CUDA::cublas)
+        CUDA::cusolver
+        CUDA::cusparse
+    )
     message(STATUS "HYPRE was built with CUDA support")
   endif()
 
@@ -81,13 +83,15 @@ if(HYPRE_FOUND AND NOT TARGET HYPRE::HYPRE)
     find_package(rocsparse REQUIRED)
     find_package(rocrand REQUIRED)
     find_package(rocblas REQUIRED)
+    find_package(rocsolver REQUIRED)
     set_property(TARGET HYPRE::HYPRE APPEND PROPERTY
       INTERFACE_COMPILE_DEFINITIONS HYPRE_USING_HIP)
     set_property(TARGET HYPRE::HYPRE APPEND PROPERTY
       INTERFACE_LINK_LIBRARIES
         roc::rocsparse
         roc::rocrand
-        roc::rocblas)
+        roc::rocblas
+        roc::rocsolver)
     message(STATUS "HYPRE was built with HIP support")
   endif()
 endif()

@@ -84,12 +84,10 @@ namespace {
 
         const auto& [outer, middle] = inferOuterLoopOrdering(cartDims);
 
-        std::transform(colGlobIx.begin(), colGlobIx.end(), colGlobIx.begin(),
-                       [&cartDims, &getIJK, Outer=outer, Middle=middle]
-            (const std::size_t cell)
-        {
-            return columnarGlobalIdx(cartDims, getIJK(cell), Outer, Middle);
-        });
+        std::ranges::transform(colGlobIx, colGlobIx.begin(),
+                               [&cartDims, &getIJK, Outer=outer, Middle=middle]
+                               (const std::size_t cell)
+                               { return columnarGlobalIdx(cartDims, getIJK(cell), Outer, Middle); });
 
         return colGlobIx;
     }
@@ -106,11 +104,9 @@ namespace {
 
         const auto colGlobIx = computeColumnarGlobalIndex(activeCells, cartDims, getIJK);
 
-        std::sort(activeCells.begin(), activeCells.end(),
-            [&colGlobIx](const std::size_t cell1, const std::size_t cell2)
-        {
-            return colGlobIx[cell1] < colGlobIx[cell2];
-        });
+        std::ranges::sort(activeCells,
+                          [&colGlobIx](const std::size_t cell1, const std::size_t cell2)
+                          { return colGlobIx[cell1] < colGlobIx[cell2]; });
 
         auto columnarActiveID = 0;
         for (const auto& naturalActiveID : activeCells) {

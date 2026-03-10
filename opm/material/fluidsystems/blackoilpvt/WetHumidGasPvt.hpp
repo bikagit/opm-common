@@ -33,16 +33,15 @@
 #include <opm/material/common/MathToolbox.hpp>
 #include <opm/material/common/UniformXTabulated2DFunction.hpp>
 #include <opm/material/common/Tabulated1DFunction.hpp>
+#include <opm/material/fluidsystems/BlackOilFunctions.hpp>
 
 #include <cstddef>
 
 namespace Opm {
 
-#if HAVE_ECL_INPUT
 class EclipseState;
 class Schedule;
 class SimpleTable;
-#endif
 
 /*!
  * \brief This class represents the Pressure-Volume-Temperature relations of the gas phase
@@ -57,7 +56,6 @@ public:
     using TabulatedTwoDFunction = UniformXTabulated2DFunction<Scalar>;
     using TabulatedOneDFunction = Tabulated1DFunction<Scalar>;
 
-#if HAVE_ECL_INPUT
     /*!
      * \brief Initialize the parameters for wet gas using an ECL deck.
      *
@@ -77,8 +75,6 @@ private:
                           const SimpleTable& masterTable);
 
 public:
-#endif // HAVE_ECL_INPUT
-
     void setNumRegions(std::size_t numRegions);
 
     void setVapPars(const Scalar par1, const Scalar)
@@ -97,6 +93,7 @@ public:
     /*!
      * \brief Initialize the function for the water vaporization factor \f$R_v\f$
      *
+     * \param regionIdx Region index to use
      * \param samplePoints A container of (x,y) values.
      */
     void setSaturatedGasWaterVaporizationFactor(unsigned regionIdx,
@@ -106,6 +103,7 @@ public:
     /*!
      * \brief Initialize the function for the oil vaporization factor \f$R_v\f$
      *
+     * \param regionIdx Region index to use
      * \param samplePoints A container of (x,y) values.
      */
     void setSaturatedGasOilVaporizationFactor(unsigned regionIdx,
@@ -211,6 +209,58 @@ public:
     }
 
     /*!
+     * \brief Returns the formation volume factor [-] and viscosity [Pa s] of the fluid phase.
+     */
+    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    std::pair<LhsEval, LhsEval>
+    inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState, unsigned regionIdx)
+    {
+        const LhsEval& p = decay<LhsEval>(fluidState.pressure(FluidState::gasPhaseIdx));
+        const LhsEval& Rv = decay<LhsEval>(fluidState.Rv());
+        const LhsEval& Rvw = decay<LhsEval>(fluidState.Rvw());
+        const LhsEval& saltConc
+            = BlackOil::template getSaltConcentration_<FluidState, LhsEval>(fluidState, regionIdx);
+
+        // It is not guaranteed that the oil and water vaporization
+        // factor tables, and also the saturated B and Mu tables, have
+        // the same pressure sample points. Therefore we do not bother
+        // to separately call findSegmentIndex() and eval() here.
+        const auto RvSat = this->saturatedOilVaporizationFactorTable_[regionIdx].eval(p, /*extrapolate=*/ true);
+        // TODO: check that handling of salt concentration is correct, it seems to only affect the saturation curve.
+        const auto RvwSat = enableRwgSalt_
+            ? this->saturatedWaterVaporizationSaltFactorTable_[regionIdx].eval(p, saltConc, /*extrapolate=*/ true)
+            : this->saturatedWaterVaporizationFactorTable_[regionIdx].eval(p, /*extrapolate=*/true);
+
+        const bool waterSaturated = (fluidState.saturation(FluidState::waterPhaseIdx) > 0.0) && (Rvw >= (1.0 - 1e-10) * RvwSat);
+        const bool oilSaturated = (fluidState.saturation(FluidState::oilPhaseIdx) > 0.0) && (Rv >= (1.0 - 1e-10) * RvSat);
+
+        if (waterSaturated && oilSaturated) {
+            const auto satSegIdx = this->inverseSaturatedGasB_[regionIdx].findSegmentIndex(p, /*extrapolate=*/ true);
+            const LhsEval b = this->inverseSaturatedGasB_[regionIdx].eval(p, SegmentIndex{satSegIdx});
+            const LhsEval invBMu = this->inverseSaturatedGasBMu_[regionIdx].eval(p, SegmentIndex{satSegIdx});
+            const LhsEval mu = b / invBMu;
+            return { b, mu };
+        } else if (oilSaturated) {
+            unsigned ii, jj1, jj2;
+            LhsEval alpha, beta1, beta2;
+            this->inverseGasBRvSat_[regionIdx].findPoints(ii, jj1, jj2, alpha, beta1, beta2, p, Rvw, /*extrapolate =*/ true);
+            const LhsEval b = this->inverseGasBRvSat_[regionIdx].eval(ii, jj1, jj2, alpha, beta1, beta2);
+            const LhsEval invBMu = this->inverseGasBMuRvSat_[regionIdx].eval(ii, jj1, jj2, alpha, beta1, beta2);
+            const LhsEval mu = b / invBMu;
+            return { b, mu };
+        } else {
+            // At this point, we assume waterSaturated is true, but this is not checked.
+            unsigned ii, jj1, jj2;
+            LhsEval alpha, beta1, beta2;
+            this->inverseGasBRvwSat_[regionIdx].findPoints(ii, jj1, jj2, alpha, beta1, beta2, p, Rv, /*extrapolate =*/ true);
+            const LhsEval b = this->inverseGasBRvwSat_[regionIdx].eval(ii, jj1, jj2, alpha, beta1, beta2);
+            const LhsEval invBMu = this->inverseGasBMuRvwSat_[regionIdx].eval(ii, jj1, jj2, alpha, beta1, beta2);
+            const LhsEval mu = b / invBMu;
+            return { b, mu };
+        }
+    }
+
+    /*!
      * \brief Returns the formation volume factor [-] of water saturated gas at a given pressure.
      */
     template <class Evaluation>
@@ -288,6 +338,7 @@ public:
      * \brief Returns the saturation pressure of the gas phase [Pa]
      *        depending on its mass fraction of the water component
      *
+     * \param regionIdx Region index to use
      * \param Rw The surface volume of water component dissolved in what will yield one
      *           cubic meter of gas at the surface [-]
      */

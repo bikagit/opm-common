@@ -33,7 +33,6 @@
 #include <opm/input/eclipse/EclipseState/Runspec.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/RtempvdTable.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/TableManager.hpp>
-#include <opm/input/eclipse/EclipseState/Util/OrderedMap.hpp>
 
 #include <opm/input/eclipse/Units/UnitSystem.hpp>
 
@@ -55,6 +54,7 @@
 #include <cstddef>
 #include <functional>
 #include <optional>
+#include <regex>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -129,6 +129,13 @@ bool is_oper_keyword(const std::string& name)
             || region_oper_keywords.find(name) != region_oper_keywords.end());
 }
 
+bool is_work(const std::string& name)
+{
+    static const auto work_array_regex = std::regex { R"(WORK\d+)" };
+
+    return std::regex_match(name, work_array_regex);
+}
+
 template <>
 keyword_info<double>
 global_kw_info(const std::string& name, const bool allow_unsupported)
@@ -160,7 +167,7 @@ global_kw_info(const std::string& name, const bool allow_unsupported)
     {
         return kwPos->second;
     }
-    
+
     if (auto kwPos = SOLUTION::composition_keywords.find(name);
         kwPos != SOLUTION::composition_keywords.end())
     {
@@ -171,6 +178,10 @@ global_kw_info(const std::string& name, const bool allow_unsupported)
         kwPos != SCHEDULE::double_keywords.end())
     {
         return kwPos->second;
+    }
+
+    if (is_work(name)) {
+        return keyword_info<double>{}.init(0.0);
     }
 
     if (allow_unsupported) {
@@ -749,9 +760,9 @@ bool FieldProps::rst_cmp(const FieldProps& full_arg, const FieldProps& rst_arg)
 // constructor below. Otherwise we get a compilation error.
 template <>
 Fieldprops::FieldData<double>&
-FieldProps::init_get(const std::string& keyword_name,
+FieldProps::init_get(const std::string&                                keyword_name,
                      const Fieldprops::keywords::keyword_info<double>& kw_info,
-                     const bool multiplier_in_edit)
+                     const bool                                        multiplier_in_edit)
 {
     if (multiplier_in_edit && !kw_info.scalar_init.has_value()) {
         OPM_THROW(std::logic_error, "Keyword " +  keyword_name +
@@ -759,10 +770,16 @@ FieldProps::init_get(const std::string& keyword_name,
     }
 
     const auto keyword = Fieldprops::keywords::get_keyword_from_alias(keyword_name);
-    const auto mult_keyword = std::string(multiplier_in_edit ? getMultiplierPrefix() : "") + keyword;
 
-    auto iter = this->double_data.find(mult_keyword);
-    if (iter != this->double_data.end()) {
+    const auto mult_keyword = multiplier_in_edit
+        ? std::string { this->getMultiplierPrefix() } + keyword
+        : keyword;
+
+    auto& props = (!multiplier_in_edit && Fieldprops::keywords::is_work(keyword))
+        ? this->work_arrays
+        : this->double_data;
+
+    if (auto iter = props.find(mult_keyword); iter != props.end()) {
         return iter->second;
     }
     else if (multiplier_in_edit) {
@@ -774,7 +791,7 @@ FieldProps::init_get(const std::string& keyword_name,
         this->multiplier_kw_infos_.insert_or_assign(mult_keyword, kw_info);
     }
 
-    auto elmDescr = this->double_data
+    const auto elmDescr = props
         .try_emplace(mult_keyword, kw_info, this->active_size,
                      kw_info.global ? this->global_size : std::size_t{0});
 
@@ -863,6 +880,8 @@ FieldProps::FieldProps(const Deck& deck,
         this->processMULTREGP(deck);
     }
 
+    this->resetWorkArrays();
+
     if (DeckSection::hasGRID(deck)) {
         if (grid.getMinpvMode() == MinpvMode::EclSTD) {
             // Intial values were set via MINPV/MINPORV in the grid
@@ -875,9 +894,13 @@ FieldProps::FieldProps(const Deck& deck,
         this->scanGRIDSection(GRIDSection(deck));
     }
 
+    this->resetWorkArrays();
+
     if (DeckSection::hasEDIT(deck)) {
         this->scanEDITSection(EDITSection(deck));
     }
+
+    this->resetWorkArrays();
 
     grid.resetACTNUM(this->actnum());
     this->reset_actnum(grid.getACTNUM());
@@ -885,6 +908,8 @@ FieldProps::FieldProps(const Deck& deck,
     if (DeckSection::hasREGIONS(deck)) {
         this->scanREGIONSSection(REGIONSSection(deck));
     }
+
+    this->resetWorkArrays();
 
     // Update PVTNUM/SATNUM for numerical aquifer cells
     {
@@ -906,9 +931,13 @@ FieldProps::FieldProps(const Deck& deck,
         this->scanPROPSSection(PROPSSection(deck));
     }
 
+    this->resetWorkArrays();
+
     if (DeckSection::hasSOLUTION(deck)) {
         this->scanSOLUTIONSection(SOLUTIONSection(deck), ncomps);
     }
+
+    this->resetWorkArrays();
 }
 
 
@@ -992,7 +1021,7 @@ void FieldProps::reset_actnum(const std::vector<int>& new_actnum)
     Fieldprops::compress(this->cell_volume, active_map);
     Fieldprops::compress(this->cell_depth, active_map);
 
-    this->m_actnum = std::move(new_actnum);
+    this->m_actnum = new_actnum;
     this->active_size = new_active_size;
 }
 
@@ -1171,20 +1200,18 @@ void FieldProps::apply_multipliers()
                 .first;
         }
 
-        std::transform(iter->second.data.begin(), iter->second.data.end(),
-                       mult_iter->second.data.begin(), iter->second.data.begin(),
-                       std::multiplies<>());
+        std::ranges::transform(iter->second.data, mult_iter->second.data,
+                               iter->second.data.begin(), std::multiplies<>());
 
         // If data is global, then we also need to set the global_data. I think they should be the same at this stage, though!
         if (kw_info.global)
         {
             assert(mult_iter->second.global_data.has_value());
             assert(iter->second.global_data.has_value());
-            std::transform(iter->second.global_data->begin(),
-                           iter->second.global_data->end(),
-                           mult_iter->second.global_data->begin(),
-                           iter->second.global_data->begin(),
-                           std::multiplies<>());
+            std::ranges::transform(*iter->second.global_data,
+                                   *mult_iter->second.global_data,
+                                   iter->second.global_data->begin(),
+                                   std::multiplies<>());
         }
         // If this is MULTPV we also need to apply the additional multiplier to PORV if that was initialized already.
         // Note that the check for PORV is essential as otherwise the value constructed durig init_get will already apply
@@ -1192,7 +1219,7 @@ void FieldProps::apply_multipliers()
         if (keyword == ParserKeywords::MULTPV::keywordName && !hasPorvBefore) {
             auto& porv = this->init_get<double>(ParserKeywords::PORV::keywordName);
             auto& porv_data = porv.data;
-            std::transform(porv_data.begin(), porv_data.end(), mult_iter->second.data.begin(), porv_data.begin(), std::multiplies<>());
+            std::ranges::transform(porv_data, mult_iter->second.data, porv_data.begin(), std::multiplies<>());
         }
         this->double_data.erase(mult_iter);
     }
@@ -1361,26 +1388,6 @@ void FieldProps::handle_double_keyword(const Section section,
     this->handle_double_keyword(section, kw_info, keyword, keyword.name(), box);
 }
 
-double FieldProps::get_alpha(const std::string& func_name,
-                             const std::string& target_array,
-                             const double       raw_alpha)
-{
-    return ((func_name == "ADDX") ||
-            (func_name == "MAXLIM") ||
-            (func_name == "MINLIM"))
-        ? this->getSIValue(target_array, raw_alpha)
-        : raw_alpha;
-}
-
-double FieldProps::get_beta(const std::string& func_name,
-                            const std::string& target_array,
-                            const double       raw_beta)
-{
-    return (func_name == "MULTA")
-        ? this->getSIValue(target_array, raw_beta)
-        : raw_beta;
-}
-
 template <typename T>
 void FieldProps::operate(const DeckRecord&                   record,
                          Fieldprops::FieldData<T>&           target_data,
@@ -1396,11 +1403,21 @@ void FieldProps::operate(const DeckRecord&                   record,
         };
     }
 
+    auto parseDim = [this](const auto& fldData)
+    {
+        return fldData.kw_info.unit.has_value()
+            ? this->unit_system.parse(*fldData.kw_info.unit)
+            : Dimension { 1.0 };
+    };
+
+    const auto srcDim = parseDim(src_data);
+    const auto dstDim = parseDim(target_data);
+
     const auto func_name    = record.getItem("OPERATION").getTrimmedString(0);
     const auto check_target = (func_name == "MULTIPLY") || (func_name == "POLY");
 
-    const auto alpha = this->get_alpha(func_name, target_array, record.getItem("PARAM1").get<double>(0));
-    const auto beta  = this->get_beta(func_name, target_array, record.getItem("PARAM2").get<double>(0));
+    const auto alpha = record.getItem("PARAM1").get<double>(0);
+    const auto beta  = record.getItem("PARAM2").get<double>(0);
     const auto func  = Operate::get(func_name, alpha, beta);
 
     auto& to_data = global? *target_data.global_data : target_data.data;
@@ -1414,7 +1431,11 @@ void FieldProps::operate(const DeckRecord&                   record,
 
         if (value::has_value(from_status[ix])) {
             if (!check_target || value::has_value(to_status[ix])) {
-                to_data[ix] = func(to_data[ix], from_data[ix]);
+                // Convert the data to input units and apply the operation.
+                const auto val = func(dstDim.convertSiToRaw(to_data[ix]),
+                                      srcDim.convertSiToRaw(from_data[ix]));
+                // Convert back the data to internal SI units.
+                to_data[ix] = dstDim.convertRawToSi(val);
                 to_status[ix] = from_status[ix];
             }
             else {
@@ -1452,7 +1473,9 @@ void FieldProps::handle_operateR(const DeckKeyword& keyword)
         const auto target_kw = Fieldprops::keywords::
             get_keyword_from_alias(record.getItem(0).getTrimmedString(0));
 
-        if (! FieldProps::supported<double>(target_kw)) {
+        if (! FieldProps::supported<double>(target_kw) &&
+            ! Fieldprops::keywords::is_work(target_kw))
+        {
             continue;
         }
 
@@ -1607,7 +1630,7 @@ void FieldProps::handle_OPERATE(const DeckKeyword& keyword, Box box)
 
         auto& field_data = this->init_get<double>(target_kw);
 
-        const auto src_kw = record.getItem("ARRAY").getTrimmedString(0);
+        const auto src_kw = record.getItem("ARRAY_PARAMETER").getTrimmedString(0);
         const auto& src_data = this->init_get<double>(src_kw);
 
         FieldProps::operate(record, field_data, src_data, box.index_list());
@@ -1909,7 +1932,7 @@ void FieldProps::init_porv(Fieldprops::FieldData<double>& porv)
 
     if (this->has<double>("MULTPV")) {
         const auto& multpv = this->get<double>("MULTPV");
-        std::transform(porv_data.begin(), porv_data.end(), multpv.begin(), porv_data.begin(), std::multiplies<>());
+        std::ranges::transform(porv_data, multpv, porv_data.begin(), std::multiplies<>());
     }
 
     for (const auto& mregp: this->multregp) {
@@ -2028,9 +2051,9 @@ void FieldProps::processMULTREGP(const Deck& deck)
             // for the multiplier item in keyword MULTREGP.
             const auto multiplier = record.getItem<Kw::MULTIPLIER>().get<double>(0);
 
-            auto iter = std::find_if(this->multregp.begin(), this->multregp.end(),
-                                     [region_value](const MultregpRecord& mregp)
-                                     { return mregp.region_value == region_value; });
+            const auto iter = std::ranges::find_if(this->multregp,
+                                                  [region_value](const MultregpRecord& mregp)
+                                                  { return mregp.region_value == region_value; });
 
             // There is some weirdness if the same region value is entered
             // in several records, then only the last applies.
@@ -2344,4 +2367,10 @@ void FieldProps::set_active_indices(const std::vector<int>& indices)
 
 template std::vector<bool> FieldProps::defaulted<int>(const std::string& keyword);
 template std::vector<bool> FieldProps::defaulted<double>(const std::string& keyword);
+
+void FieldProps::resetWorkArrays()
+{
+    this->work_arrays.clear();
+}
+
 }

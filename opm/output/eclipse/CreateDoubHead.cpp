@@ -88,11 +88,11 @@ namespace {
             double f = 0.;
             double delay = 0.;
             double damping_fact = 0.;
-            
+
             const auto& guideCFG = sched[lookup_step].guide_rate();
             if (guideCFG.has_model()) {
                 const auto& guideRateModel = guideCFG.model();
-                
+
                 a = guideRateModel.getA();
                 b = guideRateModel.getB();
                 c = guideRateModel.getC();
@@ -187,12 +187,15 @@ createDoubHead(const EclipseState& es,
     auto dh = DoubHEAD{}
         .tuningParameters(sched[lookup_step].tuning(), tconv)
         .timeStamp       (computeTimeStamp(sched, simTime))
-        .drsdt           (sched, lookup_step, tconv)
         .udq_param       (rspec.udqParams())
         .guide_rate_param(computeGuideRate(sched, lookup_step))
         .lift_opt_param  (computeLiftOptParam(sched, usys, lookup_step))
         .netBalParams    (getNetworkBalanceParameters(sched, usys, report_step, lookup_step))
         ;
+
+    if (report_step > 0) {
+        dh.phaseMixing(sched[lookup_step].oilvap(), usys);
+    }
 
     if (nextTimeStep > 0.0) {
         using M = ::Opm::UnitSystem::measure;

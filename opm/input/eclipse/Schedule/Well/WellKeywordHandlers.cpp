@@ -44,7 +44,9 @@
 
 #include <opm/input/eclipse/Units/UnitSystem.hpp>
 
+#include <opm/input/eclipse/Deck/DeckItem.hpp>
 #include <opm/input/eclipse/Deck/DeckKeyword.hpp>
+#include <opm/input/eclipse/Deck/DeckRecord.hpp>
 
 #include <opm/input/eclipse/Parser/ParseContext.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/F.hpp>
@@ -56,10 +58,16 @@
 #include <fmt/ranges.h>
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
+#include <functional>
 #include <memory>
 #include <numeric>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace Opm {
@@ -92,6 +100,17 @@ std::string trim_wgname(const DeckKeyword& keyword,
         parseContext.handleError(ParseContext::PARSE_WGNAME_SPACE, msg_fmt, location, errors);
     }
     return wgname;
+}
+
+void updateOpenShutEvents(HandlerContext& handlerContext, const std::string& well_name){
+    if (handlerContext.getWellStatus(well_name) == WellStatus::OPEN) {
+        handlerContext.state().wellgroup_events().addEvent( well_name, ScheduleEvents::REQUEST_OPEN_WELL);
+        handlerContext.state().wellgroup_events().clearEvent( well_name, ScheduleEvents::REQUEST_SHUT_WELL);
+    }
+    if (handlerContext.getWellStatus(well_name) == WellStatus::SHUT) {
+        handlerContext.state().wellgroup_events().addEvent( well_name, ScheduleEvents::REQUEST_SHUT_WELL);
+        handlerContext.state().wellgroup_events().clearEvent( well_name, ScheduleEvents::REQUEST_OPEN_WELL);
+    }
 }
 
 void handleWCONHIST(HandlerContext& handlerContext)
@@ -176,11 +195,8 @@ void handleWCONHIST(HandlerContext& handlerContext)
                 handlerContext.affected_well(well_name);
             }
 
-            // Always check if well can be opened (it could have been closed for numerical reasons and possible to operate with new params)
-            if (handlerContext.getWellStatus(well_name) == WellStatus::OPEN) {
-                handlerContext.state().wellgroup_events().addEvent( well_name, ScheduleEvents::REQUEST_OPEN_WELL);
-            }
-
+            // Add Event if well open/shut is requested
+            updateOpenShutEvents(handlerContext, well_name);
         }
     }
 }
@@ -254,11 +270,8 @@ void handleWCONINJE(HandlerContext& handlerContext)
                 handlerContext.state().wells.update( std::move(well2) );
                 handlerContext.affected_well(well_name);
             }
-
-            if (handlerContext.state().wells.get( well_name ).getStatus() == Well::Status::OPEN) {
-                handlerContext.state().wellgroup_events().addEvent(well_name, ScheduleEvents::REQUEST_OPEN_WELL);
-            }
-
+             // Add Event if well open/shut is requested
+            updateOpenShutEvents(handlerContext, well_name);
             auto udq_active = handlerContext.state().udq_active.get();
             if (injection->updateUDQActive(handlerContext.state().udq.get(), udq_active)) {
                 handlerContext.state().udq_active.update( std::move(udq_active) );
@@ -333,10 +346,8 @@ void handleWCONINJH(HandlerContext& handlerContext)
                 handlerContext.affected_well(well_name);
             }
 
-            // Always check if well can be opened (it could have been closed for numerical reasons and possible to operate with new params)
-            if (handlerContext.getWellStatus(well_name) == WellStatus::OPEN) {
-                handlerContext.state().wellgroup_events().addEvent( well_name, ScheduleEvents::REQUEST_OPEN_WELL);
-            }
+            // Add Event if well open/shut is requested
+            updateOpenShutEvents(handlerContext, well_name);
         }
     }
 }
@@ -401,9 +412,10 @@ void handleWCONPROD(HandlerContext& handlerContext)
                                                                    ParserKeywords::WCONPROD::BHP::defaultValue.get<double>());
             }
 
+            const auto& phases = handlerContext.static_schedule().m_runspec.phases();
             properties->handleWCONPROD(alq_type, table_nr, default_bhp_target,
                                        handlerContext.static_schedule().m_unit_system,
-                                       well_name, record, handlerContext.keyword.location());
+                                       well_name, phases, record, handlerContext.keyword.location());
 
             if (switching_from_injector) {
                 if (properties->bhp_hist_limit_defaulted) {
@@ -425,16 +437,15 @@ void handleWCONPROD(HandlerContext& handlerContext)
                 update_well = true;
             }
 
-            if (well2.getStatus() == WellStatus::OPEN) {
-                handlerContext.state().wellgroup_events().addEvent(well2.name(), ScheduleEvents::REQUEST_OPEN_WELL);
-            }
-
             if (update_well) {
                 handlerContext.state().events().addEvent( ScheduleEvents::PRODUCTION_UPDATE );
                 handlerContext.state().wellgroup_events().addEvent( well2.name(), ScheduleEvents::PRODUCTION_UPDATE);
                 handlerContext.state().wells.update( std::move(well2) );
                 handlerContext.affected_well(well_name);
             }
+
+            // Add Event if well open/shut is requested
+            updateOpenShutEvents(handlerContext, well_name);
 
             auto udq_active = handlerContext.state().udq_active.get();
             if (properties->updateUDQActive(handlerContext.state().udq.get(), udq_active)) {
@@ -523,10 +534,8 @@ void handleWELOPEN(HandlerContext& handlerContext)
                         handlerContext.state().wells.update(std::move(well2));
                     }
                 }
-
-                if (new_well_status == open) {
-                    handlerContext.state().wellgroup_events().addEvent( wname, ScheduleEvents::REQUEST_OPEN_WELL);
-                }
+                // Add Event if well open/shut is requested
+                updateOpenShutEvents(handlerContext, wname);
             }
             continue;
         }
@@ -538,11 +547,6 @@ void handleWELOPEN(HandlerContext& handlerContext)
           shut.
          */
         for (const auto& wname : well_names) {
-            {
-                auto well = handlerContext.state().wells.get(wname);
-                handlerContext.state().wells.update( std::move(well) );
-            }
-
             const auto connection_status = Connection::StateFromString( status_str );
             {
                 auto well = handlerContext.state().wells.get(wname);
@@ -682,7 +686,7 @@ void handleWELSPECS(HandlerContext& handlerContext)
     }
 
     if (! fieldWells.empty()) {
-        std::sort(fieldWells.begin(), fieldWells.end());
+        std::ranges::sort(fieldWells);
         fieldWells.erase(std::unique(fieldWells.begin(), fieldWells.end()),
                          fieldWells.end());
 
@@ -707,6 +711,7 @@ Well{0} entered with 'FIELD' parent group:
 void handleWELSPECL(HandlerContext& handlerContext)
 {
     using Kw = ParserKeywords::WELSPECL;
+
     auto getTrimmedName = [&handlerContext](const auto& item)
     {
         return trim_wgname(handlerContext.keyword,
@@ -715,43 +720,75 @@ void handleWELSPECL(HandlerContext& handlerContext)
                            handlerContext.errors);
     };
     handleWELSPECS(handlerContext);
+    std::size_t index = 0;
+    std::unordered_map<std::string, int> lgr_well_seq_map;
+
     for (const auto& record : handlerContext.keyword) {
         const auto wellName = getTrimmedName(record.getItem<Kw::WELL>());
         const auto lgrTag = getTrimmedName(record.getItem<Kw::LGR>());
-        handlerContext.state().wells.get(wellName).flag_lgr_well();
-        handlerContext.state().wells.get(wellName).set_lgr_well_tag(lgrTag);
+        const auto& [tagPos, inserted] = lgr_well_seq_map.try_emplace(lgrTag, 0);
+        if (! inserted) {
+            // lgrTag already exists in the map, increase sequence number.
+            ++tagPos->second;
+        }
+        auto& well = handlerContext.state().wells.get(wellName);
+        well.setInsertIndexLGR(tagPos->second);
+        well.setInsertIndexAllLGR(index);
+        well.flag_lgr_well();
+        well.set_lgr_well_tag(lgrTag);
+        index++;
     }
 }
 
-/*
-  The documentation for the WELTARG keyword says that the well
-  must have been fully specified and initialized using one of the
-  WCONxxxx keywords prior to modifying the well using the WELTARG
-  keyword.
-
-  The following implementation of handling the WELTARG keyword
-  does not check or enforce in any way that this is done (i.e. it
-  is not checked or verified that the well is initialized with any
-  WCONxxxx keyword).
-
-  Update: See the discussion following the definitions of the SI factors, due
-  to a bad design we currently need the well to be specified with
-  WCONPROD / WCONHIST before WELTARG is applied, if not the units for the
-  rates will be wrong.
-*/
+// The documentation for the WELTARG keyword says that the well must have
+// been fully specified and initialized using one of the WCONxxxx keywords
+// prior to modifying the well using the WELTARG keyword.
+//
+// The following implementation of handling the WELTARG keyword does not
+// check or enforce in any way that this is done (i.e., it is not checked or
+// verified that the well is initialized with any WCONxxxx keyword).
+//
+// Update: See the discussion following the definitions of the SI factors,
+// due to a bad design we currently need the well to be specified with
+// WCONPROD / WCONHIST before WELTARG is applied.  Otherwise the units for
+// the rates will be wrong.
 
 void handleWELTARG(HandlerContext& handlerContext)
 {
-    const double SiFactorP = handlerContext.static_schedule().m_unit_system.parse("Pressure").getSIScaling();
+    using Kw = ParserKeywords::WELTARG;
+
+    const auto SiFactorP = handlerContext.static_schedule()
+        .m_unit_system.parse("Pressure").getSIScaling();
+
     for (const auto& record : handlerContext.keyword) {
-        const std::string& wellNamePattern = record.getItem("WELL").getTrimmedString(0);
-        const auto well_names = handlerContext.wellNames(wellNamePattern);
+        const auto wellNamePattern = record.getItem<Kw::WELL>().getTrimmedString(0);
+
+        const auto is_wlist = handlerContext.state()
+            .wlist_manager().hasList(wellNamePattern);
+
+        const auto well_names = handlerContext.wellNames(wellNamePattern, is_wlist);
+
         if (well_names.empty()) {
-            handlerContext.invalidNamePattern( wellNamePattern);
+            if (is_wlist) {
+                // wellNamePattern names an empty well list.  This is okay,
+                // so issue a warning and continue.
+                const auto msg_format =
+                    fmt::format("Empty WLIST '{}' in '{{keyword}}', "
+                                "in {{file}} line {{line}}.", wellNamePattern);
+
+                const auto msg = OpmInputError::format
+                    (msg_format, handlerContext.keyword.location());
+
+                OpmLog::warning("WELTARG:EmptyWLIST", msg);
+                continue;
+            }
+            else {
+                handlerContext.invalidNamePattern(wellNamePattern);
+            }
         }
 
-        const auto cmode = WellWELTARGCModeFromString(record.getItem("CMODE").getTrimmedString(0));
-        const auto new_arg = record.getItem("NEW_VALUE").get<UDAValue>(0);
+        const auto cmode = WellWELTARGCModeFromString(record.getItem<Kw::CMODE>().getTrimmedString(0));
+        const auto new_arg = record.getItem<Kw::NEW_VALUE>().get<UDAValue>(0);
 
         for (const auto& well_name : well_names) {
             auto well2 = handlerContext.state().wells.get(well_name);
@@ -798,30 +835,6 @@ void handleWELTARG(HandlerContext& handlerContext)
     }
 }
 
-void handleWELTRAJ(HandlerContext& handlerContext)
-{
-    for (const auto& record : handlerContext.keyword) {
-        const std::string& wellNamePattern = record.getItem("WELL").getTrimmedString(0);
-        const auto wellnames = handlerContext.wellNames(wellNamePattern, false);
-
-        for (const auto& name : wellnames) {
-            auto well2 = handlerContext.state().wells.get(name);
-            auto connections = std::make_shared<WellConnections>(WellConnections(well2.getConnections()));
-            connections->loadWELTRAJ(record, handlerContext.grid, name, handlerContext.keyword.location());
-            if (well2.updateConnections(connections, handlerContext.grid)) {
-                handlerContext.state().wells.update( well2 );
-                handlerContext.record_well_structure_change();
-            }
-            handlerContext.state().wellgroup_events().addEvent( name, ScheduleEvents::COMPLETION_CHANGE);
-            const auto& md = connections->getMD();
-            if (!std::is_sorted(std::begin(md), std::end(md))) {
-                auto msg = fmt::format("Well {} measured depth column is not strictly increasing", name);
-                throw OpmInputError(msg, handlerContext.keyword.location());
-            }
-        }
-    }
-    handlerContext.state().events().addEvent(ScheduleEvents::COMPLETION_CHANGE);
-}
 
 void handleWHISTCTL(HandlerContext& handlerContext)
 {
@@ -856,62 +869,348 @@ void handleWHISTCTL(HandlerContext& handlerContext)
     }
 }
 
-void handleWLIST(HandlerContext& handlerContext)
+// ---------------------------------------------------------------------------
+
+/// Intermediate layer for canonicalising well list inputs and applying the
+/// resulting well list operation.
+class WListOperation
 {
-    const std::string legal_actions = "NEW:ADD:DEL:MOV";
-    for (const auto& record : handlerContext.keyword) {
-        const std::string& name = record.getItem("NAME").getTrimmedString(0);
-        const std::string& action = record.getItem("ACTION").getTrimmedString(0);
-        const std::vector<std::string>& well_args = record.getItem("WELLS").getData<std::string>();
-        std::vector<std::string> wells;
-        auto new_wlm = handlerContext.state().wlist_manager.get();
+public:
+    /// Constructor.
+    ///
+    /// \param[in] handlerContext Schedule state and ancillary information
+    /// at the current time point.
+    explicit WListOperation(HandlerContext& handlerContext)
+        : hctx_ { std::ref(handlerContext) }
+    {}
 
-        if (legal_actions.find(action) == std::string::npos)
-            throw std::invalid_argument("The action:" + action + " is not recognized.");
+    /// Internalise well list name, operation, and well name data for a
+    /// single WLIST keyword record.
+    ///
+    /// Throws an exception if any of the input data is incorrect and cannot
+    /// be properly interpreted in context.
+    ///
+    /// \param[in] record Single record from a WLIST keyword.
+    void parse(const DeckRecord& record);
 
-        for (const auto& well_arg : well_args) {
-            // does not use overload for context to avoid throw
-            const auto names = handlerContext.wellNames(well_arg, true);
-            if (names.empty() && well_arg.find("*") == std::string::npos) {
-                std::string msg_fmt = "Problem with {keyword}\n"
-                                      "In {file} line {line}\n"
-                                      "The well '" + well_arg + "' has not been defined with WELSPECS and will not be added to the list.";
-                const auto& parseContext = handlerContext.parseContext;
-                parseContext.handleError(ParseContext::SCHEDULE_INVALID_NAME, msg_fmt, handlerContext.keyword.location(),handlerContext.errors);
-                continue;
-            }
+    /// Apply previously parsed input data to the current set of well lists.
+    ///
+    /// Depending on the operation, this function will create a new well
+    /// list with an initial set of wells (NEW), add a set of wells to an
+    /// existing (or new) well list (ADD), move a set of wells to an
+    /// existing (or new) well list (MOV), or remove a set of wells from an
+    /// existing well list (DEL).
+    ///
+    /// \param[in,out] wlm Run's currently known well lists.  On exit,
+    /// updated according to the specification previously internalised in
+    /// parse().
+    void apply(WListManager& wlm);
 
-            std::move(names.begin(), names.end(), std::back_inserter(wells));
-        }
+    /// Whether or not any well lists have changed as a result of the
+    /// current set of operations.
+    bool wellListsChanged() const
+    {
+        return this->well_lists_changed_;
+    }
 
-        if (name[0] != '*')
-            throw std::invalid_argument("The list name in WLIST must start with a '*'");
+private:
+    // Note to maintainers: If you change the 'Action' enumeration, then you
+    // must also update the apply() member function accordingly.
 
-        if (action == "NEW") {
-            new_wlm.newList(name, wells);
-        }
+    /// Well list operation.
+    enum class Action : std::size_t {
+        /// Create a new well list (NEW).
+        New,
 
-        if (!new_wlm.hasList(name))
-            throw std::invalid_argument("Invalid well list: " + name);
+        /// Add wells to an existing or new well list (ADD).
+        Add,
 
-        if (action == "MOV") {
-            for (const auto& well : wells) {
-                new_wlm.delWell(well);
-            }
-        }
+        /// Remove a set of wells from an existing well list (DEL).
+        Del,
 
-        if (action == "DEL") {
-            for (const auto& well : wells) {
-                new_wlm.delWListWell(well, name);
-            }
-        } else if (action != "NEW"){
-            for (const auto& well : wells) {
-                new_wlm.addWListWell(well, name);
-            }
-        }
-        handlerContext.state().wlist_manager.update( std::move(new_wlm) );
+        /// Move all specified wells onto an existing or new well list (MOV).
+        Mov,
+
+        /// Parse error.
+        Invalid,
+    };
+
+    /// Schedule state and ancillary dynamic information at the current time
+    /// point.
+    std::reference_wrapper<HandlerContext> hctx_;
+
+    /// Name of well list that is currently being manipulated.
+    std::string wlist_name_{};
+
+    /// Current well list operation.
+    Action action_{ Action::Invalid };
+
+    /// Set of wells involved in current operation.
+    std::vector<std::string> wells_{};
+
+    /// Whether or not any well lists changed as a result of the current set
+    /// of operations.
+    bool well_lists_changed_{};
+
+    /// Internalise well list name.
+    ///
+    /// Updates \c wlist_name_.  Will throw an exception if the well list
+    /// item does not name a well list--i.e., if the name in the well list
+    /// item does not begin with a leading asterisk.
+    ///
+    /// \param[in] record Single record from a WLIST keyword.
+    void parseWListName(const DeckRecord& record);
+
+    /// Internalise well list operation.
+    ///
+    /// Updates \c action_.  Will throw an exception if the well list
+    /// operation item is not a known operation--i.e., if the string in the
+    /// well list operation item is not among the set supported by Action.
+    ///
+    /// \param[in] record Single record from a WLIST keyword.
+    void parseWListAction(const DeckRecord& record);
+
+    /// Internalise collection of wells
+    ///
+    /// Updates \c wells_.  Will throw an exception if any of the named
+    /// wells have not been previously defined.
+    ///
+    /// \param[in] record Single record from a WLIST keyword.
+    void parseWListWells(const DeckRecord& record);
+
+    /// Create a new well list.
+    ///
+    /// Implements the NEW operation.
+    ///
+    /// \param[in,out] wlm Run's currently known well lists.  On exit, will
+    /// have a new, or reset, well list by the name of wlist_name_,
+    /// containing the wells in wells_.
+    void newList(WListManager& wlm);
+
+    /// Add wells to new or existing well list.
+    ///
+    /// Implements the ADD operation.
+    ///
+    /// \param[in,out] wlm Run's currently known well lists.  On exit, the
+    /// well list named in wlist_name_ will contain at least the wells named
+    /// in wells_.
+    void add(WListManager& wlm);
+
+    /// Move wells to new or existing well list.
+    ///
+    /// Implements the MOV operation.
+    ///
+    /// \param[in,out] wlm Run's currently known well lists.  On exit, the
+    /// well list named in wlist_name_ will contain at least the wells named
+    /// in wells_.  Moreover, those wells will no longer be included in any
+    /// other well list known to \p wlm.
+    void move(WListManager& wlm);
+
+    /// Remove wells from existing well list.
+    ///
+    /// Implements the DEL operation.
+    ///
+    /// Will throw an exception if the well list named in well_list_ does
+    /// not exist.
+    ///
+    /// \param[in,out] wlm Run's currently known well lists.  On exit, the
+    /// wells named in wells_ will no longer be included in the well list
+    /// named in well_list_.
+    void del(WListManager& wlm);
+
+    /// Record that at least one well list changed as a result of the
+    /// current operation.
+    void recordWellListChange();
+
+    /// Report a parsing error through the run's parse context/error guard
+    ///
+    /// Includes the normal keyword and location information.
+    ///
+    /// \param[in] msg Specific message pertaining to a particular context
+    /// such as an invalid well or well list name.
+    void errorInvalidName(std::string_view msg) const;
+};
+
+void WListOperation::parse(const DeckRecord& record)
+{
+    this->parseWListName(record);
+    this->parseWListAction(record);
+    this->parseWListWells(record);
+}
+
+void WListOperation::apply(WListManager& wlm)
+{
+    // Note: Member function order must match Action enumerator order.
+    const auto op = std::array {
+        &WListOperation::newList,
+        &WListOperation::add,
+        &WListOperation::del,
+        &WListOperation::move,
+    }[ static_cast<std::underlying_type_t<Action>>(this->action_) ];
+
+    (this->*op)(wlm);
+}
+
+void WListOperation::parseWListName(const DeckRecord& record)
+{
+    this->wlist_name_ = record
+        .getItem<ParserKeywords::WLIST::NAME>()
+        .getTrimmedString(0);
+
+    if (this->wlist_name_.empty() || (this->wlist_name_.front() != '*')) {
+        this->errorInvalidName
+            (fmt::format("Well list name '{}' does not "
+                         "have a leading asterisk ('*')",
+                         record.getItem<ParserKeywords::WLIST::NAME>()
+                         .get<std::string>(0)));
     }
 }
+
+void WListOperation::parseWListAction(const DeckRecord& record)
+{
+    this->action_ = Action::Invalid;
+
+    const auto action = record
+        .getItem<ParserKeywords::WLIST::ACTION>()
+        .getTrimmedString(0);
+
+    if      (action == "NEW") { this->action_ = Action::New; }
+    else if (action == "ADD") { this->action_ = Action::Add; }
+    else if (action == "DEL") { this->action_ = Action::Del; }
+    else if (action == "MOV") { this->action_ = Action::Mov; }
+
+    if (this->action_ == Action::Invalid) {
+        throw OpmInputError {
+            fmt::format(R"(Problem with {{keyword}}
+In {{file}} line {{line}}
+"Action '{}' is not recognized.)", action),
+            this->hctx_.get().keyword.location()
+        };
+    }
+}
+
+void WListOperation::parseWListWells(const DeckRecord& record)
+{
+    this->wells_.clear();
+
+    const auto& well_args = record
+        .getItem<ParserKeywords::WLIST::WELLS>()
+        .getData<std::string>();
+
+    for (const auto& well_arg : well_args) {
+        // Does not use overload for context to avoid throw
+        const auto well_names = this->hctx_.get().wellNames(well_arg, true);
+
+        if (well_names.empty() && (well_arg.find("*") == std::string::npos)) {
+            this->errorInvalidName(fmt::format("Well '{}' has not been defined "
+                                               "with WELSPECS and will not be "
+                                               "added to the list.", well_arg));
+
+            continue;
+        }
+
+        this->wells_.insert(this->wells_.end(),
+                            well_names.begin(),
+                            well_names.end());
+    }
+}
+
+void WListOperation::newList(WListManager& wlm)
+{
+    wlm.newList(this->wlist_name_, this->wells_);
+
+    this->recordWellListChange();
+}
+
+void WListOperation::add(WListManager& wlm)
+{
+    wlm.addOrCreateWellList(this->wlist_name_, this->wells_);
+
+    this->recordWellListChange();
+}
+
+void WListOperation::move(WListManager& wlm)
+{
+    for (const auto& well : this->wells_) {
+        wlm.delWell(well);
+    }
+
+    this->add(wlm);
+}
+
+void WListOperation::del(WListManager& wlm)
+{
+    if (! wlm.hasList(this->wlist_name_)) {
+        this->errorInvalidName(fmt::format("Well list '{}' is unknown "
+                                           "and cannot be used in DEL "
+                                           "operation.", this->wlist_name_));
+
+        return;
+    }
+
+    for (const auto& well : this->wells_) {
+        if (wlm.delWListWell(well, this->wlist_name_)) {
+            this->recordWellListChange();
+        }
+    }
+}
+
+void WListOperation::recordWellListChange()
+{
+    this->well_lists_changed_ = true;
+}
+
+void WListOperation::errorInvalidName(std::string_view message) const
+{
+    const auto msg_fmt = fmt::format(R"(Problem with {{keyword}}
+In {{file}} line {{line}}
+{})", message);
+
+    this->hctx_.get().parseContext
+        .handleError(ParseContext::SCHEDULE_INVALID_NAME,
+                     msg_fmt,
+                     this->hctx_.get().keyword.location(),
+                     this->hctx_.get().errors);
+}
+
+void handleWLIST(HandlerContext& handlerContext)
+{
+    auto wlistOperation = WListOperation { handlerContext };
+
+    for (const auto& record : handlerContext.keyword) {
+        // Will throw an exception if input is unexpected.
+        wlistOperation.parse(record);
+
+        // If we get here, then the input data is meaningful and we can
+        // proceed to apply the operation.
+        //
+        // Note: We need an independent WListManager for each record to
+        // handle the case that subsequent records are influenced by the
+        // operation in earlier records.
+        auto wlm = handlerContext.state().wlist_manager();
+
+        wlistOperation.apply(wlm);
+
+        handlerContext.state().wlist_manager.update(std::move(wlm));
+    }
+
+    if (! wlistOperation.wellListsChanged()) {
+        return;
+    }
+
+    auto tracker = handlerContext.state().wlist_tracker();
+
+    if (handlerContext.action_mode) {
+        tracker.recordActionChangedLists();
+    }
+    else {
+        tracker.recordStaticChangedLists();
+    }
+
+    handlerContext.state().wlist_tracker.update(std::move(tracker));
+}
+
+// ---------------------------------------------------------------------------
 
 void handleWPAVE(HandlerContext& handlerContext)
 {
@@ -981,14 +1280,16 @@ void handleWPAVEDEP(HandlerContext& handlerContext)
 /// Keyword structure:
 ///
 ///   WSEED
-///     WellName  I  J  K  nx  ny  nz /
-///     WellName  I  J  K  nx  ny  nz /
-///     WellName  I  J  K  nx  ny  nz /
+///     WellName  I  J  K  nx  ny  nz  ev  eh  wd /
+///     WellName  I  J  K  nx  ny  nz  ev  eh  wd /
+///     WellName  I  J  K  nx  ny  nz  ev  eh  wd /
 ///   /
 ///
 /// in which 'WellName' is a well, well list, well template or well list
-/// template.  I,J,K are regular well connection coordinates and nx,ny,nz
-/// are the components of the fracturing plane's normal vector.
+/// template.  I,J,K are regular well connection coordinates, nx,ny,nz are
+/// the components of the fracturing plane's normal vector, and ev,eh,wd are
+/// the vertical and horizontal extents along with the initial fracture
+/// width at the seed point.
 void handleWSEED(HandlerContext& handlerContext)
 {
     const auto* grid = handlerContext.grid.get_grid();
@@ -1022,6 +1323,11 @@ void handleWSEED(HandlerContext& handlerContext)
             record.getItem<ParserKeywords::WSEED::NORMAL_Z>().getSIDouble(0),
         };
 
+        const auto cellSeedSize = WellFractureSeeds::SeedSize {}
+            .verticalExtent  (record.getItem<ParserKeywords::WSEED::SIZE_Z>().getSIDouble(0))
+            .horizontalExtent(record.getItem<ParserKeywords::WSEED::SIZE_H>().getSIDouble(0))
+            .width           (record.getItem<ParserKeywords::WSEED::WIDTH> ().getSIDouble(0));
+
         for (const auto& well_name : well_names) {
             const auto hasConn = handlerContext.state()
                 .wells(well_name)
@@ -1034,7 +1340,7 @@ void handleWSEED(HandlerContext& handlerContext)
                 ? std::make_shared<WellFractureSeeds>(seeds(well_name))
                 : std::make_shared<WellFractureSeeds>(well_name);
 
-            if (seed->updateSeed(cellSeedIndex, cellSeedNormal)) {
+            if (seed->updateSeed(cellSeedIndex, cellSeedNormal, cellSeedSize)) {
                 updated_seed_wells.insert(well_name);
                 seeds.update(well_name, std::move(seed));
             }
@@ -1087,7 +1393,6 @@ getWellHandlers()
         { "WELSPECS", &handleWELSPECS },
         { "WELSPECL", &handleWELSPECL },
         { "WELTARG" , &handleWELTARG  },
-        { "WELTRAJ" , &handleWELTRAJ  },
         { "WHISTCTL", &handleWHISTCTL },
         { "WINJGAS",  &handleWINJGAS  },
         { "WLIST"   , &handleWLIST    },

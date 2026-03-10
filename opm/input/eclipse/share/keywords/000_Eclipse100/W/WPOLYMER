@@ -11,12 +11,12 @@
     {
       "name": "POLYMER_CONCENTRATION",
       "value_type": "UDA",
-      "dimension": "PolymerDensity"
+      "dimension": "Concentration"
     },
     {
       "name": "SALT_CONCENTRATION",
       "value_type": "UDA",
-      "dimension": "PolymerDensity"
+      "dimension": "Concentration"
     },
     {
       "name": "GROUP_POLYMER_CONCENTRATION",

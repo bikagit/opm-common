@@ -306,7 +306,7 @@ Well::Well(const RestartIO::RstWell& rst_well,
     use_efficiency_in_network(true),   // @TODO@ Find and read the actual value from restart
     solvent_fraction(def_solvent_fraction),
     has_produced(rst_well.void_total != 0),
-    has_injected(rst_well.void_inj_total != 0),    
+    has_injected(rst_well.void_inj_total != 0),
     prediction_mode(rst_well.hist_requested_control == 0),
     econ_limits(economicLimits(rst_well)),
     foam_properties(std::make_shared<WellFoamProperties>()),
@@ -466,12 +466,33 @@ Well::Well(const RestartIO::RstWell& rst_well,
 
         this->updateInjection(std::move(i));
 
+        const auto isTemp = (rst_well.inj_temperature < RestartIO::RstWell::UNDEFINED_VALUE);
+        std::size_t tracer_conc_index = 0;
+        if (isTemp) {
+            this->well_inj_temperature = rst_well.inj_temperature;
+            ++tracer_conc_index;
+        }
+
         if (!rst_well.tracer_concentration_injection.empty()) {
             auto tracer = std::make_shared<WellTracerProperties>(this->getTracerProperties());
-            for (std::size_t tracer_index = 0; tracer_index < tracer_config.size(); tracer_index++) {
-                const auto& tname = tracer_config[tracer_index].name;
-                const auto concentration = rst_well.tracer_concentration_injection[tracer_index];
-                tracer->setConcentration(tname, concentration);
+            for (std::size_t tracer_index = 0; tracer_index < tracer_config.size(); ++tracer_index) {
+                const auto& trName = tracer_config[tracer_index].name;
+                const auto phase = tracer_config[tracer_index].phase;
+                if (phase == Phase::WATER) {
+                    const auto concentration = rst_well.tracer_concentration_injection[tracer_conc_index];
+                    tracer->setConcentration(WellTracerProperties::Tracer { trName },
+                                                UDAValue { concentration } );
+                } else {
+                    const auto free_conc = rst_well.tracer_concentration_injection[tracer_conc_index];
+                    const auto sol_conc = rst_well.tracer_concentration_injection[++tracer_conc_index];
+                    if (WellType::gas_injector(this->wtype.ecl_wtype()) || WellType::oil_injector(this->wtype.ecl_wtype())) {
+                        tracer->setConcentration( WellTracerProperties::Tracer { trName },
+                                                    UDAValue { free_conc } );
+                        if (sol_conc > 0.0) {
+                            OpmLog::warning(fmt::format("Well {}: Restoring a non-zero solution concentration of tracer {} is not yet supported.", rst_well.name, trName));
+                        }
+                    }
+                }
             }
             this->updateTracer(tracer);
         }
@@ -550,6 +571,8 @@ Well Well::serializationTestObject()
     result.group_name = "test2";
     result.init_step = 1;
     result.insert_index = 2;
+    result.insert_index_lgr = 30;
+    result.insert_index_all_lgr = 33;
     result.headI = 3;
     result.headJ = 4;
     result.ref_depth = 5;
@@ -605,20 +628,27 @@ void Well::flag_lgr_well(void)
     ref_type = WellRefinementType::LGR;
 }
 
+void Well::setInsertIndexLGR(const std::size_t index)
+{
+    this->insert_index_lgr = index;
+}
+
+void Well::setInsertIndexAllLGR(const std::size_t index)
+{
+    this->insert_index_all_lgr = index;
+}
+
 void Well::set_lgr_well_tag(const std::string& lgr_tag_name)
 {
     lgr_tag = lgr_tag_name;
 }
 
 std::optional<std::string> Well::get_lgr_well_tag(void) const
-{   
+{
     if (this->ref_type == WellRefinementType::STANDARD)
         return std::nullopt;
     return lgr_tag;
 }
-
-
-
 
 bool Well::is_lgr_well(void) const
 {
@@ -1028,10 +1058,10 @@ bool Well::updateSolventFraction(const double solvent_fraction_arg)
     return false;
 }
 
-bool Well::handleCOMPSEGS(const DeckKeyword& keyword,
+bool Well::handleCOMPSEGS(const DeckKeyword&  keyword,
                           const ScheduleGrid& grid,
                           const ParseContext& parseContext,
-                          ErrorGuard& errors)
+                          ErrorGuard&         errors)
 {
     if (this->segments == nullptr) {
         throw OpmInputError{
@@ -1043,12 +1073,15 @@ bool Well::handleCOMPSEGS(const DeckKeyword& keyword,
         };
     }
 
-    auto [new_connections, new_segments] = Compsegs::processCOMPSEGS
+    auto new_connections = Compsegs::processCOMPSEGS
         (keyword, *this->connections, *this->segments,
          grid, parseContext, errors);
 
     this->updateConnections(std::make_shared<WellConnections>(std::move(new_connections)), false);
-    this->updateSegments(std::make_shared<WellSegments>(std::move(new_segments)));
+
+    // for multi-segment wells, we always use the top segment depth as the reference depth
+    this->updateRefDepth(this->segments->depthTopSegment());
+    this->derive_refdepth_from_conns_ = false;
 
     return true;
 }
@@ -1432,11 +1465,9 @@ std::map<int, std::vector<Connection>> Well::getCompletions() const
 
 bool Well::hasCompletion(int completion) const
 {
-    return std::any_of(this->connections->begin(), this->connections->end(),
-                       [completion](const auto& conn)
-                       {
-                           return conn.complnum() == completion;
-                       });
+    return std::ranges::any_of(*this->connections,
+                              [completion](const auto& conn)
+                              { return conn.complnum() == completion; });
 }
 
 Phase Well::getPreferredPhase() const
@@ -1807,6 +1838,21 @@ bool Well::handleWELSEGS(const DeckKeyword& keyword)
     return true;
 }
 
+void Well::addWellSegmentsFromLengthsAndDepths(const std::vector<std::pair<double, double>>& lengths_and_depths, double diameter, const KeywordLocation& location)
+{
+    if (this->segments == nullptr || this->segments->empty()) {
+        throw OpmInputError{
+            fmt::format("The WELSEGS keyword must be specified for well {} "
+                        "before creating segments through the COMPTRAJ keyword.", this->name()),
+            location
+        };
+    }
+    auto new_segments = std::make_shared<WellSegments>(*this->segments);
+    new_segments->addWellSegmentsFromLengthsAndDepths(this->name(), lengths_and_depths, diameter, *unit_system);
+
+    this->updateSegments(std::move(new_segments));
+}
+
 bool Well::updatePVTTable(std::optional<int> pvt_table_)
 {
     if (pvt_table_.has_value() && (this->pvt_table != *pvt_table_)) {
@@ -1817,24 +1863,14 @@ bool Well::updatePVTTable(std::optional<int> pvt_table_)
     return false;
 }
 
-bool Well::updateWSEGSICD(const std::vector<std::pair<int, SICD>>& sicd_pairs)
-{
-    auto new_segments = std::make_shared<WellSegments>(*this->segments);
-
-    if (new_segments->updateWSEGSICD(sicd_pairs)) {
-        this->segments = std::move(new_segments);
-        return true;
-    }
-
-    return false;
-}
-
 bool Well::updateWSEGAICD(const std::vector<std::pair<int, AutoICD>>& aicd_pairs,
-                          const KeywordLocation& location)
+                          const KeywordLocation&                      location,
+                          const ParseContext&                         parseContext,
+                          ErrorGuard&                                 errors)
 {
     auto new_segments = std::make_shared<WellSegments>(*this->segments);
 
-    if (new_segments->updateWSEGAICD(aicd_pairs, location)) {
+    if (new_segments->updateWSEGAICD(this->name(), aicd_pairs, location, parseContext, errors)) {
         this->segments = std::move(new_segments);
         return true;
     }
@@ -1842,11 +1878,14 @@ bool Well::updateWSEGAICD(const std::vector<std::pair<int, AutoICD>>& aicd_pairs
     return false;
 }
 
-bool Well::updateWSEGVALV(const std::vector<std::pair<int, Valve>>& valve_pairs)
+bool Well::updateWSEGSICD(const std::vector<std::pair<int, SICD>>& sicd_pairs,
+                          const KeywordLocation&                   location,
+                          const ParseContext&                      parseContext,
+                          ErrorGuard&                              errors)
 {
     auto new_segments = std::make_shared<WellSegments>(*this->segments);
 
-    if (new_segments->updateWSEGVALV(valve_pairs)) {
+    if (new_segments->updateWSEGSICD(this->name(), sicd_pairs, location, parseContext, errors)) {
         this->segments = std::move(new_segments);
         return true;
     }
@@ -1854,9 +1893,29 @@ bool Well::updateWSEGVALV(const std::vector<std::pair<int, Valve>>& valve_pairs)
     return false;
 }
 
-void Well::filterConnections(const ActiveGridCells& grid)
+bool Well::updateWSEGVALV(const std::vector<std::pair<int, Valve>>& valve_pairs,
+                          const KeywordLocation&                    location,
+                          const ParseContext&                       parseContext,
+                          ErrorGuard&                               errors)
 {
-    this->connections->filter(grid);
+    auto new_segments = std::make_shared<WellSegments>(*this->segments);
+
+    if (new_segments->updateWSEGVALV(this->name(), valve_pairs, location, parseContext, errors)) {
+        this->segments = std::move(new_segments);
+        return true;
+    }
+
+    return false;
+}
+
+bool Well::updateICDFlowScalingFactors()
+{
+    auto new_segments = std::make_shared<WellSegments>(*this->segments);
+    if (new_segments->updateICDScalingFactors(this->getConnections())) {
+        this->segments = std::move(new_segments);
+        return true;
+    }
+    return false;
 }
 
 std::size_t Well::firstTimeStep() const

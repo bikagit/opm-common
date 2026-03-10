@@ -76,10 +76,8 @@ enum class WaterPvtApproach {
     BrineH2
 };
 
-#if HAVE_ECL_INPUT
 class EclipseState;
 class Schedule;
-#endif
 
 /*!
  * \brief This class represents the Pressure-Volume-Temperature relations of the water
@@ -112,14 +110,12 @@ public:
         return approach_ == WaterPvtApproach::ThermalWater;
     }
 
-#if HAVE_ECL_INPUT
     /*!
      * \brief Initialize the parameters for water using an ECL deck.
      *
      * This method assumes that the deck features valid DENSITY and PVDG keywords.
      */
     void initFromState(const EclipseState& eclState, const Schedule& schedule);
-#endif // HAVE_ECL_INPUT
 
     void initEnd();
 
@@ -161,6 +157,11 @@ public:
         OPM_WATER_PVT_MULTIPLEXER_CALL(return pvtImpl.viscosity(regionIdx, temperature, pressure, Rsw, saltconcentration));
     }
 
+    bool isActive() const
+    {
+        return approach_ != WaterPvtApproach::NoWater;
+    }
+
     /*!
      * \brief Returns the dynamic viscosity [Pa s] of the fluid phase given a set of parameters.
      */
@@ -185,6 +186,14 @@ public:
     {
         OPM_WATER_PVT_MULTIPLEXER_CALL(return pvtImpl.inverseFormationVolumeFactor(regionIdx, temperature, pressure, Rsw, saltconcentration));
     }
+
+    /*!
+     * \brief Returns the formation volume factor [-] and viscosity [Pa s] of the fluid phase.
+     */
+    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    std::pair<LhsEval, LhsEval>
+    inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState, unsigned regionIdx)
+    { OPM_WATER_PVT_MULTIPLEXER_CALL(return pvtImpl.inverseFormationVolumeFactorAndViscosity(fluidState, regionIdx)); }
 
         /*!
      * \brief Returns the formation volume factor [-] of the fluid phase.

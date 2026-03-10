@@ -176,17 +176,7 @@ ExtESmry::ExtESmry(const std::string &filename, bool loadBaseRunData) :
             m_tstep_v.push_back(std::get<5>(ext_esmry_head));
 
             m_nTstep_v.push_back(m_tstep_v.back().size());
-
-            int cidx = 0;
-
-            auto it = std::find_if(m_rstep_v[sim_ind].begin(), m_rstep_v[sim_ind].end(),
-                           [&cidx, &rstNum](const int & val)
-                           {
-                              if (val == 1)
-                                  ++cidx;
-
-                              return cidx == rstNum;
-                           });
+            const auto it = std::ranges::find(m_rstep_v[sim_ind], rstNum);
 
             size_t ind =  std::distance(m_rstep_v[sim_ind].begin(), it);
 
@@ -223,8 +213,10 @@ ExtESmry::ExtESmry(const std::string &filename, bool loadBaseRunData) :
     m_nTstep = m_rstep.size();
 
     for (size_t m = 0; m < m_rstep.size(); m++)
-        if (m_rstep[m] == 1)
+        if (m_rstep[m] > 0)
             m_seqIndex.push_back(m);
+
+    m_keyword_set.insert(m_keyword.begin(), m_keyword.end());
 
     std::chrono::duration<double> elapsed_seconds = std::chrono::system_clock::now() - start;
     m_io_opening += elapsed_seconds.count();
@@ -238,12 +230,9 @@ std::vector<float> ExtESmry::get_at_rstep(const std::string& name)
     std::vector<float> rs_vect;
     rs_vect.reserve(m_seqIndex.size());
 
-    std::transform(m_seqIndex.begin(), m_seqIndex.end(),
-                   std::back_inserter(rs_vect),
-                   [&full_vect](const auto& r)
-                   {
-                       return full_vect[r];
-                   });
+    std::ranges::transform(m_seqIndex, std::back_inserter(rs_vect),
+                           [&full_vect](const auto& r)
+                           { return full_vect[r]; });
 
     return rs_vect;
 }
@@ -525,9 +514,9 @@ void ExtESmry::loadData(const std::vector<std::string>& stringVect)
 
     int keyCounter = 0;
 
-    for (const auto& key: stringVect){
+    for (const auto& key: stringVect) {
         auto key_ind = m_keyword_index[0].at(key);
-        if ((!m_vectorLoaded[key_ind]) && (std::find(keyIndexVect.begin(), keyIndexVect.end(), key_ind) == keyIndexVect.end() )){
+        if ((!m_vectorLoaded[key_ind]) && (std::ranges::find(keyIndexVect, key_ind) == keyIndexVect.end())) {
             keyIndexVect.push_back(key_ind);
             loadKeyIndex.push_back(keyCounter);
         }
@@ -590,12 +579,13 @@ std::vector<Opm::time_point> ExtESmry::dates()
     std::vector<Opm::time_point> d;
 
     const auto time = this->get("TIME");
-    std::transform(time.begin(), time.end(), std::back_inserter(d),
-                  [this, time_unit](const auto& t)
-                  {
-                      using Seconds = std::chrono::duration<double, std::chrono::seconds::period>;
-                      return this->m_startdat + std::chrono::duration_cast<time_point::duration>(Seconds{t * time_unit});
-                  });
+    std::ranges::transform(time, std::back_inserter(d),
+                           [this, time_unit](const auto& t)
+                           {
+                               using Seconds = std::chrono::duration<double, std::chrono::seconds::period>;
+                               return this->m_startdat +
+                                      std::chrono::duration_cast<time_point::duration>(Seconds{t * time_unit});
+                           });
 
     return d;
 }
@@ -603,18 +593,16 @@ std::vector<Opm::time_point> ExtESmry::dates()
 std::vector<std::string> ExtESmry::keywordList(const std::string& pattern) const
 {
     std::vector<std::string> list;
-    std::copy_if(m_keyword.begin(), m_keyword.end(), std::back_inserter(list),
-                 [&pattern](const auto& key)
-                 {
-                     return shmatch(pattern, key);
-                 });
+    std::ranges::copy_if(m_keyword, std::back_inserter(list),
+                         [&pattern](const auto& key)
+                         { return shmatch(pattern, key); });
 
     return list;
 }
 
 bool ExtESmry::hasKey(const std::string &key) const
 {
-    return std::find(m_keyword.begin(), m_keyword.end(), key) != m_keyword.end();
+    return m_keyword_set.find(key) != m_keyword_set.end();
 }
 
 std::tuple<double, double> ExtESmry::get_io_elapsed() const
@@ -626,4 +614,3 @@ std::tuple<double, double> ExtESmry::get_io_elapsed() const
 
 
 }} // namespace Opm::ecl
-

@@ -35,12 +35,12 @@ namespace {
                     const char*                               suffix,
                     const std::initializer_list<std::string>& base)
     {
-        return std::any_of(base.begin(), base.end(),
-                           [&deck, suffix](const auto& kw)
-                           {
-                               return deck.hasKeyword(kw + suffix) ||
-                                      deck.hasKeyword("I" + kw + suffix);
-                           });
+        return std::ranges::any_of(base,
+                                  [&deck, suffix](const auto& kw)
+                                  {
+                                      return deck.hasKeyword(kw + suffix) ||
+                                             deck.hasKeyword("I" + kw + suffix);
+                                  });
     }
 
     bool hasScaling(const Opm::Deck&                          deck,
@@ -49,11 +49,9 @@ namespace {
         const auto direction = std::initializer_list<const char*> {
             "", "X-", "X", "Y-", "Y", "Z-", "Z"
         };
-        return std::any_of(direction.begin(), direction.end(),
-                           [&deck, &base](const auto& suffix)
-                           {
-                               return hasScaling(deck, suffix, base);
-                           });
+        return std::ranges::any_of(direction,
+                                   [&deck, &base](const auto& suffix)
+                                   { return hasScaling(deck, suffix, base); });
     }
 
     bool hasHorzScaling(const Opm::Deck& deck)

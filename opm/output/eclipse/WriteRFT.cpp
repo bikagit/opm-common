@@ -174,11 +174,10 @@ namespace {
     findConnResults(const std::size_t                         cellIndex,
                     const std::vector<Opm::data::Connection>& xcon)
     {
-        auto pos = std::find_if(xcon.begin(), xcon.end(),
-                                [cellIndex](const Opm::data::Connection& xc)
-                                {
-                                    return xc.index == cellIndex;
-                                });
+        const auto pos =
+            std::ranges::find_if(xcon,
+                                 [cellIndex](const Opm::data::Connection& xc)
+                                 { return xc.index == cellIndex; });
 
         if (pos == xcon.end()) {
             return std::nullopt;
@@ -301,7 +300,7 @@ namespace {
         std::vector<float> sgas_;
 
         void addConnection(const ::Opm::UnitSystem&       usys,
-                           const double cell_depth, 
+                           const double cell_depth,
                            const ::Opm::data::Connection& xcon);
     };
 
@@ -347,7 +346,7 @@ namespace {
     }
 
     void RFTRecord::addConnection(const ::Opm::UnitSystem&       usys,
-                                  const double cell_depth, 
+                                  const double cell_depth,
                                   const ::Opm::data::Connection& xcon)
     {
         using M = ::Opm::UnitSystem::measure;
@@ -687,7 +686,7 @@ namespace {
         // Infer neighbour connection in direction of well head.
         this->assignNextNeighbourID(connPos, well.getConnections());
 
-        this->conn_depth_.push_back(cvrt(M::length, connPos->depth()));        
+        this->conn_depth_.push_back(cvrt(M::length, connPos->depth()));
         this->conn_pressure_.push_back(cvrt(M::pressure, xcon.pressure));
         this->trans_.push_back(cvrt(M::transmissibility, xcon.trans_factor));
         this->kh_.push_back(cvrt(M::effective_Kh, connPos->Kh()));
@@ -803,16 +802,13 @@ namespace {
 
         this->ix_.resize(size);
         std::iota(this->ix_.begin(), this->ix_.end(), 0);
-        std::sort(this->ix_.begin(), this->ix_.end(), std::forward<Cmp>(cmp));
+        std::ranges::sort(this->ix_, std::forward<Cmp>(cmp));
 
         // Sort must respect binId(i1) <= binId(i2)
-        auto inconsistentId =
-            std::adjacent_find(this->ix_.begin(),
-                               this->ix_.end(),
-                [&binId](const int i1, const int i2)
-            {
-                return binId(i1) > binId(i2);
-            });
+        const auto inconsistentId =
+            std::ranges::adjacent_find(this->ix_,
+                                       [&binId](const int i1, const int i2)
+                                       { return binId(i1) > binId(i2); });
 
         if (inconsistentId != this->ix_.end()) {
             throw std::invalid_argument {
@@ -1054,7 +1050,7 @@ namespace {
         if (*connRng.first != connIx) {
             // Not first connection in `segNum`.  Typical case.  Neighbour
             // is next connection closer to the outlet.
-            auto i = std::find(connRng.first, connRng.second, connIx);
+            const auto i = std::find(connRng.first, connRng.second, connIx);
             assert (i != connRng.second);
             return getConnectionId(*(i - 1));
         }

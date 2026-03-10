@@ -195,7 +195,7 @@ PORO
  0.3 / -- Needed to derive #active cells => auto-generate FIPNUM
 )"), [](std::vector<int>& maxID)
      {
-         std::fill(maxID.begin(), maxID.end(), 42);
+         std::ranges::fill(maxID, 42);
      }
     };
 

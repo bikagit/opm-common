@@ -95,7 +95,27 @@ namespace {
             "SKIP100"sv,
             "SKIP300"sv
         };
-        return std::find(kw_list.begin(), kw_list.end(), name) != kw_list.end();
+        return std::ranges::find(kw_list, name) != kw_list.end();
+    }
+
+    bool isRestartKeyword(const std::string& kw)
+    {
+        return kw == "RESTART";
+    }
+
+    std::optional<Opm::Ecl::SectionType>
+    sectionKeyword(const std::string& kw)
+    {
+        if (kw == "RUNSPEC")  { return Opm::Ecl::SectionType::RUNSPEC;  }
+        if (kw == "GRID")     { return Opm::Ecl::SectionType::GRID;     }
+        if (kw == "EDIT")     { return Opm::Ecl::SectionType::EDIT;     }
+        if (kw == "PROPS")    { return Opm::Ecl::SectionType::PROPS;    }
+        if (kw == "REGIONS")  { return Opm::Ecl::SectionType::REGIONS;  }
+        if (kw == "SOLUTION") { return Opm::Ecl::SectionType::SOLUTION; }
+        if (kw == "SUMMARY")  { return Opm::Ecl::SectionType::SUMMARY;  }
+        if (kw == "SCHEDULE") { return Opm::Ecl::SectionType::SCHEDULE; }
+
+        return {};
     }
 
     // If ROCKOPTS does NOT exist, then the number of records is NTPVT (= TABDIMS(2))
@@ -189,17 +209,18 @@ inline Itr find_terminator( Itr begin, Itr end, Term terminator ) {
 
     if( pos == begin || pos == end) return pos;
 
-    auto qbegin = std::find_if( begin, end, RawConsts::is_quote() );
+    const auto qbegin = std::find_if(begin, end, RawConsts::is_quote());
 
-    if( qbegin == end || qbegin > pos )
+    if (qbegin == end || qbegin > pos) {
         return pos;
+    }
 
-    auto qend = std::find( qbegin + 1, end, *qbegin );
+    const auto qend = std::find(qbegin + 1, end, *qbegin);
 
     // Quotes are not balanced - probably an error?!
-    if( qend == end ) return end;
+    if (qend == end) return end;
 
-    return find_terminator( qend + 1, end, terminator );
+    return find_terminator(qend + 1, end, terminator);
 }
 
 /**
@@ -315,7 +336,7 @@ inline std::string fast_clean( const std::string& str ) {
         if ( getline( input, line ) ) {
             line = trim( strip_comments(line));
 
-            std::copy( line.begin(), line.end(), dsti );
+            std::ranges::copy(line, dsti);
             dsti += std::distance( line.begin(), line.end() );
             *dsti++ = '\n';
         } else
@@ -347,11 +368,12 @@ inline bool starts_with(const std::string_view& view, const std::string& str) {
     }
 }
 
-inline std::string clean( const std::vector<std::pair<std::string, std::string>>& code_keywords, const std::string& str ) {
-    auto count = std::count_if(code_keywords.begin(), code_keywords.end(), [&str](const std::pair<std::string, std::string>& code_pair)
-                                                                  {
-                                                                     return str.find(code_pair.first) != std::string::npos;
-                                                                   });
+inline std::string clean(const std::vector<std::pair<std::string, std::string>>& code_keywords,
+                         const std::string& str )
+{
+    auto count = std::ranges::count_if(code_keywords,
+                                       [&str](const std::pair<std::string, std::string>& code_pair)
+                                       { return str.find(code_pair.first) != std::string::npos; });
 
     if (count == 0)
         return fast_clean(str);
@@ -369,7 +391,7 @@ inline std::string clean( const std::vector<std::pair<std::string, std::string>>
                     std::string end_string = code_pair.second;
                     auto end_pos = input.find(end_string);
                     if (end_pos == std::string::npos) {
-                        std::copy(input.begin(), input.end(), dsti);
+                        std::ranges::copy(input, dsti);
                         dsti += std::distance( input.begin(), input.end() );
                         input = {};
                         break;
@@ -387,7 +409,7 @@ inline std::string clean( const std::vector<std::pair<std::string, std::string>>
             if ( getline( input, line ) ) {
                 line = trim( strip_comments(line));
 
-                std::copy( line.begin(), line.end(), dsti );
+                std::ranges::copy(line, dsti);
                 dsti += std::distance( line.begin(), line.end() );
                 *dsti++ = '\n';
             } else
@@ -402,9 +424,10 @@ inline std::string clean( const std::vector<std::pair<std::string, std::string>>
 
 
 
-inline std::string make_deck_name(const std::string_view& str) {
-    auto first_sep = std::find_if( str.begin(), str.end(), RawConsts::is_separator() );
-    return uppercase( std::string( str.substr( 0, first_sep - str.begin()) ));
+inline std::string make_deck_name(const std::string_view& str)
+{
+    const auto first_sep = std::ranges::find_if(str, RawConsts::is_separator());
+    return uppercase(std::string(str.substr(0, first_sep - str.begin())));
 }
 
 
@@ -463,15 +486,26 @@ class ParserState {
     public:
         ParserState( const std::vector<std::pair<std::string,std::string>>&,
                      const ParseContext&, ErrorGuard&,
+                     std::shared_ptr<Python> python,
                      const std::set<Opm::Ecl::SectionType>& ignore = {});
 
         ParserState( const std::vector<std::pair<std::string,std::string>>&,
                      const ParseContext&, ErrorGuard&,
-                     const std::filesystem::path&, const std::set<Opm::Ecl::SectionType>& ignore = {});
+                     const std::filesystem::path&,
+                     std::shared_ptr<Python> python,
+                     const std::set<Opm::Ecl::SectionType>& ignore = {});
 
         void loadString( const std::string& );
         void loadFile( const std::filesystem::path& );
         void openRootFile( const std::filesystem::path& );
+
+        void setRestartedRun() { this->is_restarted_ = true; }
+
+        void setCurrentSection(const Ecl::SectionType sect)
+        { this->current_section_ = sect; }
+
+        bool isRestartedRun() const { return this->is_restarted_; }
+        Ecl::SectionType currentSection() const { return this->current_section_; }
 
         void handleRandomText(const std::string_view& ) const;
         std::optional<std::filesystem::path> getIncludeFilePath( std::string ) const;
@@ -495,13 +529,16 @@ class ParserState {
         std::set<Opm::Ecl::SectionType> ignore_sections;
         std::map< std::string, std::string > pathMap;
 
+        bool is_restarted_{false};
+        Ecl::SectionType current_section_{Ecl::SectionType::RUNSPEC};
+
     public:
         ParserKeywordSizeEnum lastSizeType = SLASH_TERMINATED;
         std::string lastKeyWord;
 
         Deck deck;
         std::filesystem::path rootPath;
-        std::unique_ptr<Python> python;
+        std::shared_ptr<Python> python;
         const ParseContext& parseContext;
         ErrorGuard& errors;
         bool unknown_keyword = false;
@@ -557,10 +594,11 @@ void ParserState::closeFile() {
 ParserState::ParserState(const std::vector<std::pair<std::string, std::string>>& code_keywords_arg,
                          const ParseContext& __parseContext,
                          ErrorGuard& errors_arg,
+                         std::shared_ptr<Python> interpreter,
                          const std::set<Opm::Ecl::SectionType>& ignore) :
     code_keywords(code_keywords_arg),
     ignore_sections(ignore),
-    python( std::make_unique<Python>() ),
+    python( std::move(interpreter) ),
     parseContext( __parseContext ),
     errors( errors_arg )
 {}
@@ -569,11 +607,12 @@ ParserState::ParserState( const std::vector<std::pair<std::string, std::string>>
                           const ParseContext& context,
                           ErrorGuard& errors_arg,
                           const std::filesystem::path& p,
+                          std::shared_ptr<Python> interpreter,
                           const std::set<Opm::Ecl::SectionType>& ignore ) :
     code_keywords(code_keywords_arg),
     ignore_sections(ignore),
     rootPath( std::filesystem::canonical( p ).parent_path() ),
-    python( std::make_unique<Python>() ),
+    python( std::move(interpreter) ),
     parseContext( context ),
     errors( errors_arg )
 {
@@ -749,46 +788,75 @@ void ParserState::addPathAlias( const std::string& alias, const std::string& pat
     this->pathMap.emplace( alias, path );
 }
 
+void incompatibleKeywordError(const std::string& keywordString,
+                              const std::string& msg,
+                              ParserState&       parserState)
+{
+    const auto location = KeywordLocation {
+        keywordString,
+        parserState.current_path().generic_string(),
+        parserState.line()
+    };
+
+    parserState.parseContext
+        .handleError(ParseContext::PARSE_INVALID_KEYWORD_COMBINATION,
+                     fmt::format("Incompatible keyword combination: {}.", msg),
+                     location, parserState.errors);
+}
+
+void checkKeywordConsistency(const ParserKeyword& parserKeyword,
+                             const std::string&   keywordString,
+                             ParserState&         parserState)
+{
+    for (const auto& keyword : parserKeyword.prohibitedKeywords()) {
+        if (! parserState.deck.hasKeyword(keyword)) {
+            // Prohibited 'keyword' not present.  This is fine.
+            continue;
+        }
+
+        incompatibleKeywordError(keywordString,
+                                 fmt::format("{} used when {} is already present",
+                                             keywordString, keyword),
+                                 parserState);
+    }
+
+    for (const auto& keyword : parserKeyword.requiredKeywords()) {
+        if (parserState.deck.hasKeyword(keyword)) {
+            // Requisite 'keyword' present.  This is fine.
+            continue;
+        }
+
+        incompatibleKeywordError(keywordString,
+                                 fmt::format("{} declared but {} is missing",
+                                             keywordString, keyword),
+                                 parserState);
+    }
+}
+
 RawKeyword*
 newRawKeyword(const ParserKeyword& parserKeyword,
               const std::string&   keywordString,
               ParserState&         parserState,
               const Parser&        parser)
 {
-    for (const auto& keyword : parserKeyword.prohibitedKeywords()) {
-        if (parserState.deck.hasKeyword(keyword)) {
-            parserState
-                .parseContext
-                .handleError(
-                    ParseContext::PARSE_INVALID_KEYWORD_COMBINATION,
-                    fmt::format("Incompatible keyword combination: {} declared "
-                                "when {} is already present.", keywordString, keyword),
-                    KeywordLocation{
-                        keywordString,
-                        parserState.current_path().generic_string(),
-                        parserState.line()
-                    },
-                    parserState.errors
-                );
-        }
-    }
-
-    for (const auto& keyword : parserKeyword.requiredKeywords()) {
-        if (!parserState.deck.hasKeyword(keyword)) {
-            parserState
-                .parseContext
-                .handleError(
-                    ParseContext::PARSE_INVALID_KEYWORD_COMBINATION,
-                    fmt::format("Incompatible keyword combination: {} declared, "
-                                "but {} is missing.", keywordString, keyword),
-                    KeywordLocation{
-                        keywordString,
-                        parserState.current_path().generic_string(),
-                        parserState.line()
-                    },
-                    parserState.errors
-                );
-        }
+    if (!parserState.isRestartedRun() ||
+        (parserState.currentSection() != Ecl::SectionType::SCHEDULE))
+    {
+        // Skip keyword consistency checks--i.e., the 'requires' and
+        // 'prohibits' clauses--for SCHEDULE section keywords in restarted
+        // runs.  This a workaround to avoid false positives for the
+        // 'requires' clause since the requisite data may be stored in the
+        // restart file and we haven't loaded that file at this point.
+        //
+        // This approach basically defers the consistency checking until
+        // such time as we try to form the higher-level 'Schedule' object
+        // from the input data combined with the restart file information.
+        //
+        // For all other sections, meaning RUNSPEC through SUMMARY, and for
+        // base run SCHEDULE section keywords, we *do* run these basic
+        // consistency checks.  All information must be internally
+        // consistent in the input deck in that case.
+        checkKeywordConsistency(parserKeyword, keywordString, parserState);
     }
 
     const bool raw_string_keyword = parserKeyword.rawStringKeyword();
@@ -984,21 +1052,39 @@ std::unique_ptr<RawKeyword> tryParseKeyword( ParserState& parserState, const Par
     std::unique_ptr<RawKeyword> rawKeyword;
     std::string_view record_buffer(str::emptystr);
     std::optional<ParserKeyword> parserKeyword;
+    const bool silent = parser.silent();
     while( !parserState.done() ) {
         auto line = parserState.getline();
 
         if( line.empty() && !rawKeyword ) continue;
         if( line.empty() && !is_title ) continue;
 
-        std::string deck_name = str::make_deck_name( line );
+        const auto deck_name = str::make_deck_name(line);
+
+        if (isRestartKeyword(deck_name)) {
+            parserState.setRestartedRun();
+        }
+
+        if (const auto sect = sectionKeyword(deck_name); sect.has_value()) {
+            parserState.setCurrentSection(*sect);
+        }
+
         if (parserState.parseContext.isActiveSkipKeyword(deck_name)) {
             skip = true;
             auto msg = fmt::format("{:5} Reading {:<8} in {} line {} \n      ... ignoring everything until 'ENDSKIP' ... ", "", "SKIP", parserState.current_path().string(), parserState.line());
-            OpmLog::info(msg);
+            if (!silent) {
+                OpmLog::info(msg);
+            } else {
+                OpmLog::debug(msg, Parser::SILENT_MODE_MIN_DEBUG_VERBOSITY_LEVEL);
+            }
         } else if (deck_name == "ENDSKIP") {
             skip = false;
             auto msg = fmt::format("{:5} Reading {:<8} in {} line {}", "", "ENDSKIP", parserState.current_path().string(), parserState.line());
-            OpmLog::info(msg);
+            if (!silent) {
+                OpmLog::info(msg);
+            } else {
+                OpmLog::debug(msg, Parser::SILENT_MODE_MIN_DEBUG_VERBOSITY_LEVEL);
+            }
             continue;
         }
         if (skip) continue;
@@ -1147,26 +1233,25 @@ void addSectionKeyword(ParserState& parserState, const std::string& keyw)
 
 void cleanup_deck_keyword_list(ParserState& parserState, const std::set<Opm::Ecl::SectionType>& ignore)
 {
-    bool ignore_runspec = ignore.find(Opm::Ecl::RUNSPEC) !=ignore.end()  ? true : false;
-    bool ignore_grid = ignore.find(Opm::Ecl::GRID) !=ignore.end()  ? true : false;
-    bool ignore_edit = ignore.find(Opm::Ecl::EDIT) !=ignore.end()  ? true : false;
-    bool ignore_props = ignore.find(Opm::Ecl::PROPS) !=ignore.end()  ? true : false;
-    bool ignore_regions = ignore.find(Opm::Ecl::REGIONS) !=ignore.end()  ? true : false;
-    bool ignore_solution = ignore.find(Opm::Ecl::SOLUTION) !=ignore.end()  ? true : false;
-    bool ignore_summary = ignore.find(Opm::Ecl::SUMMARY) !=ignore.end()  ? true : false;
-    bool ignore_schedule = ignore.find(Opm::Ecl::SCHEDULE) !=ignore.end()  ? true : false;
+    const auto ignore_runspec = ignore.find(Ecl::SectionType::RUNSPEC) != ignore.end();
+    const auto ignore_grid = ignore.find(Ecl::SectionType::GRID) != ignore.end();
+    const auto ignore_edit = ignore.find(Ecl::SectionType::EDIT) != ignore.end();
+    const auto ignore_props = ignore.find(Ecl::SectionType::PROPS) != ignore.end();
+    const auto ignore_regions = ignore.find(Ecl::SectionType::REGIONS) != ignore.end();
+    const auto ignore_solution = ignore.find(Ecl::SectionType::SOLUTION) != ignore.end();
+    const auto ignore_summary = ignore.find(Ecl::SectionType::SUMMARY) != ignore.end();
+    const auto ignore_schedule = ignore.find(Ecl::SectionType::SCHEDULE) != ignore.end();
 
     std::vector<std::string> keyw_names;
     keyw_names.reserve(parserState.deck.size());
 
-    std::transform(parserState.deck.begin(), parserState.deck.end(),
-                   std::back_inserter(keyw_names),
-                   [](const auto& dk_keyw) { return dk_keyw.name(); });
+    std::ranges::transform(parserState.deck, std::back_inserter(keyw_names),
+                           [](const auto& dk_keyw) { return dk_keyw.name(); });
 
     if (ignore_runspec){
 
-        auto iter_from = std::find(keyw_names.begin(), keyw_names.end(), "RUNSPEC");
-        auto iter_to = std::find(keyw_names.begin(), keyw_names.end(), "GRID");
+        auto iter_from = std::ranges::find(keyw_names, "RUNSPEC");
+        auto iter_to = std::ranges::find(keyw_names, "GRID");
 
         auto n1 = std::distance(keyw_names.begin(), iter_from);
         auto n2 = std::distance(keyw_names.begin(), iter_to);
@@ -1177,11 +1262,11 @@ void cleanup_deck_keyword_list(ParserState& parserState, const std::set<Opm::Ecl
 
     if (ignore_grid){
 
-        auto iter_from = std::find(keyw_names.begin(), keyw_names.end(), "GRID");
-        auto iter_to = std::find(keyw_names.begin(), keyw_names.end(), "EDIT");
+        auto iter_from = std::ranges::find(keyw_names, "GRID");
+        auto iter_to = std::ranges::find(keyw_names, "EDIT");
 
         if (iter_to == keyw_names.end())
-            iter_to = std::find(keyw_names.begin(), keyw_names.end(), "PROPS");
+            iter_to = std::ranges::find(keyw_names, "PROPS");
 
         auto n1 = std::distance(keyw_names.begin(), iter_from);
         auto n2 = std::distance(keyw_names.begin(), iter_to);
@@ -1195,7 +1280,7 @@ void cleanup_deck_keyword_list(ParserState& parserState, const std::set<Opm::Ecl
         auto iter_from = std::find(keyw_names.begin(), keyw_names.end(), "EDIT");
 
         if (iter_from != keyw_names.end()){
-            auto iter_to = std::find(keyw_names.begin(), keyw_names.end(), "PROPS");
+            auto iter_to = std::ranges::find(keyw_names, "PROPS");
             auto n1 = std::distance(keyw_names.begin(), iter_from);
             auto n2 = std::distance(keyw_names.begin(), iter_to);
 
@@ -1207,11 +1292,11 @@ void cleanup_deck_keyword_list(ParserState& parserState, const std::set<Opm::Ecl
 
     if (ignore_props){
 
-        auto iter_from = std::find(keyw_names.begin(), keyw_names.end(), "PROPS");
-        auto iter_to = std::find(keyw_names.begin(), keyw_names.end(), "REGIONS");
+        auto iter_from = std::ranges::find(keyw_names, "PROPS");
+        auto iter_to = std::ranges::find(keyw_names, "REGIONS");
 
         if (iter_to == keyw_names.end())
-            iter_to = std::find(keyw_names.begin(), keyw_names.end(), "SOLUTION");
+            iter_to = std::ranges::find(keyw_names, "SOLUTION");
 
         auto n1 = std::distance(keyw_names.begin(), iter_from);
         auto n2 = std::distance(keyw_names.begin(), iter_to);
@@ -1222,10 +1307,10 @@ void cleanup_deck_keyword_list(ParserState& parserState, const std::set<Opm::Ecl
 
     if (ignore_regions){
 
-        auto iter_from = std::find(keyw_names.begin(), keyw_names.end(), "REGIONS");
+        auto iter_from = std::ranges::find(keyw_names, "REGIONS");
 
         if (iter_from != keyw_names.end()){
-            auto iter_to = std::find(keyw_names.begin(), keyw_names.end(), "SOLUTION");
+            auto iter_to = std::ranges::find(keyw_names, "SOLUTION");
 
             auto n1 = std::distance(keyw_names.begin(), iter_from);
             auto n2 = std::distance(keyw_names.begin(), iter_to);
@@ -1237,11 +1322,11 @@ void cleanup_deck_keyword_list(ParserState& parserState, const std::set<Opm::Ecl
 
     if (ignore_solution){
 
-        auto iter_from = std::find(keyw_names.begin(), keyw_names.end(), "SOLUTION");
-        auto iter_to = std::find(keyw_names.begin(), keyw_names.end(), "SUMMARY");
+        auto iter_from = std::ranges::find(keyw_names, "SOLUTION");
+        auto iter_to = std::ranges::find(keyw_names, "SUMMARY");
 
         if (iter_to == keyw_names.end())
-            iter_to = std::find(keyw_names.begin(), keyw_names.end(), "SCHEDULE");
+            iter_to = std::ranges::find(keyw_names, "SCHEDULE");
 
         auto n1 = std::distance(keyw_names.begin(), iter_from);
         auto n2 = std::distance(keyw_names.begin(), iter_to);
@@ -1252,10 +1337,10 @@ void cleanup_deck_keyword_list(ParserState& parserState, const std::set<Opm::Ecl
 
     if (ignore_summary){
 
-        auto iter_from = std::find(keyw_names.begin(), keyw_names.end(), "SUMMARY");
+        auto iter_from = std::ranges::find(keyw_names, "SUMMARY");
 
         if (iter_from != keyw_names.end()){
-            auto iter_to = std::find(keyw_names.begin(), keyw_names.end(), "SCHEDULE");
+            auto iter_to = std::ranges::find(keyw_names, "SCHEDULE");
             auto n1 = std::distance(keyw_names.begin(), iter_from);
             auto n2 = std::distance(keyw_names.begin(), iter_to);
 
@@ -1266,7 +1351,7 @@ void cleanup_deck_keyword_list(ParserState& parserState, const std::set<Opm::Ecl
 
     if (ignore_schedule){
 
-        auto iter_from = std::find(keyw_names.begin(), keyw_names.end(), "SCHEDULE");
+        auto iter_from = std::ranges::find(keyw_names, "SCHEDULE");
 
         auto n1 = std::distance(keyw_names.begin(), iter_from);
         auto n2 = std::distance(keyw_names.begin(), keyw_names.end());
@@ -1277,24 +1362,26 @@ void cleanup_deck_keyword_list(ParserState& parserState, const std::set<Opm::Ecl
 }
 
 
-bool parseState( ParserState& parserState, const Parser& parser ) {
+bool parseState( ParserState& parserState, const Parser& parser, ErrorGuard& errors ) {
     auto ignore = parserState.get_ignore();
 
     bool has_edit = true;
     bool has_regions = true;
     bool has_summary = true;
 
-    if (ignore.size() > 0)
-        if (!parserState.check_section_keywords(has_edit, has_regions, has_summary))
+    if (! ignore.empty()) {
+        if (!parserState.check_section_keywords(has_edit, has_regions, has_summary)) {
             throw std::runtime_error("Parsing individual sections not possible when section keywords in root input file");
+        }
+    }
 
-    bool ignore_grid = ignore.find(Opm::Ecl::GRID) !=ignore.end()  ? true : false;
-    bool ignore_edit = ignore.find(Opm::Ecl::EDIT) !=ignore.end()  ? true : false;
-    bool ignore_props = ignore.find(Opm::Ecl::PROPS) !=ignore.end()  ? true : false;
-    bool ignore_regions = ignore.find(Opm::Ecl::REGIONS) !=ignore.end()  ? true : false;
-    bool ignore_solution = ignore.find(Opm::Ecl::SOLUTION) !=ignore.end()  ? true : false;
-    bool ignore_summary = ignore.find(Opm::Ecl::SUMMARY) !=ignore.end()  ? true : false;
-    bool ignore_schedule = ignore.find(Opm::Ecl::SCHEDULE) !=ignore.end()  ? true : false;
+    auto ignore_grid = ignore.find(Ecl::SectionType::GRID) != ignore.end();
+    auto ignore_edit = ignore.find(Ecl::SectionType::EDIT) != ignore.end();
+    auto ignore_props = ignore.find(Ecl::SectionType::PROPS) != ignore.end();
+    auto ignore_regions = ignore.find(Ecl::SectionType::REGIONS) != ignore.end();
+    auto ignore_solution = ignore.find(Ecl::SectionType::SOLUTION) != ignore.end();
+    auto ignore_summary = ignore.find(Ecl::SectionType::SUMMARY) != ignore.end();
+    auto ignore_schedule = ignore.find(Ecl::SectionType::SCHEDULE) != ignore.end();
 
     if ((ignore_grid) && (!has_edit) && (!ignore_edit))
         ignore_grid = false;
@@ -1404,12 +1491,27 @@ bool parseState( ParserState& parserState, const Parser& parser ) {
             std::string includeFileAsString = readValueToken<std::string>(firstRecord.getItem(0));
             const auto& includeFile = parserState.getIncludeFilePath( includeFileAsString );
 
+            if (firstRecord.size() > 1) {
+                std::string ignored;
+                for(std::size_t i= 1; i < firstRecord.size(); ++i) {
+                    ignored += readValueToken<std::string>(firstRecord.getItem(i)) + " ";
+                }
+                const std::string msg = fmt::format("Problem with keyword {}:\n"
+                                                    "It has more than one argument. The following text would be ignored:\n{}\n"
+                                                    "Maybe a trailing slash (/) is missing?",
+                                                    rawKeyword->getKeywordName(), ignored);
+                OpmLog::error(Log::fileMessage(rawKeyword->location(),
+                                               msg + "\nWe will continue parsing, but stop afterwards as this is a fatal error."));
+                errors.addError(ParseContext::PARSE_EXTRA_DATA, Log::fileMessage(rawKeyword->location(), "Error: " + msg));
+            }
+
             if (includeFile.has_value()) {
                 auto& deck_tree = parserState.deck.tree();
                 deck_tree.add_include(std::filesystem::absolute(parserState.current_path()).generic_string(),
                                       includeFile.value().generic_string());
                 parserState.loadFile(includeFile.value());
             }
+
             continue;
         }
 
@@ -1419,7 +1521,11 @@ bool parseState( ParserState& parserState, const Parser& parser ) {
             {
                 const auto& location = rawKeyword->location();
                 auto msg = fmt::format("{:5} Reading {:<8} in {} line {}", parserState.deck.size(), rawKeyword->getKeywordName(), location.filename, location.lineno);
-                OpmLog::info(msg);
+                if (!parser.silent()) {
+                    OpmLog::info(msg);
+                } else {
+                    OpmLog::debug(msg, Parser::SILENT_MODE_MIN_DEBUG_VERBOSITY_LEVEL);
+                }
             }
             try {
                 if (rawKeyword->getKeywordName() ==  Opm::RawConsts::pyinput) {
@@ -1488,15 +1594,21 @@ bool parseState( ParserState& parserState, const Parser& parser ) {
                  str::find_terminator( str.begin(), str.end(), str::find_comment() ) };
     }
 
-    Parser::Parser(bool addDefault) {
+    Parser::Parser(const bool addDefault)
+        : Parser { std::make_shared<Python>(), addDefault }
+    {}
+
+    Parser::Parser(std::shared_ptr<Python> python, const bool addDefault)
+        : m_python { std::move(python) }
+    {
         // The addDefaultKeywords() method is implemented in a source file
-        // ${PROJECT_BINARY_DIR}/ParserInit.cpp which is generated by the build
-        // system.
+        // ${PROJECT_BINARY_DIR}/ParserInit.cpp which is generated by the
+        // build system.
 
-        if (addDefault)
+        if (addDefault) {
             this->addDefaultKeywords();
+        }
     }
-
 
     /*
      About INCLUDE: Observe that the ECLIPSE parser is slightly unlogical
@@ -1550,25 +1662,31 @@ bool parseState( ParserState& parserState, const Parser& parser ) {
         return parse(deck, context).getInputGrid();
     }
 
-    Deck Parser::parseFile(const std::string &dataFileName, const ParseContext& parseContext,
-                           ErrorGuard& errors, const std::vector<Opm::Ecl::SectionType>& sections) const {
+    Deck Parser::parseFile(const std::string&  dataFileName,
+                           const ParseContext& parseContext,
+                           ErrorGuard& errors,
+                           const std::vector<Ecl::SectionType>& sections) const
+    {
+        auto ignore_sections = std::set<Ecl::SectionType> {};
 
+        if (! sections.empty()) {
+            const auto all_sections = std::set {
+                Ecl::SectionType::RUNSPEC,
+                Ecl::SectionType::GRID,
+                Ecl::SectionType::EDIT,
+                Ecl::SectionType::PROPS,
+                Ecl::SectionType::REGIONS,
+                Ecl::SectionType::SOLUTION,
+                Ecl::SectionType::SUMMARY,
+                Ecl::SectionType::SCHEDULE,
+            };
 
-        std::set<Opm::Ecl::SectionType> ignore_sections;
+            const auto read_sections = std::set<Ecl::SectionType> {
+                sections.begin(), sections.end()
+            };
 
-        if (sections.size() > 0) {
-
-            std::set<Opm::Ecl::SectionType> all_sections;
-            all_sections = {Opm::Ecl::RUNSPEC, Opm::Ecl::GRID, Opm::Ecl::EDIT, Opm::Ecl::PROPS, Opm::Ecl::REGIONS,
-                            Opm::Ecl::SOLUTION, Opm::Ecl::SUMMARY, Opm::Ecl::SCHEDULE};
-
-            std::set<Opm::Ecl::SectionType> read_sections;
-
-            for (auto sec : sections)
-                 read_sections.insert(sec);
-
-            std::set_difference(all_sections.begin(), all_sections.end(), read_sections.begin(), read_sections.end(),
-                            std::inserter(ignore_sections, ignore_sections.end()));
+            std::ranges::set_difference(all_sections, read_sections,
+                                        std::inserter(ignore_sections, ignore_sections.end()));
         }
 
         /*
@@ -1587,8 +1705,16 @@ bool parseState( ParserState& parserState, const Parser& parser ) {
         else
             data_file = std::filesystem::proximate(std::filesystem::canonical(dataFileName)).generic_string();
 
-        ParserState parserState( this->codeKeywords(), parseContext, errors, data_file, ignore_sections);
-        parseState( parserState, *this );
+        ParserState parserState {
+            this->codeKeywords(),
+            parseContext,
+            errors,
+            data_file,
+            this->m_python,
+            ignore_sections
+        };
+
+        parseState(parserState, *this, errors);
 
         auto ignore = parserState.get_ignore();
 
@@ -1620,9 +1746,9 @@ bool parseState( ParserState& parserState, const Parser& parser ) {
 
 
     Deck Parser::parseString(const std::string &data, const ParseContext& parseContext, ErrorGuard& errors) const {
-        ParserState parserState( this->codeKeywords(), parseContext, errors );
+        ParserState parserState( this->codeKeywords(), parseContext, errors, this->m_python );
         parserState.loadString( data );
-        parseState( parserState, *this );
+        parseState( parserState, *this, errors );
         return std::move( parserState.deck );
     }
 
@@ -1642,12 +1768,9 @@ bool parseState( ParserState& parserState, const Parser& parser ) {
 
     const ParserKeyword* Parser::matchingKeyword(const std::string_view& name) const
     {
-        const auto it = std::find_if(m_wildCardKeywords.begin(),
-                                     m_wildCardKeywords.end(),
-                                     [&name](const auto& wild)
-                                     {
-                                         return wild.second->matches(name);
-                                     });
+        const auto it = std::ranges::find_if(m_wildCardKeywords,
+                                             [&name](const auto& wild)
+                                             { return wild.second->matches(name); });
         return it != m_wildCardKeywords.end() ? it->second : nullptr;
     }
 
@@ -1822,7 +1945,7 @@ std::vector<std::string> Parser::getAllDeckNames () const {
             "SCHEDULE"sv
         };
 
-        return std::find(delimiters.begin(), delimiters.end(), name) != delimiters.end();
+        return std::ranges::find(delimiters, name) != delimiters.end();
     }
 
     bool DeckSection::checkSectionTopology(const Deck& deck,

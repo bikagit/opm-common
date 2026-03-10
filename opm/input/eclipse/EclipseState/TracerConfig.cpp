@@ -58,9 +58,9 @@ const TracerConfig::TracerEntry& TracerConfig::operator[](std::size_t index) con
 }
 
 const TracerConfig::TracerEntry& TracerConfig::operator[](const std::string& name) const {
-    auto iter = std::find_if(this->tracers.begin(), this->tracers.end(), [&name](const TracerEntry& tracer) {
-            return tracer.name == name;
-        });
+    const auto iter = std::ranges::find_if(this->tracers,
+                                           [&name](const TracerEntry& tracer)
+                                           { return tracer.name == name; });
 
     if (iter == this->tracers.end())
         throw std::logic_error(fmt::format("No such tracer: {}", name));
@@ -103,8 +103,8 @@ TracerConfig::TracerConfig(const UnitSystem& unit_system, const Deck& deck)
                 unit_system.getDimension(UnitSystem::measure::liquid_surface_volume); //hush unused-warning ...
 
                 // Convert unit names to upper-case
-                std::transform(unit_string.begin(), unit_string.end(), unit_string.begin(),
-                    [](unsigned char c){ return std::toupper(c); });
+                std::ranges::transform(unit_string, unit_string.begin(),
+                                       [](unsigned char c){ return std::toupper(c); });
             }
 
             std::string tracer_field = "TBLKF" + name;
@@ -113,9 +113,8 @@ TracerConfig::TracerConfig(const UnitSystem& unit_system, const Deck& deck)
                 auto free_concentration = tracer_keyword.getRecord(0).getItem(0).getData<double>();
                 logger(tracer_keyword.location().format("Loading tracer concentration from {keyword} in {file} line {line}"));
 
-                std::transform(free_concentration.begin(), free_concentration.end(),
-                               free_concentration.begin(),
-                               [inv_volume](const auto& c) { return c * inv_volume; });
+                std::ranges::transform(free_concentration, free_concentration.begin(),
+                                       [inv_volume](const auto& c) { return c * inv_volume; });
 
                 std::string tracer_field_solution = "TBLKS" + name;
                 if (deck.hasKeyword(tracer_field_solution)) {
@@ -123,9 +122,8 @@ TracerConfig::TracerConfig(const UnitSystem& unit_system, const Deck& deck)
                     auto solution_concentration = tracer_keyword_solution.getRecord(0).getItem(0).getData<double>();
                     logger(tracer_keyword_solution.location().format("Loading tracer concentration from {keyword} in {file} line {line}"));
 
-                    std::transform(solution_concentration.begin(), solution_concentration.end(),
-                                   solution_concentration.begin(),
-                                   [inv_volume](const auto& c) { return c * inv_volume; });
+                    std::ranges::transform(solution_concentration,solution_concentration.begin(),
+                                           [inv_volume](const auto& c) { return c * inv_volume; });
 
                     this->tracers.emplace_back(name, unit_string, phase, std::move(free_concentration), std::move(solution_concentration)) ;
                     continue;
@@ -197,7 +195,7 @@ std::string TracerConfig::get_unit_string(const UnitSystem& unit_system, const s
         std::string tracer_name = tracer_kw.substr(4);
         std::string tracer_name2 = tracer_kw.substr(5);
         for (const auto& tracer : tracers) {
-            if (tracer.name == tracer_name || 
+            if (tracer.name == tracer_name ||
                 (tracer.name == tracer_name2 && (tracer_kw[4] == 'F' || tracer_kw[4] == 'S'))) {
                 std::string unit_string(tracer.unit_string);
                 if (tracer.unit_string != "") {

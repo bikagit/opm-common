@@ -17,15 +17,15 @@
   along with OPM.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-
-
 #ifndef OPM_PARSER_ECLIPSE_GRID_HPP
 #define OPM_PARSER_ECLIPSE_GRID_HPP
+
 #include <opm/input/eclipse/EclipseState/Grid/GridDims.hpp>
 #include <opm/input/eclipse/EclipseState/Grid/MapAxes.hpp>
 #include <opm/input/eclipse/EclipseState/Grid/MinpvMode.hpp>
 #include <opm/input/eclipse/EclipseState/Grid/PinchMode.hpp>
 
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <optional>
@@ -34,7 +34,6 @@
 #include <unordered_set>
 #include <vector>
 #include <map>
-
 
 namespace Opm {
 
@@ -109,6 +108,25 @@ namespace Opm {
         size_t getActiveIndex(size_t i, size_t j, size_t k) const {
             return activeIndex(i, j, k);
         }
+        const std::vector<std::size_t>& get_print_order_lgr () const {
+          return m_print_order_lgr_cells;
+        }
+
+        std::size_t get_lgr_cell_index(const std::string& lgr_tag) const
+        {
+            const auto& labels = get_all_lgr_labels();
+
+            if (labels.empty()) {
+                throw std::runtime_error("No LGR labels available.");
+            }
+
+            const auto it = std::ranges::find(labels, lgr_tag);
+            if (it == labels.end()) {
+                throw std::runtime_error("LGR tag not found: " + lgr_tag);
+            }
+
+            return static_cast<size_t>(std::distance(labels.begin(), it));
+        }
 
         size_t getActiveIndex(size_t globalIndex) const {
             return activeIndex(globalIndex);
@@ -116,26 +134,37 @@ namespace Opm {
 
         std::vector<std::string> get_all_lgr_labels() const
         {
-            return  {this->all_lgr_labels.begin() + 1, this->all_lgr_labels.end()};
+            if (this->all_lgr_labels.empty()) {
+              return {};
+            } else {
+              return {this->all_lgr_labels.begin() + 1, this->all_lgr_labels.end()};
+            }
+        }
+
+        const std::string& get_lgr_labels_by_number(std::size_t num) const
+        {
+          return  all_lgr_labels[num];
         }
 
         const std::vector<std::string>& get_all_labels() const
         {
             return this->all_lgr_labels;
         }
-        
-        std::string get_lgr_tag() const {
+
+        const std::string& get_lgr_tag() const {
             return this->lgr_label;
         }
 
         std::vector<GridDims> get_lgr_children_gridim() const;
-      
-        
+
+
         void assertIndexLGR(size_t localIndex) const;
 
         void assertLabelLGR(const std::string& label) const;
 
         void save(const std::string& filename, bool formatted, const std::vector<Opm::NNCdata>& nnc, const Opm::UnitSystem& units) const;
+
+
         /*
           Observe that the there is a getGlobalIndex(i,j,k)
           implementation in the base class. This method - translating
@@ -145,6 +174,10 @@ namespace Opm {
         void init_children_host_cells(bool logical = true);
         void init_children_host_cells_logical(void);
         void init_children_host_cells_geometrical(void);
+        std::array<int,3> getCellSubdivisionRatioLGR(const std::string&  lgr_tag,
+                                                     std::array<int,3>   acum = {1,1,1}) const;
+
+        void perform_refinement();
 
         using GridDims::getGlobalIndex;
         size_t getGlobalIndex(size_t active_index) const;
@@ -225,11 +258,6 @@ namespace Opm {
         std::array<double, 3> getCellDimensions(size_t i, size_t j, size_t k) const {
             return getCellDims(i, j, k);
         }
-        std::array<double,3> getCellDimensionsLGR(const std::size_t  i, 
-                                                  const std::size_t  j, 
-                                                  const std::size_t  k, 
-                                                  const std::string& lgr_tag) const;
-        double getCellDepthLGR(size_t i, size_t j, size_t k, const std::string& lgr_tag) const;
 
 
         bool isCellActive(size_t i, size_t j, size_t k) const {
@@ -287,9 +315,12 @@ namespace Opm {
         static bool hasEqualDVDEPTHZ(const Deck&);
         static bool allEqual(const std::vector<double> &v);
         EclipseGridLGR& getLGRCell(std::size_t index);
+        const EclipseGridLGR& getLGRCell(std::size_t index) const;
         const EclipseGridLGR& getLGRCell(const std::string& lgr_tag) const;
         int getLGR_global_father(std::size_t global_index,  const std::string& lgr_tag) const;
-
+        int getLGR_father(std::size_t i, std::size_t j, std::size_t k, const std::string& lgr_tag) const;
+        int getLGR_father(std::size_t global_index, const std::string& lgr_tag) const;
+        std::array<int,3> getLGR_fatherIJK(std::size_t i, std::size_t j, std::size_t k, const std::string& lgr_tag) const;
         std::vector<EclipseGridLGR> lgr_children_cells;
         /**
         * @brief Sets Local Grid Refinement for the EclipseGrid.
@@ -317,6 +348,8 @@ namespace Opm {
         // Input grid data.
         mutable std::optional<std::vector<double>> m_input_zcorn;
         mutable std::optional<std::vector<double>> m_input_coord;
+        void save_children(Opm::EclIO::EclOutput& egridfile, const Opm::UnitSystem& units) const;
+
 
     private:
         std::vector<double> m_minpvVector;
@@ -399,10 +432,10 @@ namespace Opm {
                             std::array<double,8>& X,
                             std::array<double,8>& Y,
                             std::array<double,8>& Z) const;
-        std::array<int,3> getCellSubdivisionRatioLGR(const std::string&  lgr_tag, 
-                                                     std::array<int,3>   acum = {1,1,1}) const;
-    
-    
+
+        void save_nnc(Opm::EclIO::EclOutput& egridfile, const std::vector<Opm::NNCdata>& nnc) const;
+        void save_core(Opm::EclIO::EclOutput& egridfile, const Opm::UnitSystem& units) const;
+
     };
 
     /// Specialized Class to describe LGR refined cells.
@@ -413,15 +446,16 @@ namespace Opm {
         EclipseGridLGR() = default;
         EclipseGridLGR(const std::string& self_label,
                        const std::string& father_label_,
-                       size_t nx,
-                       size_t ny,
-                       size_t nz,
+                       std::size_t nx,
+                       std::size_t ny,
+                       std::size_t nz,
                        const vec_size_t& father_lgr_index,
                        const std::array<int, 3>& low_fatherIJK_,
                        const std::array<int, 3>& up_fatherIJK_);
         const vec_size_t& getFatherGlobalID() const;
-        void save(Opm::EclIO::EclOutput&, const std::vector<Opm::NNCdata>&, const Opm::UnitSystem&) const;
-        void save_nnc(Opm::EclIO::EclOutput&) const;
+
+        void save(Opm::EclIO::EclOutput&, const Opm::UnitSystem&) const;
+
         void set_lgr_global_counter(std::size_t counter)
         {
             lgr_global_counter = counter;
@@ -434,11 +468,16 @@ namespace Opm {
         get_child_LGR_cell(const std::string& lgr_tag) const;
         std::vector<int> save_hostnum(void) const;
         int get_hostnum(std::size_t global_index) const {return(m_hostnum[global_index]);};
+
+        //parsing the father grid allows the global_father references to be given in terms of father_grid
+        std::vector<int> getLGRCell_global_father(const EclipseGrid& father_grid) const;
+        std::vector<double> getLGRCell_all_depth (const EclipseGrid& father_grid) const;
+
         void get_label_child_to_top_father(std::vector<std::reference_wrapper<const std::string>>& list) const;
-        void get_global_index_child_to_top_father(std::vector<std::size_t> & list, 
+        void get_global_index_child_to_top_father(std::vector<std::size_t> & list,
                                                   std::size_t i, std::size_t j, std::size_t k) const;
         void get_global_index_child_to_top_father(std::vector<std::size_t> & list, std::size_t global_ind) const;
-  
+
         void set_hostnum(const std::vector<int>&);
         const std::array<int,3>& get_low_fatherIJK() const{
           return low_fatherIJK;
@@ -456,7 +495,7 @@ namespace Opm {
          * @brief Sets Local Grid Refinement for the EclipseGridLGR.
          *
          * @param lgr_tag The string that contains the name of a given LGR cell.
-         * @param coords The coordinates of a given LGR cell in  CPG COORDSformat.
+         * @param coord The coordinates of a given LGR cell in  CPG COORDSformat.
          * @param zcorn The z-coordinates values of a given LGR cell in CPG ZCORN format.
          */
         void set_lgr_refinement(const std::string& lgr_tag,
@@ -464,15 +503,27 @@ namespace Opm {
                                 const std::vector<double>& zcorn) override;
 
         void set_lgr_refinement(const std::vector<double>&, const std::vector<double>&);
+        void perform_refinement(const std::vector<double>& coord,
+                                const std::vector<double>& zcorn,
+                                const std::array<int,3>& parent_nxyz);
+
 
     private:
         void init_father_global();
+        void save_core(Opm::EclIO::EclOutput&, const Opm::UnitSystem&) const;
+
         std::string father_label;
         // references global on the father label
         vec_size_t father_global;
         std::array<int, 3> low_fatherIJK {};
         std::array<int, 3> up_fatherIJK {};
         std::vector<int> m_hostnum;
+
+        std::vector<double> generate_refined_coord(const std::vector<double>& ,
+                                                   const std::array<int,3>&);
+
+        std::vector<double> generate_refined_zcorn(const std::vector<double>& zcorn_h,
+                                                   const std::array<int,3>&   parent_nxyz);
     };
 
 

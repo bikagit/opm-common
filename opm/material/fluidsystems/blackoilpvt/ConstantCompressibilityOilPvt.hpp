@@ -27,16 +27,16 @@
 #ifndef OPM_CONSTANT_COMPRESSIBILITY_OIL_PVT_HPP
 #define OPM_CONSTANT_COMPRESSIBILITY_OIL_PVT_HPP
 
+#include <opm/material/densead/Math.hpp>
+
 #include <cstddef>
 #include <stdexcept>
 #include <vector>
 
 namespace Opm {
 
-#if HAVE_ECL_INPUT
 class EclipseState;
 class Schedule;
-#endif
 
 /*!
  * \brief This class represents the Pressure-Volume-Temperature relations of the oil phase
@@ -46,7 +46,6 @@ template <class Scalar>
 class ConstantCompressibilityOilPvt
 {
 public:
-#if HAVE_ECL_INPUT
     /*!
      * \brief Sets the pressure-dependent oil viscosity and density
      *        using the Eclipse PVCDO keyword.
@@ -55,7 +54,6 @@ public:
      * \brief Initialize the oil parameters via the data specified by the PVTO ECL keyword.
      */
     void initFromState(const EclipseState& eclState, const Schedule&);
-#endif
 
     void setNumRegions(std::size_t numRegions);
 
@@ -172,6 +170,26 @@ public:
                                             const Evaluation& pressure,
                                             const Evaluation& /*Rs*/) const
     { return saturatedInverseFormationVolumeFactor(regionIdx, temperature, pressure); }
+
+    /*!
+     * \brief Returns the formation volume factor [-] and viscosity [Pa s] of the fluid phase.
+     */
+    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    std::pair<LhsEval, LhsEval>
+    inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState, unsigned regionIdx)
+    {
+        const LhsEval& p = decay<LhsEval>(fluidState.pressure(FluidState::oilPhaseIdx));
+        // Calculate bo(p).
+        Scalar pRef = oilReferencePressure_[regionIdx];
+        const LhsEval X = oilCompressibility_[regionIdx] * (p - pRef);
+        Scalar BoRef = oilReferenceFormationVolumeFactor_[regionIdx];
+        const LhsEval bo = (1.0 + X * (1.0 + X / 2.0)) / BoRef;
+        // Calculate mu(p) as (Bo * mu) * bo. Recall bo = 1/Bo.
+        const LhsEval Y = (oilCompressibility_[regionIdx] - oilViscosibility_[regionIdx]) * (p - pRef);
+        Scalar BoMuoRef = oilViscosity_[regionIdx]*oilReferenceFormationVolumeFactor_[regionIdx];
+        const LhsEval muo = BoMuoRef * bo / (1.0 + Y * (1.0 + Y / 2.0));
+        return { bo, muo };
+    }
 
     /*!
      * \brief Returns the formation volume factor [-] of gas saturated oil.

@@ -49,8 +49,7 @@ namespace {
 bool Opm::Action::State::MatchSet::hasWell(const std::string& well) const
 {
     // Note: this->wells_ is typically unsorted, so use linear search.
-    return std::find(this->wells_.begin(), this->wells_.end(), well)
-        != this->wells_.end();
+    return std::ranges::find(this->wells_, well) != this->wells_.end();
 }
 
 Opm::Action::State::MatchSet

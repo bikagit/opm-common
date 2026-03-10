@@ -28,10 +28,8 @@
 
 #include <opm/common/OpmLog/OpmLog.hpp>
 
-#if HAVE_ECL_INPUT
 #include <opm/input/eclipse/EclipseState/EclipseState.hpp>
 #include <opm/input/eclipse/Schedule/Schedule.hpp>
-#endif
 
 #include <opm/material/eos/CubicEOS.hpp>
 #include <opm/material/fluidsystems/blackoilpvt/WaterPvtMultiplexer.hpp>
@@ -57,7 +55,7 @@ namespace Opm {
  * \tparam NumComp The number of the components in the fluid system.
  */
     template<class Scalar, int NumComp, bool enableWater>
-    class GenericOilGasWaterFluidSystem 
+    class GenericOilGasWaterFluidSystem
         : public BaseFluidSystem<Scalar, GenericOilGasWaterFluidSystem<Scalar, NumComp, enableWater> > {
     public:
         // TODO: I do not think these should be constant in fluidsystem, will try to make it non-constant later
@@ -132,7 +130,6 @@ namespace Opm {
             }
         }
 
-#if HAVE_ECL_INPUT
         /*!
          * \brief Initialize the fluid system using an ECL deck object
          */
@@ -166,7 +163,6 @@ namespace Opm {
             waterPvt_->initFromState(eclState, schedule);
 
         }
-#endif // HAVE_ECL_INPUT
 
         static void init()
         {
@@ -472,9 +468,9 @@ namespace Opm {
     template <class Scalar, int NumComp, bool enableWater>
     std::vector<Scalar>
     GenericOilGasWaterFluidSystem<Scalar, NumComp, enableWater>::interaction_coefficients_;
-    
+
     template <class Scalar, int NumComp, bool enableWater>
-    std::shared_ptr<WaterPvtMultiplexer<Scalar> > 
+    std::shared_ptr<WaterPvtMultiplexer<Scalar> >
     GenericOilGasWaterFluidSystem<Scalar, NumComp, enableWater>::waterPvt_;
 
 }

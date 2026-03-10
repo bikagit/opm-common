@@ -37,9 +37,9 @@ namespace {
     auto findActionByName(ActionCollection&& actions,
                           const std::string& name)
     {
-        return std::find_if(std::begin(actions), std::end(actions),
-                            [&name](const auto& action)
-                            { return action.name() == name; });
+        return std::ranges::find_if(actions,
+                                    [&name](const auto& action)
+                                    { return action.name() == name; });
     }
 
 } // Anonymous namespace
@@ -116,9 +116,9 @@ bool Actions::empty() const
 
 bool Actions::ready(const State& state, const std::time_t sim_time) const
 {
-    return std::any_of(this->actions_.begin(), this->actions_.end(),
-                       [&state, sim_time](const auto& action)
-                       { return action.ready(state, sim_time); });
+    return std::ranges::any_of(this->actions_,
+                               [&state, sim_time](const auto& action)
+                               { return action.ready(state, sim_time); });
 }
 
 const ActionX& Actions::operator[](const std::string& name) const

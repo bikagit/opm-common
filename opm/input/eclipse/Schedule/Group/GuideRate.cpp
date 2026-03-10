@@ -215,6 +215,17 @@ bool Opm::GuideRate::has(const std::string& name, const Phase& phase) const
     return this->injection_group_values.count(std::pair(phase, name)) > 0;
 }
 
+void Opm::GuideRate::erase(const std::string& name)
+{
+    this->values.erase(name);
+    this->potentials.erase(name);
+
+    // Also erase any injection group guide rates for all phases
+    for (int p = 0; p < NUM_PHASES_IN_ENUM; ++p) {
+        this->injection_group_values.erase(std::make_pair(static_cast<Phase>(p), name));
+    }
+}
+
 void Opm::GuideRate::compute(const std::string& wgname,
                              const std::size_t  report_step,
                              const double       sim_time,
@@ -277,7 +288,7 @@ void Opm::GuideRate::group_compute(const std::string& wgname,
         }
 
         if (is_formula) {
-            const auto guide_rate = this->eval_form(config.model(), oil_pot, gas_pot, wat_pot);
+            const auto guide_rate = this->eval_form(config.model(), "group " + wgname, oil_pot, gas_pot, wat_pot);
             this->assign_grvalue(wgname, config.model(), { sim_time, guide_rate, config.model().target() });
         }
     }
@@ -345,17 +356,18 @@ void Opm::GuideRate::well_compute(const std::string& wgname,
         }
 
         const auto& model = config.model();
-        const auto guide_rate = this->eval_form(model, oil_pot, gas_pot, wat_pot);
+        const auto guide_rate = this->eval_form(model, "well " + wgname, oil_pot, gas_pot, wat_pot);
         this->assign_grvalue(wgname, model, { sim_time, guide_rate, model.target() });
     }
 }
 
 double Opm::GuideRate::eval_form(const GuideRateModel& model,
+                                 const std::string&    wgId,
                                  const double          oil_pot,
                                  const double          gas_pot,
                                  const double          wat_pot) const
 {
-    return model.eval(oil_pot, gas_pot, wat_pot);
+    return model.eval(wgId, oil_pot, gas_pot, wat_pot);
 }
 
 void Opm::GuideRate::assign_grvalue(const std::string&    wgname,
@@ -461,11 +473,10 @@ void Opm::GuideRate::updateGuideRateExpiration(const double      sim_time,
 
     // Get previous general update time--earliest 'curr.sim_time' in
     // existing collection.
-    auto last_update = std::min_element(this->values.begin(), this->values.end(),
-        [&curr_sim_time](const auto& gr1, const auto& gr2)
-    {
-        return curr_sim_time(gr1) < curr_sim_time(gr2);
-    });
+    const auto last_update =
+        std::ranges::min_element(this->values,
+                                 [&curr_sim_time](const auto& gr1, const auto& gr2)
+                                 { return curr_sim_time(gr1) < curr_sim_time(gr2); });
 
     const auto update_delay = config.model().update_delay();
     this->guide_rates_expired =

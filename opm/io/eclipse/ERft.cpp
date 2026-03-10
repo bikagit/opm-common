@@ -126,7 +126,7 @@ bool ERft::hasArray(const std::string& arrayName, const std::string& wellName,
     int fromInd = std::get<0>(searchInd->second);
     int toInd = std::get<1>(searchInd->second);
 
-    auto it = std::find(array_name.begin()+fromInd,array_name.begin()+toInd,arrayName);
+    const auto it = std::find(array_name.begin() + fromInd, array_name.begin() + toInd, arrayName);
     return it != array_name.begin() + toInd;
 }
 
@@ -138,7 +138,7 @@ bool ERft::hasArray(const std::string& arrayName, int reportInd) const
     int fromInd = std::get<0>(searchInd->second);
     int toInd = std::get<1>(searchInd->second);
 
-    auto it = std::find(array_name.begin()+fromInd,array_name.begin()+toInd,arrayName);
+    const auto it = std::find(array_name.begin() + fromInd, array_name.begin() + toInd, arrayName);
     return it != array_name.begin() + toInd;
 }
 
@@ -152,8 +152,8 @@ int ERft::getArrayIndex(const std::string& name, const std::string& wellName,
 
     int fromInd =std::get<0>(searchInd->second);
     int toInd = std::get<1>(searchInd->second);
-    auto it = std::find(array_name.begin() + fromInd, array_name.begin() + toInd, name);
 
+    const auto it = std::find(array_name.begin() + fromInd, array_name.begin() + toInd, name);
     if (std::distance(array_name.begin(),it) == toInd) {
         OPM_THROW(std::invalid_argument,
                   fmt::format("Array {} not found for RFT, well: {} date: {}/{}/{}",
@@ -176,8 +176,7 @@ int ERft::getArrayIndex(const std::string& name, int reportIndex) const
     int fromInd = std::get<0>(searchInd->second);
     int toInd = std::get<1>(searchInd->second);
 
-    auto it = std::find(array_name.begin() + fromInd,array_name.begin() + toInd, name);
-
+    const auto it = std::find(array_name.begin() + fromInd, array_name.begin() + toInd, name);
     if (std::distance(array_name.begin(), it) == toInd) {
         OPM_THROW(std::invalid_argument,
                   fmt::format("Array {} not found for RFT, rft report index: {}",

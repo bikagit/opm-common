@@ -20,10 +20,10 @@
 #ifndef OPM_OUTPUT_WELLS_HPP
 #define OPM_OUTPUT_WELLS_HPP
 
+#include <opm/common/ErrorMacros.hpp>
+#include <opm/common/OpmLog/OpmLog.hpp>
 #include <opm/output/data/GuideRateValue.hpp>
 #include <opm/input/eclipse/Schedule/Well/WellEnums.hpp>
-
-#include <opm/json/JsonObject.hpp>
 
 #include <algorithm>
 #include <array>
@@ -75,7 +75,8 @@ namespace Opm { namespace data {
                 oxygen           = (1 << 21),
                 urea             = (1 << 22),
                 vaporized_water  = (1 << 23),
-                mass_gas         = (1 << 24)
+                mass_gas         = (1 << 24),
+                mass_wat         = (1 << 25)
             };
 
             using enum_size = std::underlying_type< opt >::type;
@@ -106,8 +107,6 @@ namespace Opm { namespace data {
 
             bool operator==(const Rates& rat2) const;
 
-            inline void init_json(Json::JsonObject& json_data) const;
-
             template<class Serializer>
             void serializeOp(Serializer& serializer)
             {
@@ -137,6 +136,7 @@ namespace Opm { namespace data {
                 serializer(urea);
                 serializer(vaporized_water);
                 serializer(mass_gas);
+                serializer(mass_wat);
             }
 
             static Rates serializationTestObject()
@@ -166,6 +166,7 @@ namespace Opm { namespace data {
                 rat1.set(opt::urea, 22.0);
                 rat1.set(opt::vaporized_water, 23.0);
                 rat1.set(opt::mass_gas, 24.0);
+                rat1.set(opt::mass_wat, 25.0);
                 rat1.tracer.insert({"test_tracer", 1.0});
 
                 return rat1;
@@ -204,21 +205,25 @@ namespace Opm { namespace data {
             double urea = 0.0;
             double vaporized_water = 0.0;
             double mass_gas = 0.0;
+            double mass_wat = 0.0;
     };
 
     struct ConnectionFiltrate
     {
-        double rate;
-        double total;
-        double skin_factor;
-        double thickness;
-        double perm;
-        double poro;
-        double radius;
-        double area_of_flow;
+        double rate{};
+        double total{};
+        double skin_factor{};
+        double thickness{};
+        double perm{};
+        double poro{};
+        double radius{};
+        double area_of_flow{};
+        double flow_factor{};
+        double fracture_rate{};
 
-        template<class Serializer>
-        void serializeOp(Serializer& serializer) {
+        template <class Serializer>
+        void serializeOp(Serializer& serializer)
+        {
             serializer(rate);
             serializer(total);
             serializer(skin_factor);
@@ -227,24 +232,29 @@ namespace Opm { namespace data {
             serializer(poro);
             serializer(radius);
             serializer(area_of_flow);
+            serializer(flow_factor);
+            serializer(fracture_rate);
         }
 
         bool operator==(const ConnectionFiltrate& filtrate) const
         {
-            return this->rate == filtrate.rate &&
-                   this->total == filtrate.total &&
-                   this->skin_factor == filtrate.skin_factor &&
-                   this->thickness == filtrate.thickness &&
-                   this->perm == filtrate.perm &&
-                   this->poro == filtrate.poro &&
-                   this->radius == filtrate.radius &&
-                   this->area_of_flow == filtrate.area_of_flow;
+            return (this->rate == filtrate.rate)
+                && (this->total == filtrate.total)
+                && (this->skin_factor == filtrate.skin_factor)
+                && (this->thickness == filtrate.thickness)
+                && (this->perm == filtrate.perm)
+                && (this->poro == filtrate.poro)
+                && (this->radius == filtrate.radius)
+                && (this->area_of_flow == filtrate.area_of_flow)
+                && (this->flow_factor == filtrate.flow_factor)
+                && (this->fracture_rate == filtrate.fracture_rate)
+                ;
         }
 
         static ConnectionFiltrate serializationTestObject()
         {
-            return {0.8, 100., -1., 2., 1.e-9,
-                    0.3, 0.05, 0.8};
+            return {0.8, 100.0, -1.0, 2.0, 1.0e-9,
+                    0.3, 0.05, 0.8, 0.1, 0.7};
         }
 
         template <class MessageBufferType>
@@ -252,6 +262,80 @@ namespace Opm { namespace data {
 
         template <class MessageBufferType>
         void read(MessageBufferType& buffer);
+    };
+
+    struct ConnectionFracture
+    {
+        double area{};
+        double flux{};
+        double height{};
+        double length{};
+        double WI{};
+        double volume{};
+        double filter_volume{};
+        double avg_width{};
+        double avg_filter_width{};
+
+        template <class Serializer>
+        void serializeOp(Serializer& serializer)
+        {
+            serializer(area);
+            serializer(flux);
+            serializer(height);
+            serializer(length);
+            serializer(WI);
+            serializer(volume);
+            serializer(filter_volume);
+            serializer(avg_width);
+            serializer(avg_filter_width);
+        }
+
+        bool operator==(const ConnectionFracture& fraccon) const
+        {
+            return (this->area == fraccon.area)
+                && (this->flux == fraccon.flux)
+                && (this->height == fraccon.height)
+                && (this->length == fraccon.length)
+                && (this->WI == fraccon.WI)
+                && (this->volume == fraccon.volume)
+                && (this->filter_volume == fraccon.filter_volume)
+                && (this->avg_width == fraccon.avg_width)
+                && (this->avg_filter_width == fraccon.avg_filter_width)
+                ;
+        }
+
+        static ConnectionFracture serializationTestObject()
+        {
+            return {0.8, 100.0, 1.3, 1.4, 10.0, 4.0, 0.4, 0.5, 0.05};
+        }
+
+        template <class MessageBufferType>
+        void write(MessageBufferType& buffer) const
+        {
+            buffer.write(this->area);
+            buffer.write(this->flux);
+            buffer.write(this->height);
+            buffer.write(this->length);
+            buffer.write(this->WI);
+            buffer.write(this->volume);
+            buffer.write(this->filter_volume);
+            buffer.write(this->avg_width);
+            buffer.write(this->avg_filter_width);
+        }
+
+        template <class MessageBufferType>
+        void read(MessageBufferType& buffer)
+        {
+            buffer.read(this->area);
+            buffer.read(this->flux);
+            buffer.read(this->height);
+            buffer.read(this->length);
+            buffer.read(this->WI);
+            buffer.read(this->volume);
+            buffer.read(this->filter_volume);
+            buffer.read(this->avg_width);
+            buffer.read(this->avg_filter_width);
+        }
     };
 
     /// Connection Level Fracturing Statistics
@@ -428,7 +512,11 @@ namespace Opm { namespace data {
         double d_factor{};
         double compact_mult{1.0}; // Rock compaction transmissibility multiplier (ROCKTAB)
 
+        int lgr_grid{0}; // LGR grid index, 0 if not in LGR
+
         ConnectionFiltrate filtrate{};
+
+        ConnectionFracture fracture{};
 
         /// Connection level fracturing statistics.
         ConnectionFracturing fract{};
@@ -446,7 +534,9 @@ namespace Opm { namespace data {
                 && (trans_factor == conn2.trans_factor)
                 && (d_factor == conn2.d_factor)
                 && (compact_mult == conn2.compact_mult)
+                && (lgr_grid == conn2.lgr_grid)
                 && (filtrate == conn2.filtrate)
+                && (fracture == conn2.fracture)
                 && (this->fract == conn2.fract)
                 ;
         }
@@ -455,8 +545,6 @@ namespace Opm { namespace data {
         void write(MessageBufferType& buffer) const;
         template <class MessageBufferType>
         void read(MessageBufferType& buffer);
-
-        inline void init_json(Json::JsonObject& json_data) const;
 
         template<class Serializer>
         void serializeOp(Serializer& serializer)
@@ -472,7 +560,9 @@ namespace Opm { namespace data {
             serializer(trans_factor);
             serializer(d_factor);
             serializer(compact_mult);
+            serializer(lgr_grid);
             serializer(filtrate);
+            serializer(fracture);
             serializer(this->fract);
         }
 
@@ -482,7 +572,9 @@ namespace Opm { namespace data {
                 1, Rates::serializationTestObject(),
                 2.0, 3.0, 4.0, 5.0,
                 6.0, 7.0, 8.0, 9.0, 0.987,
+                3, // lgr_grid
                 ConnectionFiltrate::serializationTestObject(),
+                ConnectionFracture::serializationTestObject(),
                 ConnectionFracturing::serializationTestObject()
             };
         }
@@ -816,19 +908,6 @@ namespace Opm { namespace data {
                     (!this->isProducer && (this->inj == rhs.inj)));
         }
 
-        void init_json(Json::JsonObject& json_data) const
-        {
-            if (this->inj == ::Opm::WellInjectorCMode::CMODE_UNDEFINED)
-                json_data.add_item("inj", "CMODE_UNDEFINED");
-            else
-                json_data.add_item("inj", ::Opm::WellInjectorCMode2String(this->inj));
-
-            if (this->prod == ::Opm::WellProducerCMode::CMODE_UNDEFINED)
-                json_data.add_item("prod", "CMODE_UNDEFINED");
-            else
-                json_data.add_item("prod", ::Opm::WellProducerCMode2String(this->prod));
-        }
-
         template <class MessageBufferType>
         void write(MessageBufferType& buffer) const;
 
@@ -1006,15 +1085,13 @@ namespace Opm { namespace data {
         template <class MessageBufferType>
         void read(MessageBufferType& buffer);
 
-        inline void init_json(Json::JsonObject& json_data) const;
-
         const Connection*
         find_connection(const Connection::global_index connection_grid_index) const
         {
-            auto connection = std::find_if(this->connections.begin(),
-                                           this->connections.end(),
-                                           [connection_grid_index](const Connection& c)
-                                           { return c.index == connection_grid_index; });
+            const auto connection =
+                std::ranges::find_if(this->connections,
+                                     [connection_grid_index](const Connection& c)
+                                     { return c.index == connection_grid_index; });
 
             if (connection == this->connections.end()) {
                 return nullptr;
@@ -1026,10 +1103,10 @@ namespace Opm { namespace data {
         Connection*
         find_connection(const Connection::global_index connection_grid_index)
         {
-            auto connection = std::find_if(this->connections.begin(),
-                                           this->connections.end(),
-                                           [connection_grid_index](const Connection& c)
-                                           { return c.index == connection_grid_index; });
+            const auto connection =
+                std::ranges::find_if(this->connections,
+                                     [connection_grid_index](const Connection& c)
+                                     { return c.index == connection_grid_index; });
 
             if (connection == this->connections.end()) {
                 return nullptr;
@@ -1053,6 +1130,11 @@ namespace Opm { namespace data {
                 && (this->guide_rates == well2.guide_rates)
                 && (this->limits == well2.limits)
                 ;
+        }
+
+        bool operator!=(const Well& well2) const
+        {
+            return !(*this == well2);
         }
 
         template<class Serializer>
@@ -1115,15 +1197,16 @@ namespace Opm { namespace data {
             if( witr == this->end() ) return 0.0;
 
             const auto& well = witr->second;
-            const auto& connection = std::find_if( well.connections.begin() ,
-                                                   well.connections.end() ,
-                                                   [=]( const Connection& c ) {
-                                                        return c.index == connection_grid_index; });
+            const auto connection =
+                std::ranges::find_if(well.connections,
+                                     [connection_grid_index](const Connection& c)
+                                     { return c.index == connection_grid_index; });
 
-            if( connection == well.connections.end() )
+            if (connection == well.connections.end()) {
                 return 0.0;
+            }
 
-            return connection->rates.get( m, 0.0 );
+            return connection->rates.get(m, 0.0);
         }
 
         template <class MessageBufferType>
@@ -1147,22 +1230,15 @@ namespace Opm { namespace data {
                 buffer.read(name);
                 Well well;
                 well.read(buffer);
-                this->emplace(name, well);
+                auto result = this->emplace(name, well);
+                // In case there was already an entry for the well we want to insert, then result.second == false.
+                // Then we check if this entry is the same as the one we want to insert.
+                if (!result.second && result.first->second != well) {
+                    OPM_THROW(std::runtime_error, "Received different output data for well " + name + " from more than one process, the output of this simulation will be wrong!");
+                } else if (!result.second) {
+                    OpmLog::warning("Received consistently duplicated output data for well " + name + " from more than one process - this might be problematic!");
+                }
             }
-        }
-
-        void init_json(Json::JsonObject& json_data) const {
-            for (const auto& [wname, well] : *this) {
-                auto json_well = json_data.add_object(wname);
-                well.init_json(json_well);
-            }
-        }
-
-
-        Json::JsonObject json() const {
-            Json::JsonObject json_data;
-            this->init_json(json_data);
-            return json_data;
         }
 
         template<class Serializer>
@@ -1290,7 +1366,8 @@ namespace Opm { namespace data {
              oxygen == rate.oxygen &&
              urea == rate.urea &&
              vaporized_water == rate.vaporized_water &&
-             mass_gas == rate.mass_gas;
+             mass_gas == rate.mass_gas &&
+             mass_wat == rate.mass_wat;
     }
 
 
@@ -1331,6 +1408,7 @@ namespace Opm { namespace data {
             case opt::urea: return this->urea;
             case opt::vaporized_water: return this->vaporized_water;
             case opt::mass_gas: return this->mass_gas;
+            case opt::mass_wat: return this->mass_wat;
         }
 
         throw std::invalid_argument(
@@ -1356,19 +1434,6 @@ namespace Opm { namespace data {
     inline double& Rates::get_ref( opt m, const std::string& tracer_name ) {
         if (m == opt::tracer) this->tracer.emplace(tracer_name, 0.0);
         return this->tracer.at(tracer_name);
-    }
-
-    void Rates::init_json(Json::JsonObject& json_data) const {
-
-        if (this->has(opt::wat))
-            json_data.add_item("wat", this->get(opt::wat));
-
-        if (this->has(opt::oil))
-            json_data.add_item("oil", this->get(opt::oil));
-
-        if (this->has(opt::gas))
-            json_data.add_item("gas", this->get(opt::gas));
-
     }
 
     bool inline Rates::flowing() const {
@@ -1417,6 +1482,7 @@ namespace Opm { namespace data {
             buffer.write(this->urea);
             buffer.write(this->vaporized_water);
             buffer.write(this->mass_gas);
+            buffer.write(this->mass_wat);
     }
 
     template <class MessageBufferType>
@@ -1429,6 +1495,8 @@ namespace Opm { namespace data {
         buffer.write(this->poro);
         buffer.write(this->radius);
         buffer.write(this->area_of_flow);
+        buffer.write(this->flow_factor);
+        buffer.write(this->fracture_rate);
     }
 
     template <class MessageBufferType>
@@ -1444,24 +1512,10 @@ namespace Opm { namespace data {
             buffer.write(this->trans_factor);
             buffer.write(this->d_factor);
             buffer.write(this->compact_mult);
+            buffer.write(this->lgr_grid);
             this->filtrate.write(buffer);
+            this->fracture.write(buffer);
             this->fract.write(buffer);
-    }
-
-    void Connection::init_json(Json::JsonObject& json_data) const {
-        auto json_rates = json_data.add_object("rates");
-        this->rates.init_json(json_rates);
-
-        json_data.add_item("global_index", static_cast<int>(this->index));
-        json_data.add_item("pressure", this->pressure);
-        json_data.add_item("reservoir_rate", this->reservoir_rate);
-        json_data.add_item("cell_pressure", this->cell_pressure);
-        json_data.add_item("swat", this->cell_saturation_water);
-        json_data.add_item("sgas", this->cell_saturation_gas);
-        json_data.add_item("Kh", this->effective_Kh);
-        json_data.add_item("trans_factor", this->trans_factor);
-        json_data.add_item("d_factor", this->d_factor);
-        json_data.add_item("compact_mult", this->compact_mult);
     }
 
     template <class MessageBufferType>
@@ -1596,6 +1650,7 @@ namespace Opm { namespace data {
             buffer.read(this->urea);
             buffer.read(this->vaporized_water);
             buffer.read(this->mass_gas);
+            buffer.read(this->mass_wat);
     }
 
     template <class MessageBufferType>
@@ -1608,6 +1663,8 @@ namespace Opm { namespace data {
         buffer.read(this->poro);
         buffer.read(this->radius);
         buffer.read(this->area_of_flow);
+        buffer.read(this->flow_factor);
+        buffer.read(this->fracture_rate);
     }
 
    template <class MessageBufferType>
@@ -1623,7 +1680,9 @@ namespace Opm { namespace data {
             buffer.read(this->trans_factor);
             buffer.read(this->d_factor);
             buffer.read(this->compact_mult);
+            buffer.read(this->lgr_grid);
             this->filtrate.read(buffer);
+            this->fracture.read(buffer);
             this->fract.read(buffer);
    }
 
@@ -1738,27 +1797,6 @@ namespace Opm { namespace data {
         }
     }
 
-    void Well::init_json(Json::JsonObject& json_data) const {
-        auto json_connections = json_data.add_array("connections");
-        for (const auto& conn : this->connections) {
-            auto json_conn = json_connections.add_object();
-            conn.init_json(json_conn);
-        }
-        auto json_rates = json_data.add_object("rates");
-        this->rates.init_json(json_rates);
-
-        json_data.add_item("bhp", this->bhp);
-        json_data.add_item("thp", this->thp);
-        json_data.add_item("temperature", this->temperature);
-        json_data.add_item("status", ::Opm::WellStatus2String(this->dynamicStatus));
-
-        auto json_control = json_data.add_object("control");
-        this->current_control.init_json(json_control);
-
-        auto json_guiderate = json_data.add_object("guiderate");
-        this->guide_rates.init_json(json_guiderate);
-    }
-
 }} // Opm::data
 
-#endif //OPM_OUTPUT_WELLS_HPP
+#endif // OPM_OUTPUT_WELLS_HPP

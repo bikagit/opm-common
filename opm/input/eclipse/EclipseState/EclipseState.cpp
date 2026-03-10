@@ -133,7 +133,7 @@ namespace Opm {
     try
         : m_tables(            deck )
         , m_runspec(           deck )
-        , m_eclipseConfig(     deck )
+        , m_eclipseConfig(     deck, m_runspec.phases() )
         , m_deckUnitSystem(    deck.getActiveUnitSystem() )
         , m_inputGrid(         deck, nullptr )
         , m_inputNnc(          m_inputGrid, deck)
@@ -158,7 +158,7 @@ namespace Opm {
             field_props.deleteMINPVV();
         }
         this->initLgrs(deck);
-        this->aquifer_config.load_connections(deck, this->getInputGrid());
+        this->aquifer_config.load_connections(deck, m_inputGrid);
 
         this->applyMULTXYZ();
         this->initFaults(deck);
@@ -193,6 +193,10 @@ namespace Opm {
         return m_inputGrid;
     }
 
+    void EclipseState::set_lgr_refinement(const std::string& lgr_label, const std::vector<double>& coord, const std::vector<double>& zcorn) {
+        // Set LGR refinement in EclipseGrid. coords and zcorns must be in SI units.
+        m_inputGrid.set_lgr_refinement(lgr_label, coord, zcorn);
+    }
 
     const SimulationConfig& EclipseState::getSimulationConfig() const {
         return m_simulationConfig;
@@ -437,13 +441,17 @@ namespace Opm {
         this->m_transMult.applyNumericalAquifer(numerical_aquifer.allAquiferCellIds());
     }
 
-    void EclipseState::applyMULTXYZ() {
-        static const std::vector<std::pair<std::string, FaceDir::DirEnum>> multipliers = {{"MULTX" , FaceDir::XPlus},
-                                                                                          {"MULTX-", FaceDir::XMinus},
-                                                                                          {"MULTY" , FaceDir::YPlus},
-                                                                                          {"MULTY-", FaceDir::YMinus},
-                                                                                          {"MULTZ" , FaceDir::ZPlus},
-                                                                                          {"MULTZ-", FaceDir::ZMinus}};
+    void EclipseState::applyMULTXYZ()
+    {
+        using namespace std::string_literals;
+        const auto multipliers = std::array{
+           std::pair{"MULTX"s , FaceDir::XPlus},
+           std::pair{"MULTX-"s, FaceDir::XMinus},
+           std::pair{"MULTY"s , FaceDir::YPlus},
+           std::pair{"MULTY-"s, FaceDir::YMinus},
+           std::pair{"MULTZ"s , FaceDir::ZPlus},
+           std::pair{"MULTZ-"s, FaceDir::ZMinus},
+        };
 
         const auto& fp = this->field_props;
         for (const auto& [field, face] : multipliers) {
@@ -502,7 +510,7 @@ namespace Opm {
                 }
                 catch (const std::exception& std_error)
                 {
-                    OpmLog::error(fmt::format("\nMULTFLT: Cannot set fault transmissibility multiplier\n" 
+                    OpmLog::error(fmt::format("\nMULTFLT: Cannot set fault transmissibility multiplier\n"
                        "MULTFLT(FLTNAME) equals {} and MULT(FLT-TRS) equals {}\n"
                        "Error creating reservoir properties: {}" , faultPattern, multFlt, std_error.what()));
                     error = true;

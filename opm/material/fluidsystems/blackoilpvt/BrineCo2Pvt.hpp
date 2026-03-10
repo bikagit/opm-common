@@ -31,6 +31,8 @@
 #include <opm/common/TimingMacros.hpp>
 #include <opm/common/ErrorMacros.hpp>
 #include <opm/common/utility/gpuDecorators.hpp>
+#include <opm/common/utility/gpuistl_if_available.hpp>
+#include <opm/common/utility/VectorWithDefaultAllocator.hpp>
 
 #include <opm/material/Constants.hpp>
 
@@ -42,6 +44,7 @@
 #include <opm/material/components/CO2Tables.hpp>
 #include <opm/material/binarycoefficients/H2O_CO2.hpp>
 #include <opm/material/binarycoefficients/Brine_CO2.hpp>
+#include <opm/material/fluidsystems/BlackOilFunctions.hpp>
 
 #include <opm/input/eclipse/EclipseState/Co2StoreConfig.hpp>
 
@@ -56,23 +59,27 @@ class Co2StoreConfig;
 class EzrokhiTable;
 
 // forward declaration of the class so the function in the next namespace can be declared
-template <class Scalar, class Params, class ContainerT>
+template <class Scalar, template <class> class Storage>
 class BrineCo2Pvt;
 
+#if HAVE_CUDA
 // declaration of make_view in correct namespace so friend function can be declared in the class
 namespace gpuistl {
-    template <class ViewType, class OutputParams, class InputParams, class ContainerType, class ScalarT>
-    BrineCo2Pvt<ScalarT, OutputParams, ViewType>
-    make_view(BrineCo2Pvt<ScalarT, InputParams, ContainerType>&);
+    template <class ScalarT>
+    BrineCo2Pvt<ScalarT, GpuView>
+    make_view(BrineCo2Pvt<ScalarT, GpuBuffer>&);
 }
+#endif
 
 /*!
  * \brief This class represents the Pressure-Volume-Temperature relations of the liquid phase
  * for a CO2-Brine system
  */
-template <class Scalar, class Params = Opm::CO2Tables<double, std::vector<double>>, class ContainerT = std::vector<Scalar>>
+template <class Scalar, template <class> class Storage = Opm::VectorWithDefaultAllocator>
 class BrineCo2Pvt
 {
+    using Params = Opm::CO2Tables<double, Storage>;
+    using ContainerT = Storage<Scalar>;
     static constexpr bool extrapolate = true;
     //typedef H2O<Scalar> H2O_IAPWS;
     //typedef Brine<Scalar, H2O_IAPWS> Brine_IAPWS;
@@ -117,18 +124,22 @@ public:
 {
 }
 
-#if HAVE_ECL_INPUT
     /*!
      * \brief Initialize the parameters for Brine-CO2 system using an ECL deck.
      *
      */
     void initFromState(const EclipseState& eclState, const Schedule&);
-#endif
 
     void setNumRegions(std::size_t numRegions);
 
     void setVapPars(const Scalar, const Scalar)
     {
+    }
+
+
+    OPM_HOST_DEVICE static constexpr bool isActive()
+    {
+        return true;
     }
 
     /*!
@@ -198,7 +209,7 @@ public:
                               const Evaluation& Rs,
                               const Evaluation& saltConcentration) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         const Evaluation salinity = salinityFromConcentration(regionIdx, temperature, pressure, saltConcentration);
         const Evaluation xlCO2 = convertRsToXoG_(Rs,regionIdx);
         return (liquidEnthalpyBrineCO2_(temperature,
@@ -216,7 +227,7 @@ public:
                         const Evaluation& pressure,
                         const Evaluation& Rs) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         const Evaluation xlCO2 = convertRsToXoG_(Rs,regionIdx);
         return (liquidEnthalpyBrineCO2_(temperature,
                                        pressure,
@@ -247,7 +258,7 @@ public:
                                  const Evaluation& pressure,
                                  const Evaluation& saltConcentration) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         const Evaluation salinity = salinityFromConcentration(regionIdx, temperature, pressure, saltConcentration);
         if (enableEzrokhiViscosity_) {
             const Evaluation& mu_pure = H2O::liquidViscosity(temperature, pressure, extrapolate);
@@ -269,7 +280,7 @@ public:
                          const Evaluation& /*Rsw*/,
                          const Evaluation& saltConcentration) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         //TODO: The viscosity does not yet depend on the composition
         return saturatedViscosity(regionIdx, temperature, pressure, saltConcentration);
     }
@@ -282,7 +293,7 @@ public:
                                   const Evaluation& temperature,
                                   const Evaluation& pressure) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         if (enableEzrokhiViscosity_) {
             const Evaluation& mu_pure = H2O::liquidViscosity(temperature, pressure, extrapolate);
             const Evaluation& nacl_exponent = ezrokhiExponent_(temperature, ezrokhiViscNaClCoeff_);
@@ -291,7 +302,7 @@ public:
         else {
             return Brine::liquidViscosity(temperature, pressure, Evaluation(salinity_[regionIdx]));
         }
-        
+
     }
 
 
@@ -304,7 +315,7 @@ public:
                                                      const Evaluation& pressure,
                                                      const Evaluation& saltconcentration) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         const Evaluation salinity = salinityFromConcentration(regionIdx, temperature,
                                                               pressure, saltconcentration);
         Evaluation rs_sat = rsSat(regionIdx, temperature, pressure, salinity);
@@ -322,7 +333,7 @@ public:
                                             const Evaluation& Rs,
                                             const Evaluation& saltConcentration) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         const Evaluation salinity = salinityFromConcentration(regionIdx, temperature,
                                                               pressure, saltConcentration);
         return (1.0 - convertRsToXoG_(Rs,regionIdx)) * density(regionIdx, temperature,
@@ -344,6 +355,27 @@ public:
     }
 
     /*!
+     * \brief Returns the formation volume factor [-] and viscosity [Pa s] of the fluid phase.
+     */
+    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    std::pair<LhsEval, LhsEval>
+    inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState, unsigned regionIdx)
+    {
+        // Deal with the possibility that we are in a two-phase CO2STORE with OIL and GAS as phases.
+        const bool waterIsActive = fluidState.phaseIsActive(FluidState::waterPhaseIdx);
+        const int myPhaseIdx = waterIsActive ? FluidState::waterPhaseIdx : FluidState::oilPhaseIdx;
+        const LhsEval& Rsw = waterIsActive ? decay<LhsEval>(fluidState.Rsw()) : decay<LhsEval>(fluidState.Rs());
+
+        const LhsEval& T = decay<LhsEval>(fluidState.temperature(myPhaseIdx));
+        const LhsEval& p = decay<LhsEval>(fluidState.pressure(myPhaseIdx));
+        const LhsEval& saltConcentration
+            = BlackOil::template getSaltConcentration_<FluidState, LhsEval>(fluidState, regionIdx);
+        // TODO: The viscosity does not yet depend on the composition
+        return { this->inverseFormationVolumeFactor(regionIdx, T, p, Rsw, saltConcentration) ,
+                this->saturatedViscosity(regionIdx, T, p, saltConcentration) };
+    }
+
+    /*!
      * \brief Returns the formation volume factor [-] of brine saturated with CO2 at a given pressure.
      */
     template <class Evaluation>
@@ -351,7 +383,7 @@ public:
                                                      const Evaluation& temperature,
                                                      const Evaluation& pressure) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         Evaluation rs_sat = rsSat(regionIdx, temperature, pressure, Evaluation(salinity_[regionIdx]));
         return (1.0 - convertRsToXoG_(rs_sat,regionIdx)) * density(regionIdx, temperature, pressure,
                                                                     rs_sat, Evaluation(salinity_[regionIdx]))
@@ -474,7 +506,7 @@ public:
                                     const Evaluation& pressure,
                                     unsigned /*compIdx*/) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         // Diffusion coefficient of CO2 in pure water according to
         // (McLachlan and Danckwerts, 1972)
         const Evaluation log_D_H20 = -4.1764 + 712.52 / temperature
@@ -507,7 +539,7 @@ public:
                        const Evaluation& Rs,
                        const Evaluation& salinity) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         Evaluation xlCO2 = convertXoGToxoG_(convertRsToXoG_(Rs,regionIdx), salinity);
         Evaluation result = liquidDensity_(temperature,
                                         pressure,
@@ -524,7 +556,7 @@ public:
                      const Evaluation& pressure,
                      const Evaluation& salinity) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         if (!enableDissolution_) {
             return 0.0;
         }
@@ -557,14 +589,14 @@ private:
         const LhsEval& tempC = temperature - 273.15;
         return ezrokhiCoeff[0] + tempC * (ezrokhiCoeff[1] + ezrokhiCoeff[2] * tempC);
     }
-    
+
     template <class LhsEval>
     OPM_HOST_DEVICE LhsEval liquidDensity_(const LhsEval& T,
                            const LhsEval& pl,
                            const LhsEval& xlCO2,
                            const LhsEval& salinity) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         Valgrind::CheckDefined(T);
         Valgrind::CheckDefined(pl);
         Valgrind::CheckDefined(xlCO2);
@@ -600,8 +632,8 @@ private:
             return rho_pure * pow(10.0, nacl_exponent * salinity + co2_exponent * XCO2);
         }
         else {
-            const LhsEval& rho_brine = Brine::liquidDensity(T, pl, salinity, extrapolate);
-            const LhsEval& rho_lCO2 = liquidDensityWaterCO2_(T, pl, xlCO2);
+            const LhsEval& rho_brine = Brine::liquidDensity(T, pl, salinity, rho_pure);
+            const LhsEval& rho_lCO2 = liquidDensityWaterCO2_(T, xlCO2, rho_pure);
             const LhsEval& contribCO2 = rho_lCO2 - rho_pure;
             return rho_brine + contribCO2;
         }
@@ -609,15 +641,14 @@ private:
 
     template <class LhsEval>
     OPM_HOST_DEVICE LhsEval liquidDensityWaterCO2_(const LhsEval& temperature,
-                                          const LhsEval& pl,
-                                          const LhsEval& xlCO2) const
+                                                   const LhsEval& xlCO2,
+                                                   const LhsEval& rho_pure) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         Scalar M_CO2 = CO2::molarMass();
         Scalar M_H2O = H2O::molarMass();
 
         const LhsEval& tempC = temperature - 273.15;        /* tempC : temperature in °C */
-        const LhsEval& rho_pure = H2O::liquidDensity(temperature, pl, extrapolate);
         // calculate the mole fraction of CO2 in the liquid. note that xlH2O is available
         // as a function parameter, but in the case of a pure gas phase the value of M_T
         // for the virtual liquid phase can become very large
@@ -638,7 +669,7 @@ private:
     template <class LhsEval>
     OPM_HOST_DEVICE LhsEval convertRsToXoG_(const LhsEval& Rs, unsigned regionIdx) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         Scalar rho_oRef = brineReferenceDensity_[regionIdx];
         Scalar rho_gRef = co2ReferenceDensity_[regionIdx];
 
@@ -652,7 +683,7 @@ private:
     template <class LhsEval>
     OPM_HOST_DEVICE LhsEval convertXoGToxoG_(const LhsEval& XoG, const LhsEval& salinity) const
     {
-        OPM_TIMEFUNCTION_LOCAL();
+        OPM_TIMEFUNCTION_LOCAL(Subsystem::PvtProps);
         Scalar M_CO2 = CO2::molarMass();
         LhsEval M_Brine = Brine::molarMass(salinity);
         return XoG*M_Brine / (M_CO2*(1 - XoG) + XoG*M_Brine);
@@ -664,7 +695,7 @@ private:
     template <class LhsEval>
     OPM_HOST_DEVICE LhsEval convertxoGToXoG(const LhsEval& xoG, const LhsEval& salinity) const
     {
-        OPM_TIMEBLOCK_LOCAL(convertxoGToXoG);
+        OPM_TIMEBLOCK_LOCAL(convertxoGToXoG, Subsystem::PvtProps);
         Scalar M_CO2 = CO2::molarMass();
         LhsEval M_Brine = Brine::molarMass(salinity);
 
@@ -687,10 +718,10 @@ private:
     template <class LhsEval>
     OPM_HOST_DEVICE LhsEval liquidEnthalpyBrineCO2_(const LhsEval& T,
                                     const LhsEval& p,
-                                    const LhsEval& salinity, 
+                                    const LhsEval& salinity,
                                     const LhsEval& X_CO2_w) const
     {
-        if (liquidMixType_ == Co2StoreConfig::LiquidMixingType::NONE 
+        if (liquidMixType_ == Co2StoreConfig::LiquidMixingType::NONE
             && saltMixType_ == Co2StoreConfig::SaltMixingType::NONE)
         {
             return H2O::liquidEnthalpy(T, p);
@@ -765,7 +796,7 @@ private:
         else {
             delta_hCO2 = 0.0;
         }
-            
+
         /* enthalpy contribution of CO2 (kJ/kg) */
         hg = CO2::gasEnthalpy(co2Tables_, T, p, extrapolate)/1E3 + delta_hCO2;
 
@@ -786,9 +817,11 @@ private:
         return salinity(regionIdx);
     }
 
-    template <class ViewType, class OutputParams, class InputParams, class ContainerType, class ScalarT>
-    friend BrineCo2Pvt<ScalarT, OutputParams, ViewType>
-    gpuistl::make_view(BrineCo2Pvt<ScalarT, InputParams, ContainerType>&);
+    #if HAVE_CUDA
+    template <class ScalarT>
+    friend BrineCo2Pvt<ScalarT, gpuistl::GpuView>
+    gpuistl::make_view(BrineCo2Pvt<ScalarT, gpuistl::GpuBuffer>&);
+    #endif
 
     ContainerT brineReferenceDensity_{};
     ContainerT co2ReferenceDensity_{};
@@ -808,45 +841,47 @@ private:
 
 } // namespace Opm
 
+#if HAVE_CUDA
 namespace Opm::gpuistl
 {
 
-    template<class Params, class GPUContainer, class ScalarT>
-    BrineCo2Pvt<ScalarT, Params, GPUContainer>
+    template<class ScalarT>
+    BrineCo2Pvt<ScalarT, GpuBuffer>
     copy_to_gpu(const BrineCo2Pvt<ScalarT>& cpuBrineCo2)
     {
-        return BrineCo2Pvt<ScalarT, Params, GPUContainer>(
-            GPUContainer(cpuBrineCo2.getBrineReferenceDensity()),
-            GPUContainer(cpuBrineCo2.getCo2ReferenceDensity()),
-            GPUContainer(cpuBrineCo2.getSalinity()),
+        return BrineCo2Pvt<ScalarT, GpuBuffer>(
+            GpuBuffer<ScalarT>(cpuBrineCo2.getBrineReferenceDensity()),
+            GpuBuffer<ScalarT>(cpuBrineCo2.getCo2ReferenceDensity()),
+            GpuBuffer<ScalarT>(cpuBrineCo2.getSalinity()),
             cpuBrineCo2.getActivityModel(),
             cpuBrineCo2.getThermalMixingModelSalt(),
             cpuBrineCo2.getThermalMixingModelLiquid(),
-            copy_to_gpu<GPUContainer>(cpuBrineCo2.getParams())
+            copy_to_gpu(cpuBrineCo2.getParams())
         );
     }
 
-    template <class ViewType, class OutputParams, class InputParams, class ContainerType, class ScalarT>
-    BrineCo2Pvt<ScalarT, OutputParams, ViewType>
-    make_view(BrineCo2Pvt<ScalarT, InputParams, ContainerType>& brineCo2Pvt)
+    template <class ScalarT>
+    BrineCo2Pvt<ScalarT, GpuView>
+    make_view(BrineCo2Pvt<ScalarT, GpuBuffer>& brineCo2Pvt)
     {
 
-        using ContainedType = typename ViewType::value_type;
+        using ContainedType = ScalarT;
 
-        ViewType newBrineReferenceDensity = make_view<ContainedType>(brineCo2Pvt.brineReferenceDensity_);
-        ViewType newGasReferenceDensity = make_view<ContainedType>(brineCo2Pvt.co2ReferenceDensity_);
-        ViewType newSalinity = make_view<ContainedType>(brineCo2Pvt.salinity_);
+        auto newBrineReferenceDensity = make_view<ContainedType>(brineCo2Pvt.brineReferenceDensity_);
+        auto newGasReferenceDensity = make_view<ContainedType>(brineCo2Pvt.co2ReferenceDensity_);
+        auto newSalinity = make_view<ContainedType>(brineCo2Pvt.salinity_);
 
-        return BrineCo2Pvt<ScalarT, OutputParams, ViewType>(
+        return BrineCo2Pvt<ScalarT, GpuView>(
             newBrineReferenceDensity,
             newGasReferenceDensity,
             newSalinity,
             brineCo2Pvt.getActivityModel(),
             brineCo2Pvt.getThermalMixingModelSalt(),
             brineCo2Pvt.getThermalMixingModelLiquid(),
-            make_view<ViewType>(brineCo2Pvt.co2Tables_)
+            make_view(brineCo2Pvt.co2Tables_)
         );
     }
-}
+} // namespace Opm::gpuistl
+#endif // HAVE_CUDA
 
 #endif

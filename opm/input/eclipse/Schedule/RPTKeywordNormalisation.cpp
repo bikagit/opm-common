@@ -56,10 +56,9 @@ namespace {
         auto controlValues = std::vector<int>{};
         controlValues.reserve(deckItems.size());
 
-        std::transform(deckItems.begin(), deckItems.end(),
-                       std::back_inserter(controlValues),
-                       [](const std::string& controlItem)
-                       { return std::stoi(controlItem); });
+        std::ranges::transform(deckItems, std::back_inserter(controlValues),
+                               [](const std::string& controlItem)
+                               { return std::stoi(controlItem); });
 
         return controlValues;
     }
@@ -68,8 +67,8 @@ namespace {
     classifyRptKeywordSpecification(const std::vector<std::string>& deckItems)
     {
         return {
-            std::any_of(deckItems.begin(), deckItems.end(), isInteger),
-            ! std::all_of(deckItems.begin(), deckItems.end(), isInteger)
+            std::ranges::any_of(deckItems, isInteger),
+            ! std::ranges::all_of(deckItems, isInteger)
         };
     }
 

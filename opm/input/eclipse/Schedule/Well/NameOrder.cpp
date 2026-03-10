@@ -69,11 +69,9 @@ const std::vector<std::string>& NameOrder::names() const
 std::vector<std::string>
 NameOrder::sort(std::vector<std::string> names) const
 {
-    std::sort(names.begin(), names.end(),
-        [this](const std::string& w1, const std::string& w2) -> bool
-    {
-        return this->m_index_map.at(w1) < this->m_index_map.at(w2);
-    });
+    std::ranges::sort(names,
+                     [this](const std::string& w1, const std::string& w2) -> bool
+                     { return this->m_index_map.at(w1) < this->m_index_map.at(w2); });
 
     return names;
 }
@@ -118,8 +116,7 @@ GroupOrder GroupOrder::serializationTestObject()
 
 void GroupOrder::add(const std::string& gname)
 {
-    auto iter = std::find(this->name_list_.begin(),
-                          this->name_list_.end(), gname);
+    const auto iter = std::ranges::find(this->name_list_, gname);
     if (iter == this->name_list_.end()) {
         this->name_list_.push_back(gname);
     }
@@ -127,8 +124,14 @@ void GroupOrder::add(const std::string& gname)
 
 bool GroupOrder::has(const std::string& gname) const
 {
-    return std::find(this->name_list_.begin(), this->name_list_.end(), gname)
-        != this->name_list_.end();
+    return std::ranges::find(this->name_list_, gname) != this->name_list_.end();
+}
+
+bool GroupOrder::anyGroupMatches(const std::string& pattern) const
+{
+    return std::ranges::any_of(this->name_list_,
+                               [&pattern](const auto& gname)
+                               { return shmatch(pattern, gname); });
 }
 
 std::vector<std::string> GroupOrder::names(const std::string& pattern) const
@@ -145,11 +148,9 @@ std::vector<std::string> GroupOrder::names(const std::string& pattern) const
     {
         gnames.reserve(this->name_list_.size());
 
-        std::copy_if(this->name_list_.begin(),
-                     this->name_list_.end(),
-                     std::back_inserter(gnames),
-                     [&pattern](const auto& gname)
-                     { return shmatch(pattern, gname); });
+        std::ranges::copy_if(this->name_list_, std::back_inserter(gnames),
+                             [&pattern](const auto& gname)
+                             { return shmatch(pattern, gname); });
     }
     else if (this->has(pattern)) {
         // Normal group name without any special characters.

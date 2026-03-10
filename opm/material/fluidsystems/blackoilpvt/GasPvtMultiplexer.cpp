@@ -54,7 +54,7 @@ GasPvtMultiplexer<Scalar, enableThermal>::setVapPars(const Scalar par1, const Sc
 
 template <class Scalar, bool enableThermal>
 Scalar
-GasPvtMultiplexer<Scalar, enableThermal>::gasReferenceDensity(unsigned regionIdx)
+GasPvtMultiplexer<Scalar, enableThermal>::gasReferenceDensity(unsigned regionIdx) const
 {
     OPM_GAS_PVT_MULTIPLEXER_CALL(return pvtImpl.gasReferenceDensity(regionIdx));
 }
@@ -67,19 +67,17 @@ GasPvtMultiplexer<Scalar, enableThermal>::hVap(unsigned regionIdx) const
     OPM_GAS_PVT_MULTIPLEXER_CALL(return pvtImpl.hVap(regionIdx));
 }
 
-#if HAVE_ECL_INPUT
 template <class Scalar, bool enableThermal>
 void
 GasPvtMultiplexer<Scalar, enableThermal>::initFromState(const EclipseState& eclState, const Schedule& schedule)
 {
     if (!eclState.runspec().phases().active(Phase::GAS))
         return;
-
     if (eclState.runspec().co2Storage())
         setApproach(GasPvtApproach::Co2Gas);
     else if (eclState.runspec().h2Storage())
         setApproach(GasPvtApproach::H2Gas);
-    else if (enableThermal && eclState.getSimulationConfig().isThermal())
+    else if (enableThermal && (eclState.getSimulationConfig().isTemp() || eclState.getSimulationConfig().isThermal()))
         setApproach(GasPvtApproach::ThermalGas);
     else if (!eclState.getTableManager().getPvtgwTables().empty()
              && !eclState.getTableManager().getPvtgTables().empty())
@@ -91,10 +89,8 @@ GasPvtMultiplexer<Scalar, enableThermal>::initFromState(const EclipseState& eclS
     else if (!eclState.getTableManager().getPvtgwTables().empty())
         setApproach(GasPvtApproach::DryHumidGas);
 
-
     OPM_GAS_PVT_MULTIPLEXER_CALL(pvtImpl.initFromState(eclState, schedule), break);
 }
-#endif
 
 // Helper function to keep the switch case tidy when constructing different pvts
 template <class Scalar, bool enableThermal>

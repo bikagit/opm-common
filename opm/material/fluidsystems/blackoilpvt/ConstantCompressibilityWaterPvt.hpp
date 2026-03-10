@@ -27,16 +27,16 @@
 #ifndef OPM_CONSTANT_COMPRESSIBILITY_WATER_PVT_HPP
 #define OPM_CONSTANT_COMPRESSIBILITY_WATER_PVT_HPP
 
+#include <opm/material/common/MathToolbox.hpp>
+
 #include <cstddef>
 #include <stdexcept>
 #include <vector>
 
 namespace Opm {
 
-#if HAVE_ECL_INPUT
 class EclipseState;
 class Schedule;
-#endif
 
 /*!
  * \brief This class represents the Pressure-Volume-Temperature relations of the gas phase
@@ -46,13 +46,11 @@ template <class Scalar>
 class ConstantCompressibilityWaterPvt
 {
 public:
-#if HAVE_ECL_INPUT
     /*!
      * \brief Sets the pressure-dependent water viscosity and density
      *        using a table stemming from the Eclipse PVTW keyword.
      */
     void initFromState(const EclipseState& eclState, const Schedule&);
-#endif
 
     void setNumRegions(std::size_t numRegions);
 
@@ -204,6 +202,27 @@ public:
 
         // TODO (?): consider the salt concentration of the brine
         return (1.0 + X * (1.0 + X / 2.0)) / BwRef;
+    }
+
+    /*!
+     * \brief Returns the formation volume factor [-] and viscosity [Pa s] of the fluid phase.
+     */
+    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    std::pair<LhsEval, LhsEval>
+    inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState, unsigned regionIdx)
+    {
+        const auto& pressure = decay<LhsEval>(fluidState.pressure(FluidState::waterPhaseIdx));
+        Scalar pRef = waterReferencePressure_[regionIdx];
+        const LhsEval& X = waterCompressibility_[regionIdx]*(pressure - pRef);
+        Scalar BwRef = waterReferenceFormationVolumeFactor_[regionIdx];
+        LhsEval bw = (1.0 + X * (1.0 + X / 2.0)) / BwRef;
+        Scalar BwMuwRef = waterViscosity_[regionIdx]*BwRef;
+        const LhsEval& Y =
+            (waterCompressibility_[regionIdx] - waterViscosibility_[regionIdx])
+            * (pressure - pRef);
+        LhsEval muw =  BwMuwRef * bw / (1 + Y * (1 + Y / 2));
+
+        return { bw, muw };
     }
 
     template <class Evaluation>

@@ -129,8 +129,11 @@ namespace Opm {
     }
 
 
-    size_t WellTestState::num_closed_wells() const {
-        return std::count_if(this->wells.begin(), this->wells.end(), [](const auto& well_pair) { return well_pair.second.closed; });
+    size_t WellTestState::num_closed_wells() const
+    {
+        return std::ranges::count_if(this->wells,
+                                     [](const auto& well_pair)
+                                     { return well_pair.second.closed; });
     }
 
     std::vector<std::string>
@@ -259,5 +262,3 @@ namespace Opm {
         return ws;
     }
 }
-
-

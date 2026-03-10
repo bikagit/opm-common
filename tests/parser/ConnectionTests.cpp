@@ -534,7 +534,7 @@ END
     ctf_props.rw = 0.234;
     ctf_props.r0 = 0.157;
 
-    connP.addConnection(9, 9, 1, // 10, 10, 2
+    connP.addConnection(8, 9, 0, // 9, 10, 1
                         199,
                         Opm::Connection::State::OPEN,
                         2015.0, ctf_props, 1);
@@ -569,7 +569,7 @@ END
     }
 
     // Reset CF -- simulating COMPDAT record (active cell)
-    connP.addConnection(8, 9, 1, // 10, 10, 2
+    connP.addConnection(8, 9, 1, // 9, 10, 2
                         198,
                         Opm::Connection::State::OPEN,
                         2015.0, ctf_props, 1);
@@ -586,27 +586,14 @@ END
         BOOST_CHECK_CLOSE(connP[3].CF(),  50.0*cp_rm3_per_db(), 1.0e-10);
     }
 
-    const auto& grid = es.getInputGrid();
-    const auto actCells = Opm::ActiveGridCells {
-        std::size_t{10}, std::size_t{10}, std::size_t{3},
-        grid.getActiveMap().data(),
-        grid.getNumActive()
-    };
-
-    connP.filter(actCells);
-
-    BOOST_REQUIRE_EQUAL(connP.size(), std::size_t{3});
-    BOOST_CHECK_CLOSE(connP[0].CF(), 16.0*expectCF       , 1.0e-10);
-    BOOST_CHECK_CLOSE(connP[1].CF(), 16.0*expectCF       , 1.0e-10);
-    BOOST_CHECK_CLOSE(connP[2].CF(), 50.0*cp_rm3_per_db(), 1.0e-10);
-
     {
         std::vector<bool> scalingApplicable;
 
         connP.applyWellPIScaling(2.0, scalingApplicable);
         BOOST_CHECK_CLOSE(connP[0].CF(), 32.0*expectCF       , 1.0e-10);
         BOOST_CHECK_CLOSE(connP[1].CF(), 32.0*expectCF       , 1.0e-10);
-        BOOST_CHECK_CLOSE(connP[2].CF(), 50.0*cp_rm3_per_db(), 1.0e-10);
+        BOOST_CHECK_CLOSE(connP[2].CF(), 400.0*cp_rm3_per_db(), 1.0e-10);
+        BOOST_CHECK_CLOSE(connP[3].CF(), 50.0*cp_rm3_per_db(), 1.0e-10);
     }
 }
 
@@ -724,9 +711,9 @@ BOOST_AUTO_TEST_CASE(loadCOMPTRAJTESTSPE1) {
     /* Comparison values (CFs and intersected cells) are from ResInsight through importing a deviation file with contents
           WELLNAME: 'INJ1'
           # X   Y    TVDMSL   MDMSL
-          500   500  -100.0   0.0 
+          500   500  -100.0   0.0
           500   500   8325.0  8325.0
-          2500  2500  8425.0  8450.0 
+          2500  2500  8425.0  8450.0
        and adjusting the completion data in agreement with the COMPTRAJ data in the input file
      */
     const std::array<double, 4> connection_factor{311.783, 7.79428, 38.9674, 62.3465};
@@ -734,7 +721,7 @@ BOOST_AUTO_TEST_CASE(loadCOMPTRAJTESTSPE1) {
     BOOST_CHECK_EQUAL(connections.size(), 4);
     for (size_t i = 0 ; i < connections.size();  ++i ) {
          BOOST_CHECK_CLOSE(connections[i].CF(), units.to_si(Opm::UnitSystem::measure::transmissibility, connection_factor[i]), 2e-2);
-         BOOST_CHECK_EQUAL(connections[i].global_index(), global_index[i]);  
+         BOOST_CHECK_EQUAL(connections[i].global_index(), global_index[i]);
     }
 }
 
@@ -753,7 +740,7 @@ BOOST_AUTO_TEST_CASE(loadCOMPTRAJTESTSPE1_2) {
     /* Comparison values (CFs and intersected cells) are from ResInsight through importing a deviation file with contents
           WELLNAME: 'INJ1'
           # X   Y    TVDMSL   MDMSL
-          2500   3500  -100.0   0.0 
+          2500   3500  -100.0   0.0
           2500   3500   8325.0  8325.0
           2750   3750   8375.0  8375.0
           3500   4500   8400.0  8400.0
@@ -766,6 +753,6 @@ BOOST_AUTO_TEST_CASE(loadCOMPTRAJTESTSPE1_2) {
     BOOST_CHECK_EQUAL(connections.size(), 5);
     for (size_t i = 0 ; i < connections.size();  ++i ) {
          BOOST_CHECK_CLOSE(connections[i].CF(), units.to_si(Opm::UnitSystem::measure::transmissibility, connection_factor[i]), 2e-2);
-         BOOST_CHECK_EQUAL(connections[i].global_index(), global_index[i]);  
+         BOOST_CHECK_EQUAL(connections[i].global_index(), global_index[i]);
     }
 }

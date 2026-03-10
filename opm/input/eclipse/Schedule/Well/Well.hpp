@@ -17,18 +17,8 @@
   along with OPM.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 #ifndef WELL2_HPP
 #define WELL2_HPP
-
-#include <cstddef>
-#include <iosfwd>
-#include <map>
-#include <memory>
-#include <optional>
-#include <string>
-#include <utility>
-#include <vector>
 
 #include <opm/input/eclipse/Deck/UDAValue.hpp>
 #include <opm/input/eclipse/EclipseState/Phase.hpp>
@@ -42,6 +32,15 @@
 #include <opm/input/eclipse/Schedule/Well/WINJMULT.hpp>
 #include <opm/input/eclipse/Units/UnitSystem.hpp>
 
+#include <cstddef>
+#include <iosfwd>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace Opm {
 
 class ActiveGridCells;
@@ -52,6 +51,7 @@ class ErrorGuard;
 class EclipseGrid;
 class KeywordLocation;
 class ParseContext;
+class Phases;
 class ScheduleGrid;
 class SICD;
 class SummaryState;
@@ -106,6 +106,12 @@ public:
 
     void flag_lgr_well();
     void set_lgr_well_tag(const std::string& lgr_tag_name);
+    void setInsertIndexLGR(const std::size_t index);
+    void setInsertIndexAllLGR(const std::size_t index);
+
+    std::size_t seqIndexLGR() const { return insert_index_lgr; }
+    std::size_t seqIndexAllLGR() const { return insert_index_all_lgr; }
+
     bool is_lgr_well() const;
     std::optional<std::string> get_lgr_well_tag() const;
     struct WellGuideRate {
@@ -318,6 +324,7 @@ public:
         //! \param bhp_def Default BHP target in SI units
         //! \param unit_system Unit system to use
         //! \param well Well name
+        //! \param phases Phase information
         //! \param record Deck record to use
         //! \param location Location of keyword for logging purpose
         void handleWCONPROD(const std::optional<VFPProdTable::ALQ_TYPE>& alq_type,
@@ -325,6 +332,7 @@ public:
                             const double bhp_def,
                             const UnitSystem& unit_system,
                             const std::string& well,
+                            const Phases& phases,
                             const DeckRecord& record,
                             const KeywordLocation& location);
 
@@ -540,11 +548,25 @@ public:
     bool updateProduction(std::shared_ptr<WellProductionProperties> production);
     bool updateInjection(std::shared_ptr<WellInjectionProperties> injection);
     bool updateWellProductivityIndex();
-    bool updateWSEGSICD(const std::vector<std::pair<int, SICD> >& sicd_pairs);
-    bool updateWSEGVALV(const std::vector<std::pair<int, Valve> >& valve_pairs);
-    bool updateWSEGAICD(const std::vector<std::pair<int, AutoICD> >& aicd_pairs, const KeywordLocation& location);
+
+    bool updateWSEGAICD(const std::vector<std::pair<int, AutoICD>>& aicd_pairs,
+                        const KeywordLocation&                      location,
+                        const ParseContext&                         parseContext,
+                        ErrorGuard&                                 errors);
+
+    bool updateWSEGSICD(const std::vector<std::pair<int, SICD>>& sicd_pairs,
+                        const KeywordLocation&                   location,
+                        const ParseContext&                      parseContext,
+                        ErrorGuard&                              errors);
+
+    bool updateWSEGVALV(const std::vector<std::pair<int, Valve>>& valve_pairs,
+                        const KeywordLocation&                    location,
+                        const ParseContext&                       parseContext,
+                        ErrorGuard&                               errors);
+
+    bool updateICDFlowScalingFactors();
     bool updateWPAVE(const PAvg& pavg);
-  
+
 
     void updateWPaveRefDepth(double ref_depth);
     bool updateWVFPDP(std::shared_ptr<WVFPDP> wvfpdp);
@@ -563,8 +585,8 @@ public:
     void setFilterConc(const UDAValue& conc);
     double evalFilterConc(const SummaryState& summary_sate) const;
     bool applyGlobalWPIMULT(double scale_factor);
+    void addWellSegmentsFromLengthsAndDepths(const std::vector<std::pair<double, double>>& lengths_and_depths, double diameter, const KeywordLocation& location);
 
-    void filterConnections(const ActiveGridCells& grid);
     ProductionControls productionControls(const SummaryState& st) const;
     InjectionControls injectionControls(const SummaryState& st) const;
     int vfp_table_number() const;
@@ -599,6 +621,8 @@ public:
         serializer(group_name);
         serializer(init_step);
         serializer(insert_index);
+        serializer(insert_index_lgr);
+        serializer(insert_index_all_lgr);
         serializer(headI);
         serializer(headJ);
         serializer(ref_depth);
@@ -658,6 +682,10 @@ private:
 
     std::size_t init_step{};
     std::size_t insert_index{};
+    // counts wells in a single LGR
+    std::size_t insert_index_lgr{0};
+    // counts wells in all LGRs combined
+    std::size_t insert_index_all_lgr{0};
     int headI{};
     int headJ{};
     std::optional<double> ref_depth{};

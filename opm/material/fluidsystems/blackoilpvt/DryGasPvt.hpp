@@ -36,10 +36,8 @@
 
 namespace Opm {
 
-#if HAVE_ECL_INPUT
 class EclipseState;
 class Schedule;
-#endif
 
 /*!
  * \brief This class represents the Pressure-Volume-Temperature relations of the gas phase
@@ -53,14 +51,12 @@ class DryGasPvt
 public:
     using TabulatedOneDFunction = Tabulated1DFunction<Scalar>;
 
-#if HAVE_ECL_INPUT
     /*!
      * \brief Initialize the parameters for dry gas using an ECL deck.
      *
      * This method assumes that the deck features valid DENSITY and PVDG keywords.
      */
     void initFromState(const EclipseState& eclState, const Schedule&);
-#endif
 
     void setNumRegions(std::size_t numRegions);
 
@@ -99,6 +95,7 @@ public:
     /*!
      * \brief Initialize the function for the formation volume factor of dry gas
      *
+     * \param regionIdx Region index to use
      * \param samplePoints A container of \f$(p_g, B_g)\f$ values
      */
     void setGasFormationVolumeFactor(unsigned regionIdx,
@@ -169,6 +166,20 @@ public:
                                             const Evaluation& /*Rv*/,
                                             const Evaluation& /*Rvw*/) const
     { return saturatedInverseFormationVolumeFactor(regionIdx, temperature, pressure); }
+
+    /*!
+     * \brief Returns the formation volume factor [-] and viscosity [Pa s] of the fluid phase.
+     */
+    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    std::pair<LhsEval, LhsEval>
+    inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState, unsigned regionIdx)
+    {
+        const LhsEval& p = decay<LhsEval>(fluidState.pressure(FluidState::gasPhaseIdx));
+        const auto segIdx = this->inverseGasB_[regionIdx].findSegmentIndex(p, /*extrapolate=*/ true);
+        const auto& invBg = this->inverseGasB_[regionIdx].eval(p, SegmentIndex{segIdx});
+        const auto& invMugBg = this->inverseGasBMu_[regionIdx].eval(p, SegmentIndex{segIdx});
+        return { invBg, invBg / invMugBg };
+   }
 
     /*!
      * \brief Returns the formation volume factor [-] of oil saturated gas at given pressure.

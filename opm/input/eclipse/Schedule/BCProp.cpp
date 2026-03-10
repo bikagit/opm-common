@@ -191,12 +191,12 @@ bool BCProp::BCFace::operator==(const BCProp::BCFace& other) const {
 void BCProp::updateBCProp(const DeckRecord& record)
 {
     const BCProp::BCFace bcnew(record);
-    auto it = std::find_if(m_faces.begin(), m_faces.end(),
-                           [&bcnew](const auto& bc)
-                           {
-                               return bc.index == bcnew.index &&
-                                      bc.component == bcnew.component;
-                           });
+    auto it = std::ranges::find_if(m_faces,
+                                   [&bcnew](const auto& bc)
+                                   {
+                                       return bc.index == bcnew.index &&
+                                              bc.component == bcnew.component;
+                                   });
     if (it != m_faces.end()) {
         *it = bcnew;
     } else {
@@ -229,11 +229,9 @@ std::vector<BCProp::BCFace>::const_iterator BCProp::end() const {
 
 const BCProp::BCFace& BCProp::operator[](int index) const
 {
-    const auto it = std::find_if(m_faces.begin(), m_faces.end(),
-                                [index](const auto& bc)
-                                 {
-                                     return bc.index == index;
-                                 });
+    const auto it = std::ranges::find_if(m_faces,
+                                         [index](const auto& bc)
+                                         { return bc.index == index; });
 
     if (it != m_faces.end()) {
         return *it;

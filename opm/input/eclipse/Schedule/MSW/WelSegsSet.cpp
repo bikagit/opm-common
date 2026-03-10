@@ -46,17 +46,43 @@ WelSegsSet::difference(const std::set<std::string>& compsegs,
 
     // Ignore wells without connections
     const auto empty_conn = [&wells](const Entry &x) {
-        return std::any_of(wells.begin(), wells.end(),
-                           [wname = x.first](const Well& well)
-                           { return (well.name() == wname) && well.getConnections().empty(); });
+        return std::ranges::any_of(wells,
+                                   [wname = x.first](const Well& well)
+                                   {
+                                       return (well.name() == wname)
+                                            && well.getConnections().empty();
+                                   });
     };
 
-    difference.erase(std::remove_if(difference.begin(),
-                                    difference.end(), empty_conn),
-                     difference.end());
-
+    std::erase_if(difference, empty_conn);
     return difference;
 }
+
+std::vector<WelSegsSet::Entry>
+WelSegsSet::intersection(const std::set<std::string>& wells1,
+                         const std::set<std::string>& wells2) const
+{
+    std::set<std::string> wells_intersection;
+    std::ranges::set_intersection(wells1, wells2,
+                                  std::inserter(wells_intersection,
+                                                wells_intersection.begin()));
+
+    if (wells_intersection.empty()) {
+        return {};
+    }
+
+    std::vector<Entry> well_segs_set_intersection;
+    well_segs_set_intersection.reserve(wells_intersection.size());
+    for (const auto& entry : entries_) {
+        const auto& name = std::get<0>(entry);
+        if (wells_intersection.find(name) != wells_intersection.end()) {
+            well_segs_set_intersection.push_back(entry);
+        }
+    }
+
+    return well_segs_set_intersection;
+}
+
 
 bool WelSegsSet::PairComp::
 operator()(const Entry& pair, const std::string& str) const

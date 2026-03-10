@@ -32,11 +32,11 @@
 
 #include <opm/material/fluidsystems/blackoilpvt/GasPvtMultiplexer.hpp>
 
+#include <memory>
 #include <fmt/format.h>
 
 namespace Opm {
 
-#if HAVE_ECL_INPUT
 template<class Scalar>
 void GasPvtThermal<Scalar>::
 initFromState(const EclipseState& eclState, const Schedule& schedule)
@@ -185,7 +185,6 @@ initFromState(const EclipseState& eclState, const Schedule& schedule)
         }
     }
 }
-#endif
 
 template<class Scalar>
 void GasPvtThermal<Scalar>::

@@ -364,8 +364,7 @@ bool EclFile::is_ix() const
                 return true;
             } else if (array_type[n] == Opm::EclIO::LOGI) {
                 auto raw_logi_values = get_bin_logi_raw_values(n);
-                const auto it = std::find(raw_logi_values.begin(), raw_logi_values.end(),
-                                          Opm::EclIO::true_value_ix);
+                const auto it = std::ranges::find(raw_logi_values, Opm::EclIO::true_value_ix);
                 if (it != raw_logi_values.end()) {
                     return true;
                 }

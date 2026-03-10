@@ -245,14 +245,15 @@ void testThreePhaseApi()
         v = MaterialLaw::template krn<FluidState, Scalar>(params, fs);
         v = MaterialLaw::template krg<FluidState, Scalar>(params, fs);
 
-        [[maybe_unused]] typename FluidState::Scalar vEval;
-        vEval = MaterialLaw::pcnw(params, fs);
-        vEval = MaterialLaw::Sw(params, fs);
-        vEval = MaterialLaw::Sn(params, fs);
-        vEval = MaterialLaw::Sg(params, fs);
-        vEval = MaterialLaw::krw(params, fs);
-        vEval = MaterialLaw::krn(params, fs);
-        vEval = MaterialLaw::krg(params, fs);
+        using Eval = typename FluidState::Scalar;
+        [[maybe_unused]] Eval vEval;
+        vEval = MaterialLaw::template pcnw<FluidState, Eval>(params, fs);
+        vEval = MaterialLaw::template Sw<FluidState, Eval>(params, fs);
+        vEval = MaterialLaw::template Sn<FluidState, Eval>(params, fs);
+        vEval = MaterialLaw::template Sg<FluidState, Eval>(params, fs);
+        vEval = MaterialLaw::template krw<FluidState, Eval>(params, fs);
+        vEval = MaterialLaw::template krn<FluidState, Eval>(params, fs);
+        vEval = MaterialLaw::template krg<FluidState, Eval>(params, fs);
     }
 }
 
@@ -276,7 +277,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(ApiConformance, Scalar, Types)
     using ThreePhaseTraits = Opm::ThreePhaseMaterialTraits<Scalar,
                                                            ThreePFluidSystem::waterPhaseIdx,
                                                            ThreePFluidSystem::oilPhaseIdx,
-                                                           ThreePFluidSystem::gasPhaseIdx>;
+                                                           ThreePFluidSystem::gasPhaseIdx,
+                                                           true,  // enable hysteresis
+                                                           true>; // enable endpoint scaling
 
     using Evaluation = Opm::DenseAd::Evaluation<Scalar, 3>;
     using TwoPhaseFluidState = Opm::ImmiscibleFluidState<Evaluation, TwoPFluidSystem>;

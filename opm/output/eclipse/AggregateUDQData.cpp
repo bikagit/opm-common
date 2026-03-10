@@ -103,7 +103,7 @@ namespace {
             Opm::UDQTokenType::binary_op_mul,
         };
 
-        return std::find(type_1.begin(), type_1.end(), token) != type_1.end();
+        return std::ranges::find(type_1, token) != type_1.end();
     }
 
     // function to return true if token is a binary operator: type add or
@@ -115,7 +115,7 @@ namespace {
             Opm::UDQTokenType::binary_op_sub,
         };
 
-        return std::find(type_1.begin(), type_1.end(), token) != type_1.end();
+        return std::ranges::find(type_1, token) != type_1.end();
     }
 
     // function to return true if token is a binary union operator
@@ -128,7 +128,7 @@ namespace {
             Opm::UDQTokenType::binary_op_umax,
         };
 
-        return std::find(type_1.begin(), type_1.end(), token) != type_1.end();
+        return std::ranges::find(type_1, token) != type_1.end();
     }
 
     // function to return true if token is an open or close parenthesis token
@@ -139,7 +139,7 @@ namespace {
             Opm::UDQTokenType::close_paren,
         };
 
-        return std::find(type_1.begin(), type_1.end(), token) != type_1.end();
+        return std::ranges::find(type_1, token) != type_1.end();
     }
 
     // A function to return true if the token is an operator
@@ -155,12 +155,12 @@ namespace {
     // bracket that is ending the expression
     int numOperators(const std::vector<Opm::UDQToken>& modTokens)
     {
-        return std::count_if(modTokens.begin(), modTokens.end(),
-                             [](const auto& token)
-                             {
-                                 return isOperatorToken(token.type())
-                                     || isTokenTypeParen(token.type());
-                             });
+        return std::ranges::count_if(modTokens,
+                                     [](const auto& token)
+                                     {
+                                          return isOperatorToken(token.type())
+                                              || isTokenTypeParen(token.type());
+                                     });
     }
 
     // function to return the precedence of the current operator/function
@@ -418,8 +418,7 @@ namespace {
         std::pair<bool, int> result;
 
         // Find given element in vector
-        auto it = std::find(vecOfElements.begin(), vecOfElements.end(), element);
-
+        const auto it = std::ranges::find(vecOfElements, element);
         if (it != vecOfElements.end()) {
             result.second = std::distance(vecOfElements.begin(), it);
             result.first = true;
@@ -471,22 +470,36 @@ namespace {
 
         template <class IUADArray>
         int staticContrib(const Opm::UDQActive::OutputRecord& iuad_record,
-                          const bool                          is_field_uda,
                           const int                           iuap_offset,
                           IUADArray&                          iUad)
         {
             namespace VI = Opm::RestartIO::Helpers::VectorItems::IUad;
 
-            using Ix   = VI::index;;
-            using Kind = VI::Value::IuapElems;
+            using Ix = VI::index;;
 
             iUad[Ix::UDACode] = iuad_record.uda_code;
 
             // +1 for one-based indices.
             iUad[Ix::UDQIndex] = iuad_record.input_index + 1;
 
-            iUad[Ix::NumIuapElm] = is_field_uda
-                ? Kind::Field : Kind::Regular;
+            switch (auto& numIuap = iUad[Ix::NumIuapElm];
+                    Opm::UDQ::keyword(iuad_record.control))
+            {
+            case Opm::UDAKeyword::GCONINJE:
+                // Group or field level injection UDA.
+                numIuap = VI::Value::IuapElems::GrpInj;
+                break;
+
+            case Opm::UDAKeyword::GCONPROD:
+                // Group or field level production UDA.
+                numIuap = VI::Value::IuapElems::GrpProd;
+                break;
+
+            default:
+                // Well level UDA.
+                numIuap = VI::Value::IuapElems::Well;
+                break;
+            }
 
             iUad[Ix::UseCount] = iuad_record.use_count;
 
@@ -651,42 +664,85 @@ namespace {
 
     namespace iUap {
 
+        void wellUDA(const Opm::ScheduleState& sched,
+                     const std::string&        wname,
+                     std::vector<int>&         wgIndex)
+        {
+            // Well level control.  Use well's insertion index as the IUAP
+            // entry (+1 for one-based indices).
+            wgIndex.push_back(sched.wells(wname).seqIndex() + 1);
+        }
+
+        void groupProductionUDA(const Opm::ScheduleState& sched,
+                                const std::string&        gname,
+                                std::vector<int>&         wgIndex)
+        {
+            // Group level production.  Need to distinguish between the
+            // FIELD and the non-FIELD cases.
+
+            if (gname != "FIELD") {
+                // Non-field production UDA.  IUAP is [ID, 0] in this case.
+                //
+                // As the Schedule object inserts 'FIELD' at index zero, the
+                // group's insert_index() is, serendipitously, already
+                // suitably adjusted to one-based indices for output
+                // purposes.
+                wgIndex.insert(wgIndex.end(), {
+                        static_cast<int>(sched.groups(gname).insert_index()), 0
+                    });
+            }
+            else {
+                // Field level production UDA.  IUAP is [1, 1] in this case.
+                wgIndex.insert(wgIndex.end(), {1, 1});
+            }
+        }
+
+        void groupInjectionUDA(const Opm::ScheduleState& sched,
+                               const std::string&        gname,
+                               std::vector<int>&         wgIndex)
+        {
+            // Group level injection.  Need to distinguish between the FIELD
+            // and the non-FIELD cases.
+
+            if (gname != "FIELD") {
+                // Non-field injection UDA.  IUAP is [ID, 0, 2].
+                //
+                // As the Schedule object inserts 'FIELD' at index zero, the
+                // group's insert_index() is, serendipitously, already
+                // suitably adjusted to one-based indices for output
+                // purposes.
+                wgIndex.insert(wgIndex.end(), {
+                        static_cast<int>(sched.groups(gname).insert_index()), 0, 2
+                    });
+            }
+            else {
+                // Field level injection UDA.  IUAP is [1, 1, 2].
+                wgIndex.insert(wgIndex.end(), {1, 1, 2});
+            }
+        }
+
         std::vector<int>
         data(const Opm::ScheduleState&                       sched,
              const std::vector<Opm::UDQActive::InputRecord>& iuap)
         {
             // Construct the current list of well or group sequence numbers
             // to output the IUAP array.
-            auto wg_no = std::vector<int>{};
+            auto wgIndex = std::vector<int>{};
 
             for (const auto& udaRecord : iuap) {
                 switch (Opm::UDQ::keyword(udaRecord.control)) {
                 case Opm::UDAKeyword::WCONPROD:
                 case Opm::UDAKeyword::WCONINJE:
                 case Opm::UDAKeyword::WELTARG:
-                    // Well level control.  Use well's insertion index as
-                    // the IUAP entry (+1 for one-based indices).
-                    wg_no.push_back(sched.wells(udaRecord.wgname).seqIndex() + 1);
+                    wellUDA(sched, udaRecord.wgname, wgIndex);
                     break;
 
                 case Opm::UDAKeyword::GCONPROD:
-                case Opm::UDAKeyword::GCONINJE: {
-                    // Group level control.  Need to distinguish between the
-                    // FIELD and the non-FIELD cases.
+                    groupProductionUDA(sched, udaRecord.wgname, wgIndex);
+                    break;
 
-                    if (const auto& gname = udaRecord.wgname; gname != "FIELD") {
-                        // The Schedule object inserts 'FIELD' at index
-                        // zero.  The group's insert_index() is therefore,
-                        // serendipitously, already suitably adjusted to
-                        // one-based indices for output purposes.
-                        wg_no.push_back(sched.groups(gname).insert_index());
-                    }
-                    else {
-                        // IUAP for field level UDAs is represented by two
-                        // copies of the numeric ID '1'.
-                        wg_no.insert(wg_no.end(), 2, 1);
-                    }
-                }
+                case Opm::UDAKeyword::GCONINJE:
+                    groupInjectionUDA(sched, udaRecord.wgname, wgIndex);
                     break;
 
                 default: {
@@ -703,7 +759,7 @@ namespace {
                 }
             }
 
-            return wg_no;
+            return wgIndex;
         }
 
     } // iUap
@@ -785,13 +841,12 @@ namespace {
             auto msWells = std::vector<std::string>{};
             msWells.reserve(allWells.size());
 
-            std::copy_if(allWells.begin(), allWells.end(),
-                         std::back_inserter(msWells),
-                         [&scheduleBlock](const std::string& wname)
-                         {
-                             auto wptr = scheduleBlock.wells.get_ptr(wname);
-                             return (wptr != nullptr) && wptr->isMultiSegment();
-                         });
+            std::ranges::copy_if(allWells, std::back_inserter(msWells),
+                                 [&scheduleBlock](const std::string& wname)
+                                 {
+                                     auto wptr = scheduleBlock.wells.get_ptr(wname);
+                                     return (wptr != nullptr) && wptr->isMultiSegment();
+                                 });
 
             return msWells;
         }
@@ -1135,16 +1190,10 @@ collectIUAD(const UDQActive& udqActive, const std::size_t expectNumIUAD)
     auto iuap_offset = 0;
     auto index = std::size_t{0};
     for (const auto& iuad_record : iuad_records) {
-        const auto kw = UDQ::keyword(iuad_record.control);
-        const auto is_field_uda =
-            ((kw == UDAKeyword::GCONPROD) ||
-             (kw == UDAKeyword::GCONINJE))
-            && (iuad_record.wg_name() == "FIELD");
-
         auto iuad = (*this->iUAD_)[index];
 
         iuap_offset +=
-            iUad::staticContrib(iuad_record, is_field_uda, iuap_offset, iuad);
+            iUad::staticContrib(iuad_record, iuap_offset, iuad);
 
         ++index;
     }
@@ -1167,7 +1216,7 @@ collectIUAP(const std::vector<int>& wgIndex,
 
     this->iUAP_.emplace(WV::NumWindows{ 1 }, WV::WindowSize{ expectNumIUAP });
 
-    std::copy(wgIndex.begin(), wgIndex.end(), (*this->iUAP_)[0].begin());
+    std::ranges::copy(wgIndex, (*this->iUAP_)[0].begin());
 }
 
 void
@@ -1187,5 +1236,5 @@ collectIGPH(const std::vector<int>& phase_vector,
 
     this->iGPH_.emplace(WV::NumWindows{ 1 }, WV::WindowSize{ expectNumIGPH });
 
-    std::copy(phase_vector.begin(), phase_vector.end(), (*this->iGPH_)[0].begin());
+    std::ranges::copy(phase_vector, (*this->iGPH_)[0].begin());
 }

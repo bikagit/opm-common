@@ -18,7 +18,7 @@
 * Generated using opm_tables_coolprop.py in opm-utilities like this:
 *
 * >> python3 opm_tables_coolprop.py -t1 280.0 -t2 400.0 -nt 200 -tref 288.71 -p1 100000.0 -p2 100000000.0 -np 500 -pref 101325.0 -c co2
-* 
+*
 */
 // Fill in the data for a struct like this (intended to work together with brine salinity 0.1)
 //struct Opm::co2TabulatedDensityTraits {

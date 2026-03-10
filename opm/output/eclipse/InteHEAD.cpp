@@ -39,14 +39,14 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cmath>
 #include <ctime>
 #include <initializer_list>
 #include <numeric>
-#include <ratio>
 #include <utility>
 #include <vector>
+
+#include <fmt/format.h>
 
 // Public INTEHEAD items are recorded in the common header file
 //
@@ -115,7 +115,7 @@ enum index : std::vector<int>::size_type {
   ih_055       =       55       ,              //       0       0
   ih_056       =       56       ,              //       0       0
   ih_057       =       57       ,              //       0       0
-  NGRNPHASE    =       VI::intehead::NGRNPH,   //       Parameter to determine the nominated phase for the guiderate 
+  NGRNPHASE    =       VI::intehead::NGRNPH,   //       Parameter to determine the nominated phase for the guiderate
   EACHNC       =       VI::intehead::EACHNCITS, //  Index indicating if lift gas distribution optimized each of the NUPCOL first iterations or not
   ih_060       =       60       ,              //       0       0
   ih_061       =       61       ,              //       0       0
@@ -303,7 +303,7 @@ enum index : std::vector<int>::size_type {
   ih_242       =      242       ,              //       0
   ih_243       =      243       ,              //       0
   ih_244       =      244       ,              //       0
-  MXACTC       =      VI::intehead::MAX_ACT_COND, //       Max no of conditions pr action 
+  MXACTC       =      VI::intehead::MAX_ACT_COND, //       Max no of conditions pr action
   ih_246       =      246       ,              //       0
   ih_247       =      247       ,              //       0
   ih_248       =      248       ,              //       0
@@ -526,7 +526,7 @@ Opm::RestartIO::InteHEAD::wellTableDimensions(const WellTableDim& wtdim)
                                    wtdim.maxGroupInField);
 
     this->data_[NGMAXZ] = wtdim.maxGroupInField + 1;
-    
+
     this->data_[NWMAXZ] = wtdim.maxWellsInField;
 
     this->data_[MXWLSTPW]  = wtdim.mxwlstprwel;
@@ -680,7 +680,8 @@ Opm::RestartIO::InteHEAD::tuningParam(const TuningPar& tunpar)
 
 Opm::RestartIO::InteHEAD&
 Opm::RestartIO::InteHEAD::variousParam(const int version,
-                                       const int iprog)
+                                       const int iprog,
+                      [[maybe_unused]] const int num_tracer_comps)
 {
     this->data_[VERSION] = version;
     this->data_[IPROG]   = iprog;
@@ -778,7 +779,7 @@ actionParam(const ActionParam& act_par)
     this -> data_[NO_ACT]     = act_par.no_actions;
     this -> data_[MAX_LINES]  = act_par.max_no_sched_lines_per_action;
     this -> data_[MXACTC]     = act_par.max_no_conditions_per_action;
-    this -> data_[MAXSPRLINE] = ((act_par.max_no_characters_per_line % 8) == 0) ? act_par.max_no_characters_per_line / 8 : 
+    this -> data_[MAXSPRLINE] = ((act_par.max_no_characters_per_line % 8) == 0) ? act_par.max_no_characters_per_line / 8 :
                                 (act_par.max_no_characters_per_line / 8) + 1;
 
     return *this;
@@ -873,16 +874,14 @@ int Opm::RestartIO::InteHEAD::numRsegElem(const ::Opm::Phases& phase)
         + phase.active(::Opm::Phase::WATER);
 
     switch (nact) {
-    case 1: return 126;
-    case 2: return 134;
-    case 3: return 146;
+    case 1: return 127;
+    case 2: return 135;
+    case 3: return 147;
     }
 
     throw std::invalid_argument {
-        "NRSEGZ is not supported for " +
-            std::to_string(nact) +
-            " active phases"
-            };
+        fmt::format("NRSEGZ is not supported for {} active phases", nact)
+    };
 }
 
 // =====================================================================
@@ -920,7 +919,7 @@ namespace {
         if (elems.empty())     { return 0; }
         if (elems.size() == 1) { return 1; }
 
-        std::sort(elems.begin(), elems.end());
+        std::ranges::sort(elems);
         auto end = std::unique(elems.begin(), elems.end());
 
         return std::distance(elems.begin(), end);
@@ -954,12 +953,9 @@ namespace {
             }
         }
 
-        std::transform(sched.aqufluxs.begin(), sched.aqufluxs.end(),
-                       std::back_inserter(aquiferIDs),
-                       [](const auto& aq)
-                       {
-                           return aq.first;
-                       });
+        std::ranges::transform(sched.aqufluxs, std::back_inserter(aquiferIDs),
+                               [](const auto& aq)
+                               { return aq.first; });
 
         return numUnique(std::move(aquiferIDs));
     }

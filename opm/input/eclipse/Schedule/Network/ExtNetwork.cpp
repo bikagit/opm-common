@@ -140,9 +140,12 @@ void ExtNetwork::add_or_replace_branch(Branch branch)
 
 void ExtNetwork::drop_branch(const std::string& uptree_node, const std::string& downtree_node)
 {
-    auto branch_iter = std::find_if(this->m_branches.begin(),
-                                    this->m_branches.end(),
-                                    [&uptree_node, &downtree_node](const Branch& b) { return (b.uptree_node() == uptree_node && b.downtree_node() == downtree_node); });
+    auto branch_iter = std::ranges::find_if(this->m_branches,
+                                            [&uptree_node, &downtree_node](const Branch& b)
+                                            {
+                                                return b.uptree_node() == uptree_node &&
+                                                       b.downtree_node() == downtree_node;
+                                            });
     if (branch_iter != this->m_branches.end()) {
         this->m_branches.erase(branch_iter);
     }
@@ -156,9 +159,8 @@ std::optional<Branch> ExtNetwork::uptree_branch(const std::string& node) const
     }
 
     std::vector<Branch> branch;
-    std::copy_if(this->m_branches.begin(), this->m_branches.end(),
-                 std::back_inserter(branch),
-                 [&node](const Branch& b) { return b.downtree_node() == node; });
+    std::ranges::copy_if(this->m_branches, std::back_inserter(branch),
+                         [&node](const Branch& b) { return b.downtree_node() == node; });
 
     if (branch.empty()) {
         return {};
@@ -179,18 +181,16 @@ std::vector<Branch> ExtNetwork::downtree_branches(const std::string& node) const
     }
 
     std::vector<Branch> branch;
-    std::copy_if(this->m_branches.begin(), this->m_branches.end(),
-                 std::back_inserter(branch),
-                 [&node](const Branch& b) { return b.uptree_node() == node; });
+    std::ranges::copy_if(this->m_branches, std::back_inserter(branch),
+                         [&node](const Branch& b) { return b.uptree_node() == node; });
     return branch;
 }
 
 std::vector<const Branch*> ExtNetwork::branches() const
 {
     std::vector<const Branch*> branch_pointer;
-    std::transform(this->m_branches.begin(), this->m_branches.end(),
-                   std::back_inserter(branch_pointer),
-                   [](const auto& br) { return &br; });
+    std::ranges::transform(this->m_branches, std::back_inserter(branch_pointer),
+                           [](const auto& br) { return &br; });
     return branch_pointer;
 }
 
@@ -244,7 +244,7 @@ void ExtNetwork::add_indexed_node_name(const std::string& name)
 bool ExtNetwork::has_indexed_node_name(const std::string& name) const
 {
     // Find given element in vector
-    auto it = std::find(this->insert_indexed_node_names.begin(), this->insert_indexed_node_names.end(), name);
+    const auto it = std::ranges::find(this->insert_indexed_node_names, name);
 
     return (it != this->insert_indexed_node_names.end());
 }

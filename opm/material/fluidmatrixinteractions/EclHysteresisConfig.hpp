@@ -29,9 +29,7 @@
 
 namespace Opm {
 
-#if HAVE_ECL_INPUT
 class Runspec;
-#endif
 
 /*!
  * \ingroup FluidMatrixInteractions
@@ -128,14 +126,24 @@ public:
     bool enableWagHysteresis() const
     { return enableWagHyst_; }
 
-#if HAVE_ECL_INPUT
+    /*!
+     * \brief Returns whether Pc scaling is enabled.
+     */
+    bool enablePcScalingHyst() const
+    { return enablePcScalingHyst_; }
+
+    /*!
+     * \brief Returns whether fix for wetting phase killough is enabled.
+     */
+    bool enableWettingPhaseKilloughFix() const
+    { return enableWettingPhaseKilloughFix_; }
+
     /*!
      * \brief Reads all relevant material parameters form a cell of a parsed ECL deck.
      *
      * This requires that the opm-parser module is available.
      */
     void initFromState(const Runspec& runspec);
-#endif
 
 private:
     // enable hysteresis at all
@@ -149,6 +157,12 @@ private:
 
     // WAG hysteresis
     bool enableWagHyst_{false};
+
+    // Enable bug fix for capillary pressure scaling
+    bool enablePcScalingHyst_{false};
+
+    // Enable bug fix for wetting phase killough hysteresis
+    bool enableWettingPhaseKilloughFix_{false};
 };
 
 } // namespace Opm

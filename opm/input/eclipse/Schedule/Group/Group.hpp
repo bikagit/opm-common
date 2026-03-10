@@ -30,29 +30,32 @@
 #include <opm/input/eclipse/Units/UnitSystem.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <string>
 
 namespace Opm {
+    class SummaryState;
+    class UDQConfig;
+    class UDQActive;
+} // namespace Opm
 
-namespace RestartIO {
-struct RstGroup;
-}
+namespace Opm::RestartIO {
+    struct RstGroup;
+} // namespace Opm::RestartIO
 
-class SummaryState;
-class UDQConfig;
-class UDQActive;
-
-class Group {
+namespace Opm {
+class Group
+{
 public:
-    // A group can have both injection controls and production controls set at
-    // the same time, i.e. this enum is used as a bitmask.
+    // A group can have both injection controls and production controls set
+    // at the same time, i.e. this enum is used as a bitmask.
     enum class GroupType : unsigned {
         NONE = 0,
         PRODUCTION = 1,
         INJECTION = 2,
-        MIXED = 3
+        MIXED = 3,
     };
 
     enum class ExceedAction {
@@ -63,8 +66,8 @@ public:
         PLUG = 4,
         RATE = 5
     };
-    static const std::string ExceedAction2String( ExceedAction enumValue );
-    static ExceedAction ExceedActionFromString( const std::string& stringValue );
+    static std::string ExceedAction2String(ExceedAction enumValue);
+    static ExceedAction ExceedActionFromString(const std::string& stringValue);
     static ExceedAction ExceedActionFromInt(const int value);
 
     enum class InjectionCMode  : int {
@@ -76,8 +79,8 @@ public:
         FLD  = 16,
         SALE = 32
     };
-    static const std::string InjectionCMode2String( InjectionCMode enumValue );
-    static InjectionCMode InjectionCModeFromString( const std::string& stringValue );
+    static std::string InjectionCMode2String(InjectionCMode enumValue);
+    static InjectionCMode InjectionCModeFromString(const std::string& stringValue);
     static InjectionCMode InjectionCModeFromInt(int ecl_int);
     static int            InjectionCMode2Int(InjectionCMode enumValue);
 
@@ -92,8 +95,8 @@ public:
         PRBL = 64,
         FLD  = 128
     };
-    static const std::string ProductionCMode2String( ProductionCMode enumValue );
-    static ProductionCMode ProductionCModeFromString( const std::string& stringValue );
+    static std::string ProductionCMode2String(ProductionCMode enumValue);
+    static ProductionCMode ProductionCModeFromString(const std::string& stringValue);
     static ProductionCMode ProductionCModeFromInt(int ecl_int);
     static int             ProductionCMode2Int(Group::ProductionCMode cmode);
 
@@ -111,7 +114,7 @@ public:
         FORM = 10,
         NO_GUIDE_RATE = 11
     };
-    static GuideRateProdTarget GuideRateProdTargetFromString( const std::string& stringValue );
+    static GuideRateProdTarget GuideRateProdTargetFromString(const std::string& stringValue);
     static GuideRateProdTarget GuideRateProdTargetFromInt(int ecl_id);
 
     enum class GuideRateInjTarget {
@@ -121,7 +124,7 @@ public:
         RESV = 4,
         NO_GUIDE_RATE = 5
     };
-    static GuideRateInjTarget GuideRateInjTargetFromString( const std::string& stringValue );
+    static GuideRateInjTarget GuideRateInjTargetFromString(const std::string& stringValue);
     static GuideRateInjTarget GuideRateInjTargetFromInt(int ecl_id);
     static int                GuideRateInjTargetToInt(GuideRateInjTarget target);
 
@@ -174,7 +177,9 @@ public:
 
     struct GroupLimitAction
     {
+        // \Note: we do not use allRates in the simulation, while keeping it for now for RESTART output purpose
         ExceedAction allRates{ExceedAction::NONE};
+        ExceedAction oil{ExceedAction::NONE};
         ExceedAction water{ExceedAction::NONE};
         ExceedAction gas{ExceedAction::NONE};
         ExceedAction liquid{ExceedAction::NONE};
@@ -183,6 +188,7 @@ public:
         void serializeOp(Serializer& serializer)
         {
             serializer(allRates);
+            serializer(oil);
             serializer(water);
             serializer(gas);
             serializer(liquid);
@@ -191,6 +197,7 @@ public:
         bool operator==(const GroupLimitAction& other) const
         {
             return (this->allRates == other.allRates)
+                && (this->oil == other.oil)
                 && (this->water == other.water)
                 && (this->gas == other.gas)
                 && (this->liquid == other.liquid);
@@ -226,7 +233,7 @@ public:
         UDAValue liquid_target;
         double guide_rate = 0;
         GuideRateProdTarget guide_rate_def = GuideRateProdTarget::NO_GUIDE_RATE;
-        double resv_target = 0;
+        UDAValue resv_target;
         bool available_group_control = true;
         static GroupProductionProperties serializationTestObject();
 
@@ -269,8 +276,15 @@ public:
     };
 
     Group();
-    Group(const std::string& group_name, std::size_t insert_index_arg, double udq_undefined_arg, const UnitSystem& unit_system);
-    Group(const RestartIO::RstGroup& rst_group, std::size_t insert_index_arg, double udq_undefined_arg, const UnitSystem& unit_system);
+    Group(const std::string& group_name,
+          std::size_t insert_index_arg,
+          double udq_undefined_arg,
+          const UnitSystem& unit_system);
+
+    Group(const RestartIO::RstGroup& rst_group,
+          std::size_t insert_index_arg,
+          double udq_undefined_arg,
+          const UnitSystem& unit_system);
 
     static Group serializationTestObject();
 
@@ -294,6 +308,32 @@ public:
     void setInjectionGroup();
     double getGroupEfficiencyFactor(bool network = false) const;
     bool useEfficiencyInNetwork() const;
+
+    /// Tag current group as being one with satellite production.
+    ///
+    /// A satellite producer generates flows, defined by the GSATPROD
+    /// keyword, into the model.
+    void recordSatelliteProduction();
+
+    /// Predicate for whether or not this group is tagged as a satellite
+    /// producer.
+    ///
+    /// Returns true if function recordSatelliteProduction() has been
+    /// previously called and false otherwise.
+    bool hasSatelliteProduction() const;
+
+    /// Tag current group as being one with satellite injection.
+    ///
+    /// A satellite injector generates flows, defined by the GSATINJE
+    /// keyword, out of the model.
+    void recordSatelliteInjection();
+
+    /// Predicate for whether or not this group is tagged as a satellite
+    /// injector.
+    ///
+    /// Returns true if function recordSatelliteInjection() has been
+    /// previously called and false otherwise.
+    bool hasSatelliteInjection() const;
 
     std::size_t numWells() const;
     bool addGroup(const std::string& group_name);
@@ -341,6 +381,7 @@ public:
         serializer(group_type);
         serializer(gefac);
         serializer(use_efficiency_in_network);
+        serializer(satellite_status);
         serializer(parent_group);
         serializer(m_wells);
         serializer(m_groups);
@@ -354,28 +395,30 @@ private:
     bool hasType(GroupType gtype) const;
     void addType(GroupType new_gtype);
 
-    std::string m_name;
-    std::size_t m_insert_index;
-    double udq_undefined;
-    UnitSystem unit_system;
-    GroupType group_type;
-    double gefac;
-    bool use_efficiency_in_network;
+    std::string m_name{};
+    std::size_t m_insert_index{};
+    double udq_undefined{};
+    UnitSystem unit_system{};
+    GroupType group_type{};
+    double gefac{};
+    bool use_efficiency_in_network{};
 
-    std::string parent_group;
-    IOrderSet<std::string> m_wells;
-    IOrderSet<std::string> m_groups;
+    std::uint_least8_t satellite_status{};
 
-    std::map<Phase, GroupInjectionProperties> injection_properties;
-    GroupProductionProperties production_properties;
-    std::optional<Phase> m_topup_phase;
-    std::optional<GPMaint> m_gpmaint;
-    std::optional<std::string> m_choke_group;
+    std::string parent_group{};
+    IOrderSet<std::string> m_wells{};
+    IOrderSet<std::string> m_groups{};
+
+    std::map<Phase, GroupInjectionProperties> injection_properties{};
+    GroupProductionProperties production_properties{};
+    std::optional<Phase> m_topup_phase{};
+    std::optional<GPMaint> m_gpmaint{};
+    std::optional<std::string> m_choke_group{};
 };
 
 Group::GroupType operator |(Group::GroupType lhs, Group::GroupType rhs);
 Group::GroupType operator &(Group::GroupType lhs, Group::GroupType rhs);
 
-}
+} // namespace Opm
 
 #endif // OPM_GROUP_HPP

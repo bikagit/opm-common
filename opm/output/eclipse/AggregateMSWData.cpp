@@ -207,11 +207,10 @@ namespace {
                 continue;
             }
 
-            auto xcPos = std::find_if(rateConns.begin(), rateConns.end(),
-                [&conn](const Opm::data::Connection& xconn) -> bool
-            {
-                return xconn.index == conn.global_index();
-            });
+            const auto xcPos =
+                std::ranges::find_if(rateConns,
+                                     [&conn](const Opm::data::Connection& xconn) -> bool
+                                     { return xconn.index == conn.global_index(); });
 
             if (xcPos == rateConns.end()) {
                 continue;

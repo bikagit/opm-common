@@ -59,7 +59,6 @@ WaterPvtMultiplexer<Scalar,enableThermal,enableBrine>::
     }
 }
 
-#if HAVE_ECL_INPUT
 template<class Scalar, bool enableThermal, bool enableBrine>
 void WaterPvtMultiplexer<Scalar,enableThermal,enableBrine>::
 initFromState(const EclipseState& eclState, const Schedule& schedule)
@@ -73,7 +72,7 @@ initFromState(const EclipseState& eclState, const Schedule& schedule)
         setApproach(WaterPvtApproach::BrineCo2);
     else if (eclState.runspec().h2Storage() || eclState.runspec().h2Sol())
         setApproach(WaterPvtApproach::BrineH2);
-    else if (enableThermal && eclState.getSimulationConfig().isThermal())
+    else if (enableThermal && (eclState.getSimulationConfig().isTemp() || eclState.getSimulationConfig().isThermal()))
         setApproach(WaterPvtApproach::ThermalWater);
     else if (!eclState.getTableManager().getPvtwTable().empty())
         setApproach(WaterPvtApproach::ConstantCompressibilityWater);
@@ -82,7 +81,6 @@ initFromState(const EclipseState& eclState, const Schedule& schedule)
 
     OPM_WATER_PVT_MULTIPLEXER_CALL(pvtImpl.initFromState(eclState, schedule), break);
 }
-#endif
 
 template<class Scalar, bool enableThermal, bool enableBrine>
 void WaterPvtMultiplexer<Scalar,enableThermal,enableBrine>::

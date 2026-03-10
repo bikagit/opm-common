@@ -80,7 +80,7 @@ void pressure(const EclipseState& es, const Schedule& /* sched */, data::Solutio
     }
 
     auto& data = sol.data<double>("PRESSURE");
-    std::fill(data.begin(), data.end(), units.to_si(UnitSystem::measure::pressure, seconds_elapsed));
+    std::ranges::fill(data, units.to_si(UnitSystem::measure::pressure, seconds_elapsed));
 }
 
 bool is_file(const std::filesystem::path& name)

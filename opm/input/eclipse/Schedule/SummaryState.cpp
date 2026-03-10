@@ -19,19 +19,23 @@
 
 #include <opm/input/eclipse/Schedule/SummaryState.hpp>
 
+
 #include <opm/common/utility/TimeService.hpp>
 
+#include <opm/input/eclipse/EclipseState/SummaryConfig/SummaryConfig.hpp>
 #include <opm/input/eclipse/Schedule/UDQ/UDQSet.hpp>
 
 #include <opm/io/eclipse/SummaryNode.hpp>
 
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
 #include <cstring>
 #include <ctime>
 #include <iomanip>
 #include <limits>
 #include <ostream>
+#include <regex>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -84,17 +88,39 @@ namespace {
             && (keyword.compare(0, 2, "SU") == 0);
     }
 
+    bool is_encoded_well_completion_quantity(std::string_view keyword)
+    {
+        // Does 'keyword' match the pattern
+        //  W*L:* and not any of WMCTL:*, WPIL*, WU* (well UDQ),
+        // WT* (well tracer)
+        using sz_t = std::string_view::size_type;
+
+        if (keyword.size() <= sz_t{6}) {
+            return false;
+        }
+
+        static const auto comp_kw_regex = std::regex {
+           R"(^(?!WMCTL)(?!WPIL)W[^UT][A-Z]*L_*[0-9]+:)"
+        };
+        return std::regex_search(keyword.begin(), keyword.end(), comp_kw_regex);
+    }
+
+
     bool is_total(const std::string& key)
     {
         static const std::vector<std::string> totals = {
-            "OPT"  , "GPT"  , "WPT" , "GIT", "WIT", "OPTF" , "OPTS" , "OIT"  , "OVPT" , "OVIT" , "MWT" ,
+            "OPT"  , "GPT"  , "WPT" , "GIT", "WIT", "GLIT", "OPTF" , "OPTS" , "OIT"  , "OVPT" , "OVIT" , "MWT" ,
             "WVPT" , "WVIT" , "GMT"  , "GPTF" , "SGT"  , "GST" , "FGT" , "GCT" , "GIMT" ,
-            "WGPT" , "WGIT" , "EGT"  , "EXGT" , "GVPT" , "GVIT" , "LPT" , "VPT" , "VIT" , "NPT" , "NIT",
+            "WGPT" , "WGIT" , "EGT"  , "EXGT" , "GVPT" , "GVIT" , "LPT" , "VPT" , "VIT" , "NPT" , "NIT" , "LIT",
             "TPT", "TIT", "CPT", "CIT", "SPT", "SIT", "EPT", "EIT", "TPTHEA", "TITHEA",
             "MMIT", "MOIT", "MUIT", "MMPT", "MOPT", "MUPT",
             "OFT", "OFT+", "OFT-", "OFTG", "OFTL",
             "GFT", "GFT+", "GFT-", "GFTG", "GFTL",
-            "WFT", "WFT+", "WFT-", "GMIT", "GMPT",
+            "WFT", "WFT+", "WFT-", "GMIT", "GMPT", "AMIT", "AMPT"
+            // TODO: Add AQT and NQT when the aquifer code is modified
+            // to produce incremental rather than cumulative aquifer quantities.
+            // Currently the aquifer code does the cumulation internally and reports
+            // those cumulative values to the summary. Also in is_total() from SummaryConfig.cpp.
         };
 
         auto sep_pos = key.find(':');
@@ -104,11 +130,9 @@ namespace {
             return false;
 
         if (sep_pos == std::string::npos) {
-            return std::any_of(totals.begin(), totals.end(),
-                               [&key](const auto& total)
-                               {
-                                   return key.compare(1, total.size(), total) == 0;
-                               });
+            return std::ranges::any_of(totals,
+                                       [&key](const auto& total)
+                                       { return key.compare(1, total.size(), total) == 0; });
         } else
             return is_total(key.substr(0,sep_pos));
     }
@@ -162,11 +186,25 @@ namespace {
             return {};
 
         std::vector<std::string> l;
-        std::transform(var1_iter->second.begin(), var1_iter->second.end(),
-                       std::back_inserter(l),
-                       [](const auto& pair) { return pair.first; });
+        std::ranges::transform(var1_iter->second, std::back_inserter(l),
+                               [](const auto& pair) { return pair.first; });
 
         return l;
+    }
+
+    std::string normalise_encoded_well_completion_quantity(const std::string& keyword)
+    {
+        // regular expresssion to extarct kezword, completion number and
+        // wellname from W*L(number):(completion)
+        static const auto comp_kw_regex = std::regex {
+           R"((W[A-Z]+L)_*([0-9]+):(.+))"
+        };
+        std::smatch matched;
+        if (!std::regex_match(keyword, matched, comp_kw_regex)) {
+            return std::string(keyword);
+        } else {
+            return  fmt::format("{}:{}:{}", matched[1].str(), matched[3].str(), matched[2].str());
+        }
     }
 
     std::string normalise_region_set_name(const std::string& regSet)
@@ -377,10 +415,18 @@ namespace Opm
                                         const std::string& var,
                                         const double       value)
     {
+        this->update_group_var(group, var, parseKeywordType(var), value);
+    }
+
+    void SummaryState::update_group_var(const std::string& group,
+                                        const std::string& var,
+                                        const SummaryConfigNode::Type type,
+                                        const double       value)
+    {
         auto& val_ref  = this->values[fmt::format("{}:{}", var, group)];
         auto& gval_ref = this->group_values[var][group];
 
-        if (is_total(var)) {
+        if (type == SummaryConfigNode::Type::Total) {
             val_ref  += value;
             gval_ref += value;
         }
@@ -409,7 +455,10 @@ namespace Opm
         }
         else if (var_type == UDQVarType::GROUP_VAR) {
             for (const auto& udq_value : udq_set) {
-                this->update_group_var(udq_value.wgname(), udq_set.name(), udq_value.value().value_or(this->udq_undefined));
+                this->update_group_var(udq_value.wgname(),
+                                       udq_set.name(),
+                                       SummaryConfigNode::Type::Undefined,
+                                       udq_value.value().value_or(this->udq_undefined));
             }
         }
         else if (var_type == UDQVarType::SEGMENT_VAR) {
@@ -431,10 +480,21 @@ namespace Opm
                                        const std::size_t  global_index,
                                        const double       value)
     {
-        auto& val_ref  = this->values[fmt::format("{}:{}:{}", var, well, global_index)];
+        this->update_conn_var(well, var, parseKeywordType(var), global_index, value);
+    }
+
+    void SummaryState::update_conn_var(const std::string& well,
+                                       const std::string& var,
+                                       const SummaryConfigNode::Type type,
+                                       const std::size_t  global_index,
+                                       const double       value)
+    {
+        this->conn_key_buffer_.clear();
+        fmt::format_to(std::back_inserter(this->conn_key_buffer_), "{}:{}:{}", var, well, global_index);
+        auto& val_ref  = this->values[this->conn_key_buffer_];
         auto& cval_ref = this->conn_values[var][well][global_index];
 
-        if (is_total(var)) {
+        if (type == SummaryConfigNode::Type::Total) {
             val_ref  += value;
             cval_ref += value;
         }
@@ -488,6 +548,14 @@ namespace Opm
 
         if (is_udq(key)) {
             return this->udq_undefined;
+        }
+
+        if (is_encoded_well_completion_quantity(key)) {
+            auto key1 = normalise_encoded_well_completion_quantity(key);
+            auto iter1 = this->values.find(key1);
+            if (iter1 != this->values.end()) {
+                return iter1->second;
+            }
         }
 
         throw std::out_of_range {

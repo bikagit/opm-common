@@ -91,6 +91,7 @@
 #include <opm/input/eclipse/Deck/DeckKeyword.hpp>
 #include <opm/input/eclipse/Deck/DeckRecord.hpp>
 #include <opm/input/eclipse/Deck/DeckSection.hpp>
+#include <opm/input/eclipse/Deck/UDAValue.hpp>
 
 #include <opm/input/eclipse/Parser/ParserKeywords/A.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/B.hpp>
@@ -110,9 +111,11 @@
 #include <functional>
 #include <initializer_list>
 #include <iostream>
+#include <iterator>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -126,9 +129,9 @@ namespace {
     bool name_match_any(const std::unordered_set<std::string>& patterns,
                         const std::string& name)
     {
-        return std::any_of(patterns.begin(), patterns.end(),
-                           [&name](const auto& pattern)
-                           { return Opm::shmatch(pattern, name); });
+        return std::ranges::any_of(patterns,
+                                   [&name](const auto& pattern)
+                                   { return Opm::shmatch(pattern, name); });
     }
 }
 
@@ -390,7 +393,7 @@ namespace Opm {
         result.restart_output = WriteRestartFileEvents::serializationTestObject();
         result.completed_cells = CompletedCells::serializationTestObject();
         result.completed_cells_lgr =  std::vector<CompletedCells>(3, CompletedCells::serializationTestObject());
-        result.completed_cells_lgr_map = { {"GLOBAL", 0}, {"LGR2", 1}, {"LGR1", 2} };	
+        result.completed_cells_lgr_map = { {"GLOBAL", 0}, {"LGR2", 1}, {"LGR1", 2} };
         result.current_report_step = 0;
         result.m_lowActionParsingStrictness = false;
         result.simUpdateFromPython = std::make_shared<SimulatorUpdate>(SimulatorUpdate::serializationTestObject());
@@ -428,12 +431,13 @@ namespace Opm {
                                  const std::unordered_map<std::string, double>* target_wellpi,
                                  std::unordered_map<std::string, double>& wpimult_global_factor,
                                  WelSegsSet* welsegs_wells,
-                                 std::set<std::string>* compsegs_wells)
+                                 std::set<std::string>* compsegs_wells,
+                                 std::set<std::string>* comptraj_wells)
     {
         HandlerContext handlerContext { *this, block, keyword, grid, currentStep,
                                         matches, action_mode,
                                         parseContext, errors, sim_update, target_wellpi,
-                                        wpimult_global_factor, welsegs_wells, compsegs_wells};
+                                        wpimult_global_factor, welsegs_wells, compsegs_wells, comptraj_wells};
 
         if (!KeywordHandlers::getInstance().handleKeyword(handlerContext)) {
             OpmLog::warning(fmt::format("No handler registered for keyword {} "
@@ -468,7 +472,7 @@ public:
             break;
 
         case Stream::Debug:
-            this->log_function_ = &OpmLog::debug;
+            this->log_function_ = &ScheduleLogger::debug;
             break;
         }
     }
@@ -480,16 +484,19 @@ public:
 
     void operator()(const std::vector<std::string>& msg_list)
     {
-        std::for_each(msg_list.begin(), msg_list.end(),
-                      [this](const std::string& record)
-                      {
-                          (*this)(record);
-                      });
+        std::ranges::for_each(msg_list,
+                              [this](const std::string& record)
+                              { (*this)(record); });
     }
 
     void info(const std::string& msg)
     {
         OpmLog::info(this->format_message(msg));
+    }
+
+    static void debug(const std::string& msg)
+    {
+        OpmLog::debug(msg);
     }
 
     void complete_step(const std::string& msg)
@@ -573,30 +580,49 @@ private:
 
 namespace
 {
-/// \brief Check whether each MS well has COMPSEGS entry andissue error if not.
-/// \param welsegs All wells with a WELSEGS entry together with the location.
-/// \param compegs All wells with a COMPSEGS entry
-void check_compsegs_consistency(const Opm::WelSegsSet& welsegs,
-                                const std::set<std::string>& compsegs,
-                                const std::vector<::Opm::Well>& wells)
+
+void report_welsegs_error(const std::vector<Opm::WelSegsSet::Entry>& segments,
+                          std::string_view format_str)
 {
-    const auto difference = welsegs.difference(compsegs, wells);
-    
-    if (!difference.empty()) {
+    if (!segments.empty()) {
         std::string well_str = "well";
-        if (difference.size() > 1) {
+        if (segments.size() > 1) {
             well_str.append("s");
         }
         well_str.append(":");
 
-        for(const auto& [name, location] : difference) {
+        for(const auto& [name, location] : segments) {
             well_str.append(fmt::format("\n   {} in {} at line {}",
                                         name, location.filename, location.lineno));
         }
-        auto msg = fmt::format("Missing COMPSEGS keyword for the following multisegment {}.", well_str);
-        throw Opm::OpmInputError(msg, std::get<1>(difference[0]));
+        auto msg = fmt::format(fmt::runtime(format_str), well_str);
+        throw Opm::OpmInputError(msg, std::get<1>(segments[0]));
     }
 }
+
+/// \brief Check whether each MS well has COMPSEGS entry and issue error if not.
+/// \param welsegs All wells with a WELSEGS entry together with the location.
+/// \param compsegs All wells with a COMPSEGS entry
+/// \param comptraj All wells with a COMPTRAJ entry
+void check_compsegs_and_comptraj_consistency(const Opm::WelSegsSet& welsegs,
+                                             const std::set<std::string>& compsegs,
+                                             const std::set<std::string>& comptraj,
+                                             const std::vector<::Opm::Well>& wells)
+{
+    std::set<std::string> compsegs_comptraj_union = compsegs;
+    std::ranges::set_union(compsegs, comptraj,
+                           std::inserter(compsegs_comptraj_union, compsegs_comptraj_union.begin()));
+    const auto difference = welsegs.difference(compsegs_comptraj_union, wells);
+    report_welsegs_error(
+        difference, "Missing COMPSEGS or COMPTRAJ keyword for the following multisegment {}."
+    );
+
+    const auto intersection = welsegs.intersection(compsegs, comptraj);
+    report_welsegs_error(
+        intersection, "Overlapping COMPSEGS and COMPTRAJ keywords for the following multisegment {}."
+    );
+}
+
 }// end anonymous namespace
 
 namespace Opm
@@ -659,13 +685,14 @@ void Schedule::iterateScheduleSection(std::size_t load_start, std::size_t load_e
         }
 
         std::set<std::string> compsegs_wells;
+        std::set<std::string> comptraj_wells;
         WelSegsSet welsegs_wells;
 
         const auto matches = Action::Result { false }.matches();
 
         for (auto report_step = load_start; report_step < load_end; report_step++) {
             std::size_t keyword_index = 0;
-            auto& block = this->m_sched_deck[report_step];
+            const auto& block = this->m_sched_deck[report_step];
             auto time_type = block.time_type();
             if (time_type == ScheduleTimeType::DATES || time_type == ScheduleTimeType::TSTEP) {
                 const auto& start_date = Schedule::formatDate(std::chrono::system_clock::to_time_t(block.start_time()));
@@ -752,11 +779,13 @@ void Schedule::iterateScheduleSection(std::size_t load_start, std::size_t load_e
                                     target_wellpi,
                                     wpimult_global_factor,
                                     &welsegs_wells,
-                                    &compsegs_wells);
+                                    &compsegs_wells,
+                                    &comptraj_wells);
                 keyword_index++;
             }
 
-            check_compsegs_consistency(welsegs_wells, compsegs_wells, this->getWells(report_step));
+            this->updateICDScalingFactors();
+            check_compsegs_and_comptraj_consistency(welsegs_wells, compsegs_wells, comptraj_wells, this->getWells(report_step));
             this->applyGlobalWPIMULT(wpimult_global_factor);
             this->end_report(report_step);
 
@@ -776,6 +805,25 @@ void Schedule::iterateScheduleSection(std::size_t load_start, std::size_t load_e
             if (well.applyGlobalWPIMULT(factor)) {
                 this->snapshots.back().wells.update(std::move(well));
             }
+        }
+    }
+
+    void Schedule::updateICDScalingFactors() {
+        // updating the scaling factors for all SICD and AICD segments in multisegment wells
+        auto& sched_state = this->snapshots.back();
+        auto updated_wells = std::vector<Well>{};
+        for (const auto& well_pair : sched_state.wells) {
+            auto& well = well_pair.second;
+            if ( !well->isMultiSegment() ) { continue; }
+
+            auto new_well = *well;
+            if (new_well.updateICDFlowScalingFactors()) {
+                updated_wells.push_back(std::move(new_well));
+            }
+        }
+
+        for (auto&& updated_well : updated_wells) {
+            sched_state.wells.update(std::move(updated_well));
         }
     }
 
@@ -937,9 +985,17 @@ Defaulted grid coordinates is not allowed for COMPDAT as part of ACTIONX)"
         DeckKeyword action_keyword(parserKeyword);
         action_keyword.addRecord(std::move(deckRecord));
         action.addKeyword(action_keyword);
-        SimulatorUpdate delta = this->applyAction(report_step, action,
-                                                  /* matches = */ Action::Result{false}.matches(),
-                                                  std::unordered_map<std::string,double>{}/*target_wellpi*/);
+        using DI = SimulatorUpdate::DelayedIteration;
+        const SimulatorUpdate delta =
+            this->applyAction(report_step,
+                              action,
+                              /* matches = */ Action::Result{false}.matches(),
+                              /*target_wellpi*/std::unordered_map<std::string,double>{},
+                              this->simUpdateFromPython->delayed_iteration == DI::Off);
+        if (this->simUpdateFromPython->delayed_iteration != DI::Off) {
+            this->simUpdateFromPython->delayed_iteration = DI::On;
+        }
+
         this->simUpdateFromPython->append(delta);
     }
 
@@ -951,7 +1007,8 @@ Defaulted grid coordinates is not allowed for COMPDAT as part of ACTIONX)"
         if (status != Well::Status::SHUT) {
             this->potential_wellopen_patterns.insert(well_name);
         }
-        auto well2 = this->snapshots[reportStep].wells.get(well_name);
+        auto& snapshot = this->snapshots[reportStep];
+        auto well2 = snapshot.wells.get(well_name);
         if (well2.getConnections().empty() && status == Well::Status::OPEN) {
             if (location) {
                 auto msg = fmt::format("Problem with {}\n"
@@ -967,9 +1024,9 @@ Defaulted grid coordinates is not allowed for COMPDAT as part of ACTIONX)"
         bool update = false;
         if (well2.updateStatus(status)) {
             if (status == Well::Status::OPEN) {
-                auto new_rft = this->snapshots.back().rft_config().well_open(well_name);
+                auto new_rft = snapshot.rft_config().well_open(well_name);
                 if (new_rft.has_value())
-                    this->snapshots.back().rft_config.update( std::move(*new_rft) );
+                    snapshot.rft_config.update( std::move(*new_rft) );
             }
 
             /*
@@ -979,11 +1036,16 @@ Defaulted grid coordinates is not allowed for COMPDAT as part of ACTIONX)"
               for an actual status change before we emit a WELL_STATUS_CHANGE
               event.
             */
+            auto& wellgroup_events = snapshot.wellgroup_events();
             if (old_status != status) {
-                this->snapshots.back().events().addEvent( ScheduleEvents::WELL_STATUS_CHANGE);
-                this->snapshots.back().wellgroup_events().addEvent( well2.name(), ScheduleEvents::WELL_STATUS_CHANGE);
+                snapshot.events().addEvent( ScheduleEvents::WELL_STATUS_CHANGE);
+                wellgroup_events.addEvent( well2.name(), ScheduleEvents::WELL_STATUS_CHANGE);
             }
-            this->snapshots[reportStep].wells.update( std::move(well2) );
+            const bool has_open_request = wellgroup_events.hasEvent( well2.name(), ScheduleEvents::REQUEST_OPEN_WELL);
+            if (status == Well::Status::SHUT && has_open_request) {
+                wellgroup_events.clearEvent( well2.name(), ScheduleEvents::REQUEST_OPEN_WELL);
+            }
+            snapshot.wells.update( std::move(well2) );
             update = true;
         }
         return update;
@@ -1206,10 +1268,9 @@ Defaulted grid coordinates is not allowed for COMPDAT as part of ACTIONX)"
 
         if (report_step == initialStep) {
             // Time = 0 or time = simulation restart.
-            std::transform(currWells.begin(), currWells.end(),
-                           std::back_inserter(changedWells),
-                           [](const auto& wellPair)
-                           { return wellPair.first; });
+            std::ranges::transform(currWells, std::back_inserter(changedWells),
+                                   [](const auto& wellPair)
+                                   { return wellPair.first; });
         }
         else {
             const auto& prevWells = this->snapshots[report_step - 1].wells;
@@ -1226,6 +1287,17 @@ Defaulted grid coordinates is not allowed for COMPDAT as part of ACTIONX)"
         return this->wellMatcher(report_step).sort(std::move(changedWells));
     }
 
+    bool Schedule::changedWellLists(const std::size_t report_step,
+                                    const std::size_t initialStep) const
+    {
+        if (report_step == initialStep) {
+            return this->snapshots[report_step]
+                .wlist_manager().WListSize() > 0;
+        }
+
+        return this->snapshots[report_step]
+            .wlist_tracker().changedLists();
+    }
 
     std::vector<Well> Schedule::getWells(std::size_t timeStep) const
     {
@@ -1240,11 +1312,10 @@ Defaulted grid coordinates is not allowed for COMPDAT as part of ACTIONX)"
         }
 
         const auto& well_order = this->snapshots[timeStep].well_order();
-        std::transform(well_order.begin(), well_order.end(),
-                       std::back_inserter(wells),
-                       [&wells = this->snapshots[timeStep].wells]
-                       (const auto& wname) -> decltype(auto)
-                       { return wells.get(wname); });
+        std::ranges::transform(well_order, std::back_inserter(wells),
+                               [&wells = this->snapshots[timeStep].wells]
+                               (const auto& wname) -> decltype(auto)
+                               { return wells.get(wname); });
 
         return wells;
     }
@@ -1593,17 +1664,17 @@ File {} line {}.)", pattern, location.keyword, location.filename, location.linen
 
 
 
-    void Schedule::checkIfAllConnectionsIsShut(std::size_t timeStep) {
-        const auto& well_names = this->wellNames(timeStep);
+    void Schedule::checkIfAllConnectionsIsShut(std::size_t reportStep) {
+        const auto& well_names = this->wellNames(reportStep);
         for (const auto& wname : well_names) {
-            const auto& well = this->getWell(wname, timeStep);
+            const auto& well = this->getWell(wname, reportStep);
             const auto& connections = well.getConnections();
             if (connections.allConnectionsShut() && well.getStatus() != Well::Status::SHUT) {
-                auto days = unit::convert::to(seconds(timeStep), unit::day);
+                auto days = unit::convert::to(seconds(reportStep), unit::day);
                 auto msg = fmt::format("All completions in well {} is shut at {} days\n"
                                        "The well is therefore also shut", well.name(), days);
                 OpmLog::note(msg);
-                this->updateWellStatus( well.name(), timeStep, Well::Status::SHUT);
+                this->updateWellStatus(well.name(), reportStep, Well::Status::SHUT);
             }
         }
     }
@@ -1611,16 +1682,6 @@ File {} line {}.)", pattern, location.keyword, location.filename, location.linen
     void Schedule::end_report(std::size_t report_step) {
         this->checkIfAllConnectionsIsShut(report_step);
     }
-
-
-    void Schedule::filterConnections(const ActiveGridCells& grid) {
-        for (auto& sched_state : this->snapshots) {
-            for (auto& well : sched_state.wells()) {
-                well.get().filterConnections(grid);
-            }
-        }
-    }
-
 
     const UDQConfig& Schedule::getUDQConfig(std::size_t timeStep) const {
         return this->snapshots[timeStep].udq.get();
@@ -1701,8 +1762,8 @@ File {} line {}.)", pattern, location.keyword, location.filename, location.linen
 
         this->snapshots.resize(reportStep + 1);
 
-        auto& input_block = this->m_sched_deck[reportStep];
-        ScheduleLogger logger(ScheduleLogger::select_stream(false, false), // will log to OpmLog::info
+        auto& input_block = this->m_sched_deck.mutableKeywordBlock(reportStep);
+        ScheduleLogger logger(ScheduleLogger::select_stream(true, false), // will log to OpmLog::debug
                               prefix, this->m_sched_deck.location());
 
         for (const auto& keyword : keywords) {
@@ -1728,7 +1789,7 @@ File {} line {}.)", pattern, location.keyword, location.filename, location.linen
                                     action_mode,
                                     &sim_update,
                                     &target_wellpi,
-                                    wpimult_global_factor);    
+                                    wpimult_global_factor);
             }
             else {
                 const std::string msg_fmt =
@@ -1751,7 +1812,10 @@ File {} line {}.)", pattern, location.keyword, location.filename, location.linen
                                          grid,
                                          &target_wellpi,
                                          prefix,
-                                         /* keepKeywords = */ true);
+                                         /* keepKeywords = */ true,
+                                         /* log_to_debug = */ true);
+            this->simUpdateFromPython->delayed_iteration =
+                SimulatorUpdate::DelayedIteration::Off;
         }
 
         this->simUpdateFromPython->append(sim_update);
@@ -1771,9 +1835,11 @@ File {} line {}.)", pattern, location.keyword, location.filename, location.linen
     Schedule::applyAction(const std::size_t reportStep,
                           const Action::ActionX& action,
                           const Action::Result::MatchingEntities& matches,
-                          const std::unordered_map<std::string, float>& target_wellpi)
+                          const std::unordered_map<std::string, float>& target_wellpi,
+                          const bool iterateSchedule)
     {
-        return this->applyAction(reportStep, action, matches, convertToDoubleMap(target_wellpi));
+        return this->applyAction(reportStep, action, matches,
+                                 convertToDoubleMap(target_wellpi), iterateSchedule);
     }
 
 
@@ -1781,11 +1847,12 @@ File {} line {}.)", pattern, location.keyword, location.filename, location.linen
     Schedule::applyAction(std::size_t reportStep,
                           const Action::ActionX& action,
                           const Action::Result::MatchingEntities& matches,
-                          const std::unordered_map<std::string, double>& target_wellpi)
+                          const std::unordered_map<std::string, double>& target_wellpi,
+                          const bool iterateSchedule)
     {
         const std::string prefix = "| ";
         ParseContext parseContext;
-        // Ignore invalid keyword combinaions in actions, since these decks are typically incomplete
+        // Ignore invalid keyword combinations in actions, since these decks are typically incomplete
         parseContext.update(ParseContext::PARSE_INVALID_KEYWORD_COMBINATION, InputErrorAction::IGNORE);
         if (this->m_treat_critical_as_non_critical) { // Continue with invalid names if parsing strictness is set to low
             parseContext.update(ParseContext::SCHEDULE_INVALID_NAME, InputErrorAction::WARN);
@@ -1801,7 +1868,7 @@ File {} line {}.)", pattern, location.keyword, location.filename, location.linen
                                   prefix, action.name()));
 
         this->snapshots.resize(reportStep + 1);
-        auto& input_block = this->m_sched_deck[reportStep];
+        auto& input_block = this->m_sched_deck.mutableKeywordBlock(reportStep);
 
         std::unordered_map<std::string, double> wpimult_global_factor;
         for (const auto& keyword : action) {
@@ -1839,7 +1906,7 @@ File {} line {}.)", pattern, location.keyword, location.filename, location.linen
             }
         }
 
-        if (reportStep < this->m_sched_deck.size() - 1) {
+        if (reportStep < this->m_sched_deck.size() - 1 && iterateSchedule) {
             const auto keepKeywords = true;
             const auto log_to_debug = true;
             this->iterateScheduleSection(reportStep + 1, this->m_sched_deck.size(),
@@ -1957,7 +2024,7 @@ File {} line {}.)", pattern, location.keyword, location.filename, location.linen
 
             return this->applyAction(reportStep, actions[action_name],
                                      Action::Result{true}.wells(well_names).matches(),
-                                     std::unordered_map<std::string,double>{});
+                                     std::unordered_map<std::string,double>{}, true);
         }
         else {
             OpmLog::error(fmt::format("Tried to apply unknown action: '{}'", action_name));
@@ -2063,6 +2130,29 @@ File {} line {}.)", pattern, location.keyword, location.filename, location.linen
 
         auto result = pyaction.run(ecl_state, *this, reportStep, summary_state, apply_action_callback, target_wellpi);
         action_state.add_run(pyaction, result);
+
+        if (this->simUpdateFromPython->delayed_iteration ==
+                SimulatorUpdate::DelayedIteration::On &&
+            reportStep < this->m_sched_deck.size() - 1)
+        {
+            const auto keepKeywords = true;
+            const auto log_to_debug = true;
+
+            const std::string prefix = "| ";
+            ParseContext parseContext;
+            // Ignore invalid keyword combinations in actions, since these decks are typically incomplete
+            parseContext.update(ParseContext::PARSE_INVALID_KEYWORD_COMBINATION, InputErrorAction::IGNORE);
+            if (this->m_treat_critical_as_non_critical) { // Continue with invalid names if parsing strictness is set to low
+                parseContext.update(ParseContext::SCHEDULE_INVALID_NAME, InputErrorAction::WARN);
+            }
+
+            ErrorGuard errors;
+            ScheduleGrid grid(this->completed_cells, this->completed_cells_lgr, this->completed_cells_lgr_map);
+
+            this->iterateScheduleSection(reportStep + 1, this->m_sched_deck.size(),
+                                         parseContext, errors, grid, &target_wellpi,
+                                         prefix, keepKeywords, log_to_debug);
+        }
 
         // The whole pyaction script was executed, now the simUpdateFromPython is returned.
         return *(this->simUpdateFromPython);
@@ -2250,14 +2340,14 @@ namespace {
 }
 
     void Schedule::init_completed_cells_lgr(const EclipseGrid& ecl_grid)
-    { 
+    {
         if (ecl_grid.is_lgr())
         {
             std::size_t num_label = ecl_grid.get_all_lgr_labels().size();
             completed_cells_lgr.reserve(num_label);
             for (const auto& lgr_tag : ecl_grid.get_all_lgr_labels())
             {
-                const auto& lgr_grid = ecl_grid.getLGRCell(lgr_tag);    
+                const auto& lgr_grid = ecl_grid.getLGRCell(lgr_tag);
                 completed_cells_lgr.emplace_back(lgr_grid.getNX(), lgr_grid.getNY(), lgr_grid.getNZ());
             }
         }
@@ -2283,8 +2373,11 @@ namespace {
         std::map<int, std::string> rst_group_names;
         for (const auto& rst_group : rst_state.groups) {
             this->addGroup(rst_group, report_step);
+
             const auto& group = this->snapshots.back().groups.get( rst_group.name );
+
             rst_group_names[group.insert_index()] = rst_group.name;
+
             if (group.isProductionGroup()) {
                 // Was originally at report_step + 1
                 this->snapshots.back().events().addEvent(ScheduleEvents::GROUP_PRODUCTION_UPDATE );
@@ -2368,12 +2461,9 @@ namespace {
             };
 
             auto rst_connections = std::vector<Connection> {};
-            std::transform(rst_well.connections.begin(), rst_well.connections.end(),
-                           std::back_inserter(rst_connections),
-                           [&grid, &fp](const auto& rst_conn)
-                           {
-                               return Connection{rst_conn, grid, fp};
-                           });
+            std::ranges::transform(rst_well.connections, std::back_inserter(rst_connections),
+                                   [&grid, &fp](const auto& rst_conn)
+                                   { return Connection{rst_conn, grid, fp}; });
 
             if (rst_well.segments.empty()) {
                 auto connections = std::make_shared<WellConnections>
@@ -2405,7 +2495,7 @@ namespace {
         this->snapshots.back().update_tuning(rst_state.tuning);
         this->snapshots.back().events().addEvent( ScheduleEvents::TUNING_CHANGE );
 
-        this->snapshots.back().update_oilvap(rst_state.oilvap);
+        this->snapshots.back().oilvap.update(rst_state.oilvap);
 
         {
             const auto& header = rst_state.header;
@@ -2449,6 +2539,7 @@ namespace {
 
         for (const auto& rst_group : rst_state.groups) {
             auto& group = this->snapshots.back().groups.get( rst_group.name );
+
             if (group.isProductionGroup()) {
                 auto new_config = this->snapshots.back().guide_rate();
                 new_config.update_production_group(group);
@@ -2483,6 +2574,31 @@ namespace {
                         group.updateInjection(inj_prop);
                     }
                 }
+            }
+
+            if (group.hasSatelliteProduction()) {
+                auto satellite_prod = this->snapshots.back().gsatprod();
+
+                const auto dim_l = this->m_static.m_unit_system
+                    .getDimension(UnitSystem::measure::liquid_surface_rate);
+
+                const auto dim_g = this->m_static.m_unit_system
+                    .getDimension(UnitSystem::measure::gas_surface_rate);
+
+                const auto dim_r = this->m_static.m_unit_system
+                    .getDimension(UnitSystem::measure::rate);
+
+                const auto qo    = UDAValue { rst_group.oil_rate_limit  , dim_l };
+                const auto qw    = UDAValue { rst_group.water_rate_limit, dim_l };
+                const auto qg    = UDAValue { rst_group.gas_rate_limit  , dim_g };
+                const auto qr    = UDAValue { rst_group.resv_rate_limit , dim_r };
+                const auto glift = UDAValue { rst_group.glift_max_supply, dim_g };
+
+                satellite_prod.assign(rst_group.name,
+                                      qo, qg, qw, qr, glift,
+                                      udq_undefined);
+
+                this->snapshots.back().gsatprod.update(std::move(satellite_prod));
             }
         }
 
@@ -2606,6 +2722,10 @@ namespace {
         return this->m_static.m_python_handle;
     }
 
+    const std::optional<RPTConfig>& Schedule::initialReportConfiguration() const
+    {
+        return this->m_static.rpt_config;
+    }
 
     const GasLiftOpt& Schedule::glo(std::size_t report_step) const {
         return this->snapshots[report_step].glo();
@@ -2867,20 +2987,20 @@ std::vector<ScheduleState>::const_iterator Schedule::end() const {
     return this->snapshots.end();
 }
 
-void Schedule::create_first(const time_point& start_time, const std::optional<time_point>& end_time) {
-    if (end_time.has_value())
+void Schedule::create_first(const time_point& start_time, const std::optional<time_point>& end_time)
+{
+    if (end_time.has_value()) {
         this->snapshots.emplace_back( start_time, end_time.value() );
-    else
+    }
+    else {
         this->snapshots.emplace_back(start_time);
+    }
 
     const auto& run_spec = this->m_static.m_runspec;
+
     auto& sched_state = snapshots.back();
     sched_state.init_nupcol(run_spec.nupcol());
-    if (this->m_static.oilVap.has_value()) {
-        sched_state.update_oilvap(*this->m_static.oilVap);
-    } else {
-        sched_state.update_oilvap( OilVaporizationProperties(run_spec.tabdims().getNumPVTTables()));
-    }
+
     sched_state.update_message_limits( this->m_static.m_deck_message_limits );
     sched_state.pavg.update( PAvg() );
     sched_state.wtest_config.update( WellTestConfig() );
@@ -2901,13 +3021,25 @@ void Schedule::create_first(const time_point& start_time, const std::optional<ti
     sched_state.guide_rate.update( GuideRateConfig() );
     sched_state.rft_config.update( RFTConfig() );
     sched_state.rst_config.update( RSTConfig::first( this->m_static.rst_config ) );
+
+    sched_state.oilvap.update(OilVaporizationProperties { run_spec.tabdims().getNumPVTTables() });
+
+    if (this->m_static.oilVap.has_value()) {
+        const auto& vappars = *this->m_static.oilVap;
+        auto oilvap = sched_state.oilvap();
+
+        OilVaporizationProperties::updateVAPPARS(oilvap, vappars[0], vappars[1]);
+        sched_state.oilvap.update(std::move(oilvap));
+    }
+
     sched_state.network_balance.update(Network::Balance{run_spec.networkDimensions().active()});
     sched_state.update_sumthin(this->m_static.sumthin);
     sched_state.rptonly(this->m_static.rptonly);
     sched_state.bhp_defaults.update( ScheduleState::BHPDefaults() );
     sched_state.source.update( Source() );
     sched_state.wcycle.update( WCYCLE() );
-    //sched_state.update_date( start_time );
+    sched_state.wlist_tracker.update(ScheduleState::WellListChangeTracker{});
+
     this->addGroup("FIELD", 0);
 }
 
@@ -2940,5 +3072,16 @@ std::ostream& operator<<(std::ostream& os, const Schedule& sched)
     sched.dump_deck(os);
     return os;
 }
+
+template Schedule::Schedule(const Deck&,
+                            const EclipseState&,
+                            const ParseContext&,
+                            ErrorGuard&&,
+                            std::shared_ptr<const Python>,
+                            const bool lowActionParsingStrictness,
+                            const bool slave_mode,
+                            const bool keepKeywords,
+                            const std::optional<int>&,
+                            const RestartIO::RstState* rst);
 
 }

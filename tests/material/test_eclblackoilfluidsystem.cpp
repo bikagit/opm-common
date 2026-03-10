@@ -29,10 +29,6 @@
  */
 #include "config.h"
 
-#if !HAVE_ECL_INPUT
-#error "The test for the black oil fluid system classes requires ecl input support in opm-common"
-#endif
-
 #include <boost/mpl/list.hpp>
 
 #define BOOST_TEST_MODULE EclBlackOilFluidSystem
@@ -613,7 +609,21 @@ static constexpr const char* deckString1 =
     "      860.04 1033.0    0.853  /\n"
     "\n";
 
-using Types = boost::mpl::list<double,Opm::DenseAd::Evaluation<double,2>>;
+using Types = boost::mpl::list<double, Opm::DenseAd::Evaluation<double,2>>;
+
+void checkSmall(const double x, const double tol)
+{
+    BOOST_CHECK_SMALL(x, tol);
+}
+
+template <int N>
+void checkSmall(const Opm::DenseAd::Evaluation<double, N>& x, const double tol)
+{
+    BOOST_CHECK_SMALL(x.value(), tol);
+    for (int ii = 0; ii < N; ++ii) {
+        BOOST_CHECK_SMALL(x.derivative(ii), tol);
+    }
+}
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(BlackOil, Evaluation, Types)
 {
@@ -621,7 +631,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(BlackOil, Evaluation, Types)
     // for fluid systems are already tested by the generic test for all fluidsystems.
 
     using Scalar = typename Opm::MathToolbox<Evaluation>::Scalar;
-    using FluidSystem = Opm::BlackOilFluidSystem<double>;
+    using FluidSystem = Opm::BlackOilFluidSystem<Scalar>;
 
     static constexpr int numPhases = FluidSystem::numPhases;
 
@@ -644,10 +654,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(BlackOil, Evaluation, Types)
 
     // create a parameter cache
     using ParamCache = typename FluidSystem::template ParameterCache<Scalar>;
-    ParamCache paramCache(/*maxOilSat=*/0.5, /*regionIdx=*/1);
+    ParamCache paramCache(/*regionIdx=*/1);
     BOOST_CHECK_EQUAL(paramCache.regionIndex(), 1);
 
-    BOOST_CHECK_SMALL(Opm::abs(paramCache.maxOilSat() - 0.5), 1e-10);
     BOOST_CHECK_SMALL(Opm::abs(FluidSystem::reservoirTemperature() - (273.15 + 15.555)), 1e-10);
     BOOST_CHECK(FluidSystem::enableDissolvedGas());
     BOOST_CHECK(FluidSystem::enableVaporizedOil());
@@ -668,57 +677,74 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(BlackOil, Evaluation, Types)
     BOOST_CHECK_SMALL(std::abs(FluidSystem::referenceDensity(gasPhaseIdx, /*regionIdx=*/1) - 0.853), 1e-10);
     BOOST_CHECK_SMALL(std::abs(FluidSystem::referenceDensity(waterPhaseIdx, /*regionIdx=*/1) - 1033), 1e-10);
 
-    Opm::BlackOilFluidState<Scalar, FluidSystem> fluidState{};
+    Opm::BlackOilFluidState<Evaluation, FluidSystem> fluidState{};
     Opm::Valgrind::SetUndefined(fluidState);
 
     static const Scalar eps = std::sqrt(std::numeric_limits<Scalar>::epsilon());
     unsigned regionIdx = paramCache.regionIndex();
     for (unsigned i = 0; i < 1000; ++i) {
-        Scalar p = Scalar(i)/1000*350e5 + 100e5;
-
-        for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx) {
-            fluidState.setPressure(phaseIdx, p);
-            fluidState.setSaturation(phaseIdx, 1e-3);
+        const auto pval = Scalar(i)/1000*350e5 + 100e5;
+        Evaluation p;
+        if constexpr (std::is_same_v<Scalar, double>) {
+            p = pval;
+        } else {
+            p = Evaluation::createVariable(pval, 0);
         }
-
-        Scalar RsSat = FluidSystem::saturatedDissolutionFactor(fluidState, oilPhaseIdx, regionIdx);
-        fluidState.setRs(RsSat);
-
-        Scalar RvSat = FluidSystem::saturatedDissolutionFactor(fluidState, gasPhaseIdx, regionIdx);
-        fluidState.setRv(RvSat);
-
-        paramCache.updateAll(fluidState);
-
-        for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx) {
-            // ensure that the black-oil specific variants of the methods to compute
-            // thermdynamic properties return the same value as the generic ones and that
-            // the generic methods return the same value as the ones for the saturated
-            // quantities (we specify the fluid state to be on the saturation line)
-            BOOST_CHECK_SMALL(Opm::abs(FluidSystem::density(fluidState, paramCache, phaseIdx) -
-                                       FluidSystem::density(fluidState, phaseIdx, regionIdx)), eps);
-
-            BOOST_CHECK_SMALL(Opm::abs(FluidSystem::density(fluidState, paramCache, phaseIdx) -
-                                       FluidSystem::saturatedDensity(fluidState, phaseIdx, regionIdx)), eps);
-
-            Scalar b = FluidSystem::inverseFormationVolumeFactor(fluidState, phaseIdx, regionIdx);
-            Scalar bSat = FluidSystem::saturatedInverseFormationVolumeFactor(fluidState, phaseIdx, regionIdx);
-            BOOST_CHECK_SMALL(Opm::abs(b - bSat), eps);
-
-            BOOST_CHECK_SMALL(Opm::abs(FluidSystem::viscosity(fluidState, paramCache, phaseIdx) -
-                                       FluidSystem::viscosity(fluidState, phaseIdx, regionIdx)), 1e-10);
-
-            Scalar R = FluidSystem::saturatedDissolutionFactor(fluidState, phaseIdx, regionIdx);
-            Scalar R2 = FluidSystem::saturatedDissolutionFactor(fluidState, phaseIdx, regionIdx);
-            BOOST_CHECK_SMALL(Opm::abs(R - R2), eps);
-
-            // water is immiscible and thus there is no saturation pressure
-            if (phaseIdx != waterPhaseIdx) {
-                BOOST_CHECK_SMALL(Opm::abs(FluidSystem::saturationPressure(fluidState, phaseIdx, regionIdx) - p), eps*p);
+        for (const Scalar sval : { 0.0, 1e-12, 1e-9, 1e-3, 1e-2, 0.5, 0.99, 0.999999999 }) {
+            Evaluation s;
+            if constexpr (std::is_same_v<Scalar, double>) {
+                s = sval;
+            } else {
+                s = Evaluation::createVariable(sval, 1);
             }
-        }
+            for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx) {
+                fluidState.setPressure(phaseIdx, p);
+                fluidState.setSaturation(phaseIdx, s);
+            }
 
-        BOOST_CHECK_SMALL(Opm::abs(FluidSystem::bubblePointPressure(fluidState, regionIdx) - p), eps*p);
-        BOOST_CHECK_SMALL(Opm::abs(FluidSystem::dewPointPressure(fluidState, regionIdx) - p), eps*p);
+            Evaluation RsSat = FluidSystem::saturatedDissolutionFactor(fluidState, oilPhaseIdx, regionIdx);
+            fluidState.setRs(RsSat);
+
+            Evaluation RvSat = FluidSystem::saturatedDissolutionFactor(fluidState, gasPhaseIdx, regionIdx);
+            fluidState.setRv(RvSat);
+
+            paramCache.updateAll(fluidState);
+
+            for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx) {
+                // ensure that the black-oil specific variants of the methods to compute
+                // thermdynamic properties return the same value as the generic ones and that
+                // the generic methods return the same value as the ones for the saturated
+                // quantities (we specify the fluid state to be on the saturation line)
+                checkSmall(Opm::abs(FluidSystem::density(fluidState, paramCache, phaseIdx) -
+                                    FluidSystem::density(fluidState, phaseIdx, regionIdx)), eps);
+
+                checkSmall(Opm::abs(FluidSystem::density(fluidState, paramCache, phaseIdx) -
+                                    FluidSystem::saturatedDensity(fluidState, phaseIdx, regionIdx)), eps);
+
+                Evaluation b = FluidSystem::inverseFormationVolumeFactor(fluidState, phaseIdx, regionIdx);
+                Evaluation bSat = FluidSystem::saturatedInverseFormationVolumeFactor(fluidState, phaseIdx, regionIdx);
+                checkSmall(Opm::abs(b - bSat), eps);
+
+                Evaluation mu = FluidSystem::viscosity(fluidState, phaseIdx, regionIdx);
+                checkSmall(Opm::abs(FluidSystem::viscosity(fluidState, paramCache, phaseIdx) - mu), 1e-10);
+
+                auto [b2, mu2] = FluidSystem::inverseFormationVolumeFactorAndViscosity(fluidState, phaseIdx, regionIdx);
+                checkSmall(Opm::abs(b - b2), 1e-10);
+                checkSmall(Opm::abs(mu - mu2), 1e-10);
+
+                Evaluation R = FluidSystem::saturatedDissolutionFactor(fluidState, phaseIdx, regionIdx);
+                Evaluation R2 = FluidSystem::saturatedDissolutionFactor(fluidState, phaseIdx, regionIdx);
+                checkSmall(Opm::abs(R - R2), eps);
+
+                // water is immiscible and thus there is no saturation pressure
+                if (phaseIdx != waterPhaseIdx) {
+                    checkSmall(Opm::abs(FluidSystem::saturationPressure(fluidState, phaseIdx, regionIdx) - p), eps*pval);
+                }
+            }
+
+            checkSmall(Opm::abs(FluidSystem::bubblePointPressure(fluidState, regionIdx) - p), eps*pval);
+            checkSmall(Opm::abs(FluidSystem::dewPointPressure(fluidState, regionIdx) - p), eps*pval);
+        }
     }
 
     // make sure that the {oil,gas,water}Pvt() methods are available

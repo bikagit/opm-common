@@ -46,6 +46,7 @@
 #include <opm/input/eclipse/EclipseState/EclipseState.hpp>
 #include <opm/input/eclipse/EclipseState/Grid/EclipseGrid.hpp>
 #include <opm/input/eclipse/EclipseState/Runspec.hpp>
+#include <opm/input/eclipse/EclipseState/SummaryConfig/SummaryConfig.hpp>
 #include <opm/input/eclipse/EclipseState/TracerConfig.hpp>
 
 #include <opm/input/eclipse/Schedule/MSW/WellSegments.hpp>
@@ -828,7 +829,7 @@ namespace {
             restoreConnCumulatives(xcon, [globCell, &wname, &smry]
                 (const std::string& vector, const double value)
             {
-                smry.update_conn_var(wname, vector, globCell + 1, value);
+                smry.update_conn_var(wname, vector, Opm::SummaryConfigNode::Type::Total, globCell + 1, value);
             });
 
             auto* xc = xw.find_connection(globCell);
@@ -894,7 +895,7 @@ namespace {
                                Opm::data::Well&   xw)
     {
         const auto iwel = wellData.iwel(wellID);
-        // For E100 it appears that +1 instead of -1 is written for group_controllable_flag when the 
+        // For E100 it appears that +1 instead of -1 is written for group_controllable_flag when the
         // group control is aactive, so using this to correct active_control (where ind.ctrl. is written)
         const auto grpc = iwel[VI::IWell::index::WGrupConControllable];
         const auto act  = grpc > 0 ? VI::IWell::Value::WellCtrlMode::Group : iwel[VI::IWell::index::ActWCtrl];
@@ -1292,6 +1293,7 @@ namespace {
                                  const Opm::Tracers& tracer_dims,
                                  const Opm::TracerConfig& tracer_config,
                                  const WellVectors& wellData,
+                                 const bool isTemp,
                                  Opm::SummaryState& smry)
     {
         if (! wellData.hasDefinedWellValues()) {
@@ -1337,13 +1339,27 @@ namespace {
         smry.update_well_var(well, "WWITH", xwel[VI::XWell::index::HistWatInjTotal]);
         smry.update_well_var(well, "WGITH", xwel[VI::XWell::index::HistGasInjTotal]);
 
-        for (std::size_t tracer_index = 0; tracer_index < tracer_config.size(); tracer_index++) {
-            const auto& tracer_name = tracer_config[tracer_index].name;
-            auto wtpt_offset = VI::XWell::index::TracerOffset +   tracer_dims.water_tracers();
-            auto wtit_offset = VI::XWell::index::TracerOffset + 2*tracer_dims.water_tracers();
+        // Tracer production/injection totals
+        const auto num_tracer_comps = tracer_dims.water_tracers() + 2* (tracer_dims.oil_tracers() + tracer_dims.gas_tracers()) + (isTemp ? 1 : 0);
+        auto offset = VI::XWell::index::TracerOffset + num_tracer_comps; // First num_tracer_comps are the rates
+        for (const auto* type : { "P", "I", }) { // Production followed by injection
+            if (isTemp) {
+                smry.update_well_var(well, fmt::format("WT{}THEA", type), xwel[offset++]);
+            }
 
-            smry.update_well_var(well, fmt::format("WTPT{}", tracer_name), xwel[wtpt_offset + tracer_index]);
-            smry.update_well_var(well, fmt::format("WTIT{}", tracer_name), xwel[wtit_offset + tracer_index]);
+            for (const auto& tracer : tracer_config) {
+                if (tracer.phase == Opm::Phase::WATER) {
+                    smry.update_well_var(well, fmt::format("WT{}T{}", type, tracer.name), xwel[offset++]);
+                }
+                else {
+                    const auto free_total = xwel[offset++];
+                    const auto solution_total = xwel[offset++];
+
+                    smry.update_well_var(well, fmt::format("WT{}TF{}", type, tracer.name), free_total);
+                    smry.update_well_var(well, fmt::format("WT{}TS{}", type, tracer.name), solution_total);
+                    smry.update_well_var(well, fmt::format("WT{}T{}", type, tracer.name), free_total + solution_total);
+                }
+            }
         }
     }
 
@@ -1367,7 +1383,7 @@ namespace {
             }
             else {
                 // Initialise the G* vectors for all non-FIELD groups
-                smry.update_group_var(group, 'G' + vector, value);
+                smry.update_group_var(group, 'G' + vector, Opm::SummaryConfigNode::Type::Total, value);
             }
         };
 
@@ -1440,7 +1456,7 @@ namespace {
                 continue;
             }
 
-            smry.update_group_var(groups[iGrp]->name(), quantity, dudg[iGrp]);
+            smry.update_group_var(groups[iGrp]->name(), quantity, Opm::SummaryConfigNode::Type::Undefined, dudg[iGrp]);
         }
     }
 
@@ -1492,13 +1508,12 @@ namespace {
         auto msWells = std::vector<std::string>{};
         msWells.reserve(allWells.size());
 
-        std::copy_if(allWells.begin(), allWells.end(),
-                     std::back_inserter(msWells),
-                     [&scheduleBlock](const std::string& wname)
-                     {
-                         auto wptr = scheduleBlock.wells.get_ptr(wname);
-                         return (wptr != nullptr) && wptr->isMultiSegment();
-                     });
+        std::ranges::copy_if(allWells, std::back_inserter(msWells),
+                             [&scheduleBlock](const std::string& wname)
+                             {
+                                 auto wptr = scheduleBlock.wells.get_ptr(wname);
+                                 return (wptr != nullptr) && wptr->isMultiSegment();
+                             });
 
         return msWells;
     }
@@ -1563,13 +1578,15 @@ namespace {
 
         // Well cumulatives
         {
+            const auto isTemp = schedule.runspec().temp();
             const auto  wellData = WellVectors { intehead, rst_view };
             const auto& wells    = schedule.wellNames(sim_step);
 
             for (auto nWells = wells.size(), wellID = 0*nWells;
                  wellID < nWells; ++wellID)
             {
-                assign_well_cumulatives(wells[wellID], wellID, schedule.runspec().tracers(), tracer_config, wellData, smry);
+                assign_well_cumulatives(wells[wellID], wellID, schedule.runspec().tracers(), tracer_config,
+                                        wellData, isTemp, smry);
             }
         }
 

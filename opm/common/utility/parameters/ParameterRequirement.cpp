@@ -65,7 +65,7 @@ ParameterRequirementMemberOf(const std::vector<std::string>& elements)
 std::string ParameterRequirementMemberOf::
 operator()(const std::string& x) const
 {
-    if (std::find(elements_.begin(), elements_.end(), x) == elements_.end()) {
+    if (std::ranges::find(elements_, x) == elements_.end()) {
         if (elements_.size() == 1) {
             return "The string '" + x + "' is not '" + elements_[0] + "'.";
         }

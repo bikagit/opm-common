@@ -31,6 +31,7 @@
 #include <opm/input/eclipse/Parser/ParserKeywords/C.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/D.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/G.hpp>
+#include <opm/input/eclipse/Parser/ParserKeywords/H.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/N.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/P.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/T.hpp>
@@ -104,24 +105,33 @@ namespace Opm {
                 m_diffuse = true;
             }
 
-            this->m_isThermal = runspec.hasKeyword<ParserKeywords::THERMAL>()
-                || runspec.hasKeyword<ParserKeywords::TEMP>();
+            const bool isThermal = runspec.hasKeyword<ParserKeywords::THERMAL>();
+            const bool isTemp = runspec.hasKeyword<ParserKeywords::TEMP>();
+            const bool needTemperature = runspec.hasKeyword<ParserKeywords::CO2STORE>() || runspec.hasKeyword<ParserKeywords::CO2SOL>()
+                || runspec.hasKeyword<ParserKeywords::H2STORE>() || runspec.hasKeyword<ParserKeywords::H2SOL>();
 
-            this->m_useEnthalpy = runspec.hasKeyword<ParserKeywords::THERMAL>();
-
-            if(runspec.hasKeyword<ParserKeywords::TEMP>()){
-                this->m_useEnthalpy = false;
-                if(runspec.hasKeyword<ParserKeywords::THERMAL>()){
+            if (isTemp) {
+                m_energy_type = EnergyModules::SequentialImplicitThermal;
+                if (isThermal) {
                     throw std::invalid_argument {
-                        "ERROR: In the RUNSPEC section the BOTH TEMP and THERMAL keyword "
-                        "only one should be spesified"
+                        "ERROR: In the RUNSPEC section Both TEMP and THERMAL keyword is given."
                     };
                 }
+            } else if (isThermal) {
+                this->m_useEnthalpy = true;
+                m_energy_type = EnergyModules::FullyImplicitThermal;
+            } else if (needTemperature) {
+                m_energy_type = EnergyModules::ConstantTemperature;
             }
 
             if (runspec.hasKeyword<ParserKeywords::PRECSALT>()) {
                 m_PRECSALT = true;
             }
+        }
+
+        if (DeckSection::hasSCHEDULE(deck)) {
+            const SCHEDULESection schedule(deck);
+            m_anyTUNING = schedule.hasKeyword<ParserKeywords::TUNING>();
         }
     }
 
@@ -139,9 +149,10 @@ namespace Opm {
         result.m_DISGASW = true;
         result.m_VAPOIL = true;
         result.m_VAPWAT = true;
-        result.m_isThermal = true;
+        result.m_energy_type = EnergyModules::FullyImplicitThermal;
         result.m_diffuse = true;
         result.m_PRECSALT = true;
+        result.m_anyTUNING = true;
 
         return result;
     }
@@ -203,7 +214,17 @@ namespace Opm {
 
     bool SimulationConfig::isThermal() const
     {
-        return this->m_isThermal;
+        return this->m_energy_type == EnergyModules::FullyImplicitThermal;
+    }
+
+    bool SimulationConfig::isTemp() const
+    {
+        return this->m_energy_type == EnergyModules::SequentialImplicitThermal;
+    }
+
+    EnergyModules SimulationConfig::energyModuleType() const
+    {
+        return this->m_energy_type;
     }
 
     bool SimulationConfig::useEnthalpy() const
@@ -221,6 +242,11 @@ namespace Opm {
         return m_PRECSALT;
     }
 
+    bool SimulationConfig::anyTUNING() const
+    {
+        return m_anyTUNING;
+    }
+
     bool SimulationConfig::operator==(const SimulationConfig& data) const
     {
         return (this->getThresholdPressure() == data.getThresholdPressure())
@@ -233,9 +259,10 @@ namespace Opm {
             && (this->hasDISGASW() == data.hasDISGASW())
             && (this->hasVAPOIL() == data.hasVAPOIL())
             && (this->hasVAPWAT() == data.hasVAPWAT())
-            && (this->isThermal() == data.isThermal())
+            && (this->energyModuleType() == data.energyModuleType())
             && (this->isDiffusive() == data.isDiffusive())
             && (this->hasPRECSALT() == data.hasPRECSALT())
+            && (this->anyTUNING() == data.anyTUNING())
             ;
     }
 
@@ -252,9 +279,10 @@ namespace Opm {
             && (full_config.hasDISGASW() == rst_config.hasDISGASW())
             && (full_config.hasVAPOIL() == rst_config.hasVAPOIL())
             && (full_config.hasVAPWAT() == rst_config.hasVAPWAT())
-            && (full_config.isThermal() == rst_config.isThermal())
+            && (full_config.energyModuleType() == rst_config.energyModuleType())
             && (full_config.isDiffusive() == rst_config.isDiffusive())
             && (full_config.hasPRECSALT() == rst_config.hasPRECSALT())
+            && (full_config.anyTUNING() == rst_config.anyTUNING())
             ;
     }
 

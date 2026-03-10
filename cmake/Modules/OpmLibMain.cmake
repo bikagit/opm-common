@@ -1,5 +1,5 @@
-# -*- mode: cmake; tab-width: 2; indent-tabs-mode: t; truncate-lines: t; compile-command: "cmake -Wdev" -*-
-# vim: set filetype=cmake autoindent tabstop=2 shiftwidth=2 noexpandtab softtabstop=2 nowrap:
+# -*- mode: cmake; cmake-tab-width: 2, tab-width: 2; indent-tabs-mode: nil; truncate-lines: t; compile-command: "cmake -Wdev" -*-
+# vim: set filetype=cmake autoindent tabstop=2 shiftwidth=2 expandtab softtabstop=2 nowrap:
 
 # - Build an OPM library module
 #
@@ -9,16 +9,20 @@
 #
 # Customize the module configuration by defining these "callback" macros:
 #
-#	prereqs_hook    Do special processing before prerequisites are found
-# fortran_hook    Determine whether Fortran support is necessary or not
-#	sources_hook    Do special processing before sources are compiled
-#	tests_hook      Do special processing before tests are compiled
-#	files_hook      Do special processing before final targets are added
+# ${project}_prereqs_hook     Do special processing before prerequisites are found
+# ${project}_fortran_hook     Determine whether Fortran support is necessary or not
+# ${project}_sources_hook     Do special processing before sources are compiled
+# ${project}_tests_hook       Do special processing before tests are compiled
+# ${project}_files_hook       Do special processing before final targets are added
+# ${project}_targets_hook     Add additional targets, set additional target properties
 
+include(OpmCompile)
+include(OpmPolicies)
+include(OpmTargets)
+include(MPIChecks)
 
-# don't write default flags into the cache, preserve that for user set values
-include (AddOptions)
-no_default_options ()
+# needed for Debian installation scheme
+include (GNUInstallDirs)
 
 # Various compiler extension checks
 include(OpmCompilerChecks)
@@ -36,100 +40,74 @@ include (UseCompVer)
 compiler_info ()
 linker_info ()
 
+OpmSetPolicies()
+
 # default settings: build static debug library
 include (OpmDefaults)
-opm_defaults (${project})
 message (STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
-# use tricks to do faster builds
-include (UseFastBuilds)
+# name of the library should not contain dashes, as CMake will
+# define a symbol with that name, and those cannot contain dashes
+string(REPLACE "-" "" ${project}_TARGET "${PROJECT_NAME}")
 
-# precompiled headers
-include (UsePrecompHeaders)
-
-# optimize full if we're not doing a debug build
-include (UseOptimization)
-
-# turn on all warnings; this must be done before adding any
-# dependencies, in case they alter the list of warnings
-option(OPM_DISABLE_WARNINGS "Disable warning flags" OFF)
-if(NOT OPM_DISABLE_WARNINGS)
-  include (UseWarnings)
+# Run language setup hook
+if(COMMAND ${project}_language_hook)
+  cmake_language(CALL ${project}_language_hook)
 endif()
 
-# parallel programming
-include (UseOpenMP)
-find_openmp (${project})
-include (UseThreads)
-find_threads (${project})
+# Setup prereqs
+include(${project}-prereqs)
 
-# PETSc is optional
-option (USE_PETSC "Use PETSc iterative solvers" OFF)
-
-# static code analysis
-include(UseStaticAnalysis)
-setup_static_analysis_tools()
-
-# callback hook to setup additional dependencies
-if (COMMAND prereqs_hook)
-	prereqs_hook ()
-endif (COMMAND prereqs_hook)
-
-# macro to set standard variables (INCLUDE_DIRS, LIBRARIES etc.)
-include (OpmFind)
-find_and_append_package_list_to (${project} ${${project}_DEPS})
+opm_add_library(
+  TARGET
+    ${${project}_TARGET}
+  VERSION
+    ${${project}_VERSION}
+)
 
 # set aliases to probed variables
 include (OpmAliases)
 
-# remove the dependency on the testing framework from the main library;
-# it is not possible to query for Boost twice with different components.
-list (REMOVE_ITEM "${project}_LIBRARIES" "${Boost_UNIT_TEST_FRAMEWORK_LIBRARY}")
+# callback hook to link to dependencies
+if(COMMAND ${project}_prereqs_hook)
+  cmake_language(CALL ${project}_prereqs_hook)
+endif()
 
-# don't import more libraries than we need to
-include (UseOnlyNeeded)
-
-# put debug information into every executable
-include (UseDebugSymbols)
-
-# detect if Boost is in a shared library
-include (UseDynamicBoost)
-
-# needed for Debian installation scheme
-include (GNUInstallDirs)
+# find Boost::unit_test_framework and detect if Boost is in a shared library
+include(UseDynamicBoost)
 
 # Run conditional file hook
-files_hook()
+if(COMMAND ${project}_files_hook)
+  cmake_language(CALL ${project}_files_hook)
+endif()
+
+include(CMakeLists_files.cmake)
 
 # this module contains code to figure out which files is where
 include (OpmFiles)
-opm_auto_dirs ()
-
-# put libraries in lib/
-opm_out_dirs ()
 
 # identify the compilation units in the library; sources in opm/,
 # tests files in tests/, examples in tutorials/ and examples/
 opm_sources (${project})
 
 # processing after base sources have been identified
-if (COMMAND sources_hook)
-	sources_hook ()
-endif (COMMAND sources_hook)
+if(COMMAND ${project}_sources_hook)
+  cmake_language(CALL ${project}_sources_hook)
+endif()
 
 # convenience macro to add version of another suite, e.g. dune-common
 macro (opm_need_version_of what)
-	string (TOUPPER "${what}" _WHAT)
-	string (REPLACE "-" "_" _WHAT "${_WHAT}")
-	list (APPEND ${project}_CONFIG_IMPL_VARS
-		${_WHAT}_VERSION_MAJOR ${_WHAT}_VERSION_MINOR ${_WHAT}_VERSION_REVISION
-		)
+  string (TOUPPER "${what}" _WHAT)
+  string (REPLACE "-" "_" _WHAT "${_WHAT}")
+  list (APPEND ${project}_CONFIG_IMPL_VARS
+        ${_WHAT}_VERSION_MAJOR ${_WHAT}_VERSION_MINOR ${_WHAT}_VERSION_REVISION
+  )
 endmacro (opm_need_version_of suite module)
 
 # use this hook to add version macros before we write to config.h
-if (COMMAND config_hook)
-	config_hook ()
-endif (COMMAND config_hook)
+if(COMMAND ${project}_config_hook)
+  cmake_language(CALL ${project}_config_hook)
+endif()
 
 # create configuration header which describes available features
 # necessary to compile this library. singular version is the names that
@@ -147,44 +125,24 @@ list (APPEND ${project}_CONFIG_VARS ${${project}_CONFIG_VAR})
 message (STATUS "Writing config file \"${PROJECT_BINARY_DIR}/config.h\"...")
 set (CONFIG_H "${PROJECT_BINARY_DIR}/config.h.tmp")
 configure_vars (
-	FILE  CXX  ${CONFIG_H}
-	WRITE ${${project}_CONFIG_VARS}
-	      ${${project}_CONFIG_IMPL_VARS}
-	      ${TESTING_CONFIG_VARS}
-	)
-
-# call this hook to let it setup necessary conditions for Fortran support
-if (COMMAND fortran_hook)
-	fortran_hook ()
-endif (COMMAND fortran_hook)
-
-if (${project}_FORTRAN_IF)
-	include (UseFortranWrappers)
-	define_fc_func (
-		APPEND ${CONFIG_H}
-		IF ${${project}_FORTRAN_IF}
-		)
-endif (${project}_FORTRAN_IF)
+  FILE  CXX  ${CONFIG_H}
+  WRITE ${${project}_CONFIG_VARS}
+        ${${project}_CONFIG_IMPL_VARS}
+        ${TESTING_CONFIG_VARS}
+)
 
 # overwrite the config.h that is used by the code only if we have some
 # real changes. thus, we don't have to recompile if a reconfigure is run
 # due to some files being added, for instance
 execute_process (COMMAND
-	${CMAKE_COMMAND} -E copy_if_different ${CONFIG_H} ${PROJECT_BINARY_DIR}/config.h
-	)
+  ${CMAKE_COMMAND} -E copy_if_different ${CONFIG_H} ${PROJECT_BINARY_DIR}/config.h
+)
 
 # compile main library; pull in all required includes and libraries
-include (OpmCompile)
 opm_compile (${project})
 
-# installation target: copy the library together with debug and
-# configuration files to system directories
-include (OpmInstall)
-if (COMMAND install_hook)
-	install_hook ()
-endif (COMMAND install_hook)
-opm_install (${project})
-message (STATUS "This build defaults to installing in ${CMAKE_INSTALL_PREFIX}")
+# MPI version probes
+mpi_checks(TARGET ${${project}_TARGET})
 
 # installation of CMake modules to help user programs locate the library
 include (OpmProject)
@@ -196,10 +154,10 @@ include (OpmSatellites)
 # example programs are found in the tutorials/ and examples/ directory
 option (BUILD_EXAMPLES "Build the examples/ tree" ON)
 if (BUILD_EXAMPLES)
-	opm_compile_satellites (${project} examples "" "")
+  opm_compile_satellites (${project} examples "" "")
 endif (BUILD_EXAMPLES)
 
-opm_compile_satellites (${project} additionals EXCLUDE_FROM_ALL "")
+opm_compile_satellites (${project} additionals "" "")
 
 # attic are programs which are not quite abandoned yet; however, they
 # are not actively maintained, so they should not be a part of the
@@ -207,35 +165,19 @@ opm_compile_satellites (${project} additionals EXCLUDE_FROM_ALL "")
 opm_compile_satellites (${project} attic EXCLUDE_FROM_ALL "")
 
 # infrastructure for testing
-enable_testing ()
 include (CTest)
-
-# conditionally disable tests when features aren't available
-macro (cond_disable_test name)
-	if ((NOT DEFINED HAVE_${name}) OR (NOT HAVE_${name}))
-		message (STATUS "${name} test disabled, since ${name} is not found.")
-		string (TOLOWER "${name}" name_lower)
-		get_filename_component (test_${name}_FILE "tests/test_${name_lower}.cpp" ABSOLUTE)
-		list (REMOVE_ITEM tests_SOURCES "${test_${name}_FILE}")
-	endif ((NOT DEFINED HAVE_${name}) OR (NOT HAVE_${name}))
-endmacro (cond_disable_test name)
 
 # use this target to run all tests, with parallel execution
 cmake_host_system_information(RESULT TESTJOBS QUERY NUMBER_OF_PHYSICAL_CORES)
 if(TESTJOBS EQUAL 0)
-	set(TESTJOBS 1)
+  set(TESTJOBS 1)
 endif()
 add_custom_target (check
-	COMMAND ${CMAKE_CTEST_COMMAND} -j${TESTJOBS}
-	DEPENDS test-suite
-	COMMENT "Checking if library is functional"
-	VERBATIM
-	)
-
-# special processing for tests
-if (COMMAND tests_hook)
-	tests_hook ()
-endif (COMMAND tests_hook)
+  COMMAND ${CMAKE_CTEST_COMMAND} -j${TESTJOBS}
+  DEPENDS test-suite
+  COMMENT "Checking if library is functional"
+  VERBATIM
+)
 
 # make datafiles necessary for tests available in output directory
 opm_data (tests datafiles "${tests_DIR}")
@@ -243,6 +185,24 @@ if(NOT BUILD_TESTING)
   set(excl_all EXCLUDE_FROM_ALL)
 endif()
 opm_compile_satellites (${project} tests "${excl_all}" "${tests_REGEXP}")
+
+# special processing for tests
+if(COMMAND ${project}_tests_hook)
+  cmake_language(CALL ${project}_tests_hook)
+endif()
+
+if(COMMAND ${project}_targets_hook)
+  cmake_language(CALL ${project}_targets_hook)
+endif()
+
+# installation target: copy the library together with debug and
+# configuration files to system directories
+include (OpmInstall)
+if(COMMAND ${project}_install_hook)
+  cmake_language(CALL ${project}_install_hook)
+endif()
+opm_install (${project})
+message (STATUS "This build defaults to installing in ${CMAKE_INSTALL_PREFIX}")
 
 # use this target to check local git commits
 add_custom_target(check-commits
@@ -256,22 +216,12 @@ add_custom_target(check-commits
 include (OpmDoc)
 opm_doc (${project} ${doxy_dir})
 
-### clean in-source builds ###
-include (OpmDistClean)
-opm_dist_clean (${project})
-
-### emulate the with-xxx feature of autotools;
-include (OpmKnown)
-
 # make sure we rebuild if dune.module changes
 configure_file (
-	"${CMAKE_CURRENT_SOURCE_DIR}/dune.module"
-	"${CMAKE_CURRENT_BINARY_DIR}/dunemod.tmp"
-	COPYONLY
-	)
+  "${CMAKE_CURRENT_SOURCE_DIR}/dune.module"
+  "${CMAKE_CURRENT_BINARY_DIR}/dunemod.tmp"
+  COPYONLY
+)
 
 # make sure updated version information is available in the source code
 include (UseVersion)
-
-# update the cache for next run
-write_back_options ()

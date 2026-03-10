@@ -20,6 +20,7 @@
 #include <opm/common/ErrorMacros.hpp>
 
 #include <algorithm>
+#include <cstddef>
 
 namespace Opm::EclIO {
 
@@ -34,7 +35,7 @@ EInit::EInit(const std::string &filename) : EclFile(filename)
             auto lgr = this->get<std::string>(n);
             lgrname = lgr[0];
 
-            if (std::find(lgr_names.begin(), lgr_names.end(), lgrname) == lgr_names.end()){
+            if (std::ranges::find(lgr_names, lgrname) == lgr_names.end()){
                 lgr_names.push_back(lgrname);
                 lgr_array_index.push_back({});
                 lgr_nijk.push_back({});
@@ -50,8 +51,8 @@ EInit::EInit(const std::string &filename) : EclFile(filename)
 
         if ((lgrname != "global") && (array_name[n] != "LGRSGONE") && (array_name[n] != "LGR"))
         {
-           auto it = std::find(lgr_names.begin(), lgr_names.end(), lgrname);
-           size_t ind = std::distance(lgr_names.begin(), it);
+           const auto it = std::ranges::find(lgr_names, lgrname);
+           const std::size_t ind = std::distance(lgr_names.begin(), it);
            lgr_array_index[ind][array_name[n]] = n;
         }
 
@@ -63,8 +64,8 @@ EInit::EInit(const std::string &filename) : EclFile(filename)
                 global_nijk = {inteh[8], inteh[9], inteh[10]};
                 global_nactive = inteh[11];
             } else {
-               auto it = std::find(lgr_names.begin(), lgr_names.end(), lgrname);
-               size_t lgr_ind = std::distance(lgr_names.begin(), it);
+               const auto it = std::ranges::find(lgr_names, lgrname);
+               const std::size_t lgr_ind = std::distance(lgr_names.begin(), it);
                lgr_nijk[lgr_ind] = {inteh[8], inteh[9], inteh[10]};
                lgr_nactive[lgr_ind] = inteh[11];
             }
@@ -108,16 +109,14 @@ const std::array<int, 3>& EInit::grid_dimension(const std::string& grid_name) co
         return lgr_nijk[get_lgr_index(grid_name)];
 }
 
-bool EInit::hasLGR(const std::string& name) const{
-    if (std::find(lgr_names.begin(), lgr_names.end(), name) == lgr_names.end())
-        return false;
-    else
-        return true;
+bool EInit::hasLGR(const std::string& name) const
+{
+    return std::ranges::find(lgr_names, name) != lgr_names.end();
 }
 
 int EInit::get_lgr_index(const std::string& grid_name) const
 {
-    auto it = std::find(lgr_names.begin(), lgr_names.end(), grid_name);
+    const auto it = std::ranges::find(lgr_names, grid_name);
 
     if (it == lgr_names.end()) {
         OPM_THROW(std::invalid_argument, "LGR '" + grid_name + "' not found in init file.");

@@ -16,9 +16,10 @@
   You should have received a copy of the GNU General Public License
   along with OPM.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include <stdexcept>
-
 #include <opm/input/eclipse/EclipseState/Grid/FaultFace.hpp>
+
+#include <algorithm>
+#include <stdexcept>
 
 namespace Opm {
 
@@ -89,9 +90,7 @@ namespace Opm {
     bool FaultFace::operator==( const FaultFace& rhs ) const {
         return this->m_faceDir == rhs.m_faceDir
             && this->m_indexList.size() == rhs.m_indexList.size()
-            && std::equal( this->m_indexList.begin(),
-                           this->m_indexList.end(),
-                           rhs.m_indexList.begin() );
+            && std::ranges::equal(this->m_indexList, rhs.m_indexList);
     }
 
     bool FaultFace::operator!=( const FaultFace& rhs ) const {

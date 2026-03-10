@@ -82,9 +82,8 @@ normaliseRestartConditionTokens(const Opm::RestartIO::RstAction& rst_action)
     for (const auto& rst_condition : rst_action.conditions) {
         const auto rst_tokens = rst_condition.tokens();
 
-        std::transform(rst_tokens.begin(), rst_tokens.end(),
-                       std::back_inserter(tokens),
-                       [](const auto& token) { return dequote(token, {}); });
+        std::ranges::transform(rst_tokens, std::back_inserter(tokens),
+                               [](const auto& token) { return dequote(token, {}); });
     }
 
     return tokens;
@@ -97,7 +96,7 @@ namespace Opm::Action {
 bool ActionX::valid_keyword(const std::string& keyword)
 {
     static const auto actionx_allowed_list = std::unordered_set<std::string> {
-        "BOX",
+        "BOX", "BRANPROP",
 
         "COMPLUMP", "COMPDAT", "COMPSEGS",
 
@@ -117,6 +116,7 @@ bool ActionX::valid_keyword(const std::string& keyword)
 
         "WCONHIST", "WCONINJH",
         "WCONINJE", "WCONPROD",
+        "WDFAC",
         "WECON", "WEFAC",
         "WELOPEN", "WELPI", "WELSEGS", "WELSPECS", "WELTARG",
         "WGRUPCON",
@@ -341,10 +341,9 @@ parseActionX(const DeckKeyword& kw,
              .getItem<ParserKeywords::ACTIONX::CONDITION>()
              .getData<RawString>());
 
-        std::transform(cond_tokens.begin(), cond_tokens.end(),
-                       std::back_inserter(tokens),
-                       [&loc = kw.location()](const auto& token)
-                       { return dequote(token, loc); });
+        std::ranges::transform(cond_tokens, std::back_inserter(tokens),
+                               [&loc = kw.location()](const auto& token)
+                               { return dequote(token, loc); });
 
         conditions.emplace_back(cond_tokens, kw.location());
     }

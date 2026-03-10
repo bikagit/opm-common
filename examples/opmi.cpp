@@ -17,14 +17,14 @@
   along with OPM.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <opm/input/eclipse/EclipseState/EclipseState.hpp>
-
 #include <opm/common/OpmLog/LogUtil.hpp>
 #include <opm/common/OpmLog/OpmLog.hpp>
 #include <opm/common/OpmLog/StreamLog.hpp>
 
+#include <opm/common/utility/OpmInputError.hpp>
 #include <opm/common/utility/TimeService.hpp>
 
+#include <opm/input/eclipse/EclipseState/EclipseState.hpp>
 #include <opm/input/eclipse/EclipseState/SummaryConfig/SummaryConfig.hpp>
 
 #include <opm/input/eclipse/Python/Python.hpp>
@@ -37,7 +37,7 @@
 #include <opm/input/eclipse/Parser/ErrorGuard.hpp>
 
 #include <chrono>
-#include <iomanip>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 
@@ -98,7 +98,15 @@ int main(int argc, char** argv)
 {
     initLogging();
 
-    for (int iarg = 1; iarg < argc; ++iarg) {
-        loadDeck(argv[iarg]);
+    try {
+        for (int iarg = 1; iarg < argc; ++iarg) {
+            loadDeck(argv[iarg]);
+        }
     }
+    catch (const Opm::OpmInputError& e) {
+        std::cerr << "Opm input error thrown: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
 }

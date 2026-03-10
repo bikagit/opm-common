@@ -97,7 +97,7 @@ namespace {
         0.0,
         0.0,
         0.0,
-        0.0,
+        0.0
     };
 
     static const double to_metric[] = {
@@ -141,14 +141,14 @@ namespace {
         1 / ( Metric::Energy / Metric::Time ),
         1 / (Metric::Pressure / Opm::unit::square(Metric::GeomVolume / Metric::Time)),
         1 / (Metric::Pressure / Metric::Density / Opm::unit::square(Metric::GeomVolume / Metric::Time)),
-        1 / Metric::PolymerDensity,
-        1 / Metric::Salinity,
-        1 / (1 / Metric::Time),
+        1 / Metric::Concentration,
+        1 / (Metric::GasDissolutionFactor / Metric::Time),
         1 / Metric::Moles,
         1 / Metric::PPM,
         1 / Metric::Ymodule,
         1 / Metric::ThermalConductivity,
         1 / (Metric::Time / Metric::GasSurfaceVolume),
+        1 / (Metric::Length / Metric::Time)
     };
 
     static const double from_metric[] = {
@@ -192,14 +192,14 @@ namespace {
         Metric::Energy / Metric::Time,
         Metric::Pressure / Opm::unit::square(Metric::GeomVolume / Metric::Time),
         Metric::Pressure / Metric::Density / Opm::unit::square(Metric::GeomVolume / Metric::Time),
-        Metric::PolymerDensity,
-        Metric::Salinity,
-        1 / Metric::Time,
+        Metric::Concentration,
+        Metric::GasDissolutionFactor / Metric::Time,
         Metric::Moles,
         Metric::PPM,
         Metric::Ymodule,
         Metric::ThermalConductivity,
         Metric::Time / Metric::GasSurfaceVolume,
+        Metric::Length / Metric::Time
     };
 
     static constexpr const char* metric_names[static_cast<int>(UnitSystem::measure::_count)] = {
@@ -211,7 +211,7 @@ namespace {
         "BARSA",
         "BARS",
         "K",
-        "C",
+        "DEG C",
         "CP",
         "MD",
         "SM2",
@@ -243,14 +243,14 @@ namespace {
         "KJ/DAY", /* energy rate*/
         "BARS/(RM3/DAY)2", /* ICD strength parameter */
         "BARS/(KG/SM3)/(RM3/DAY)2", /* AICD strength parameter */
-        "KG / SM3", /*polymer density */
-        "KG / SM3", /*salinity */
+        "KG / SM3", /* concentration */
         "SM3/SM3/DAY",
         "KG-M",
         "PPM", /*Parts per million */
         "GPa",
         "KJ/M/DAY/K",
         "DAY/SM3",
+        "M/DAY"
     };
 
     static_assert(numElems(from_metric_offset) == static_cast<std::size_t>(UnitSystem::measure::_count),
@@ -321,7 +321,7 @@ namespace {
         0.0,
         0.0,
         0.0,
-        0.0,
+        0.0
     };
 
     static const double to_field[] = {
@@ -365,14 +365,14 @@ namespace {
         1 / (Field::Energy / Field::Time),
         1 / (Field::Pressure / Opm::unit::square(Field::GeomVolume / Field::Time)),
         1 / (Field::Pressure / Field::Density / Opm::unit::square(Field::GeomVolume / Field::Time)),
-        1 / Field::PolymerDensity,
-        1 / Field::Salinity,
-        1 / (Field::GasSurfaceVolume / Field::LiquidSurfaceVolume / Field::Time),
+        1 / Field::Concentration,
+        1 / (Field::GasDissolutionFactor / Field::Time),
         1 / Field::Moles,
         1 / Field::PPM,
         1 / Field::Ymodule,
         1 / Field::ThermalConductivity,
-        1 / (Field::Time / Field::GasSurfaceVolume)
+        1 / (Field::Time / Field::GasSurfaceVolume),
+        1 / (Field::Length / Field::Time)
     };
 
     static const double from_field[] = {
@@ -416,14 +416,14 @@ namespace {
          Field::Energy / Field::Time,
          Field::Pressure / Opm::unit::square(Field::GeomVolume / Field::Time),
          Field::Pressure / Field::Density / Opm::unit::square(Field::GeomVolume / Field::Time),
-         Field::PolymerDensity,
-         Field::Salinity,
-         Field::GasSurfaceVolume / Field::LiquidSurfaceVolume / Field::Time,
+         Field::Concentration,
+         Field::GasDissolutionFactor / Field::Time,
          Field::Moles,
          Field::PPM,
          Field::Ymodule,
          Field::ThermalConductivity,
          Field::Time / Field::GasSurfaceVolume,
+         Field::Length / Field::Time
     };
 
     static constexpr const char* field_names[static_cast<int>(UnitSystem::measure::_count)] = {
@@ -467,14 +467,14 @@ namespace {
         "BTU/DAY", /* energy rate*/
         "PSI/(RFT3/DAY)2", /* ICD strength parameter */
         "PSI/(LB/FT3)/(RFT3/DAY)2", /* AICD strength parameter */
-        "LB/STB", /*polymer density */
-        "LB/STB", /*salinity */
+        "LB/STB", /* concentration */
         "MSCF/STB/DAY",
         "LB-M",
         "PPM",
         "GPa",
         "BTU/FT/DAY/R",
         "DAY/MSCF",
+        "FT/DAY"
     };
 
     static_assert(numElems(from_field_offset) == static_cast<std::size_t>(UnitSystem::measure::_count),
@@ -545,7 +545,7 @@ namespace {
         0.0,
         0.0,
         0.0,
-        0.0,
+        0.0
     };
 
     static const double to_lab[] = {
@@ -589,14 +589,14 @@ namespace {
         1 / ( Lab::Energy / Lab::Time ),
         1 / (Lab::Pressure / Opm::unit::square(Lab::GeomVolume / Lab::Time)),
         1 / (Lab::Pressure / Lab::Density / Opm::unit::square(Lab::GeomVolume / Lab::Time)),
-        1 / Lab::PolymerDensity,
-        1 / Lab::Salinity,
+        1 / Lab::Concentration,
         1 / (Lab::GasDissolutionFactor / Lab::Time),
         1 / Lab::Moles,
         1 / Lab::PPM,
         1 / Lab::Ymodule,
         1 / Lab::ThermalConductivity,
-        1 / (Lab::Time / Lab::GasSurfaceVolume)
+        1 / (Lab::Time / Lab::GasSurfaceVolume),
+        1 / (Lab::Length / Lab::Time)
     };
 
     static const double from_lab[] = {
@@ -640,14 +640,14 @@ namespace {
         Lab::Energy / Lab::Time,
         Lab::Pressure / Opm::unit::square(Lab::GeomVolume / Lab::Time),
         Lab::Pressure / Lab::Density / Opm::unit::square(Lab::GeomVolume / Lab::Time),
-        Lab::PolymerDensity,
-        Lab::Salinity,
+        Lab::Concentration,
         Lab::GasDissolutionFactor / Lab::Time,
         Lab::Moles,
         Lab::PPM,
         Lab::Ymodule,
         Lab::ThermalConductivity,
-        Lab::Time / Lab::GasSurfaceVolume
+        Lab::Time / Lab::GasSurfaceVolume,
+        Lab::Length / Lab::Time
     };
 
     static constexpr const char* lab_names[static_cast<int>(UnitSystem::measure::_count)] = {
@@ -691,14 +691,14 @@ namespace {
         "J/HR", /* energy */
         "ATM/(RCC/H)2", /* ICD strength parameter */
         "ATM/(G/SCC)/(RCC/H)2", /* AICD strength parameter */
-        "G/SCC", /*polymer density */
-        "G/SCC", /*salinity */
+        "G/SCC", /* concentration */
         "SCC/SCC/HR",
         "g-M",
         "PPM",
         "GPa",
         "J/CM/HR/K",
         "HR/SCC",
+        "CM/HR"
     };
 
     static_assert(numElems(from_lab_offset) == static_cast<std::size_t>(UnitSystem::measure::_count),
@@ -769,7 +769,7 @@ namespace {
         0.0,
         0.0,
         0.0,
-        0.0,
+        0.0
     };
 
     static const double to_pvt_m[] = {
@@ -813,14 +813,14 @@ namespace {
         1 / ( PVT_M::Energy/ PVT_M::Time ),
         1 / (PVT_M::Pressure / Opm::unit::square(PVT_M::GeomVolume / PVT_M::Time)),
         1 / (PVT_M::Pressure / PVT_M::Density  / Opm::unit::square(PVT_M::GeomVolume / PVT_M::Time)),
-        1 / PVT_M::PolymerDensity,
-        1 / PVT_M::Salinity,
-        1 / (PVT_M::GasSurfaceVolume / PVT_M::LiquidSurfaceVolume /PVT_M::Time),
+        1 / PVT_M::Concentration,
+        1 / (PVT_M::GasDissolutionFactor / PVT_M::Time),
         1 / PVT_M::Moles,
         1 / PVT_M::PPM,
         1 / PVT_M::Ymodule,
         1 / PVT_M::ThermalConductivity,
         1 / (PVT_M::Time / PVT_M::GasSurfaceVolume),
+        1 / (PVT_M::Length / PVT_M::Time)
     };
 
     static const double from_pvt_m[] = {
@@ -864,14 +864,14 @@ namespace {
         PVT_M::Energy / PVT_M::Time,
         PVT_M::Pressure / Opm::unit::square(PVT_M::GeomVolume / PVT_M::Time),
         PVT_M::Pressure / PVT_M::Density  / Opm::unit::square(PVT_M::GeomVolume / PVT_M::Time),
-        PVT_M::PolymerDensity,
-        PVT_M::Salinity,
-        PVT_M::GasSurfaceVolume / PVT_M::LiquidSurfaceVolume /PVT_M::Time,
+        PVT_M::Concentration,
+        PVT_M::GasDissolutionFactor / PVT_M::Time,
         PVT_M::Moles,
         PVT_M::PPM,
         PVT_M::Ymodule,
         PVT_M::ThermalConductivity,
         PVT_M::Time / PVT_M::GasSurfaceVolume,
+        PVT_M::Length / PVT_M::Time
     };
 
     static constexpr const char* pvt_m_names[static_cast<int>(UnitSystem::measure::_count)] = {
@@ -915,14 +915,14 @@ namespace {
         "KJ/DAY" /* energy */,
         "ATM/(RM3/DAY)2", /* ICD strength parameter */
         "ATM/(KG/SM3)/(RM3/DAY)2", /* AICD strength parameter */
-        "KG/SM3", /*polymer density */
-        "KG/SM3", /*salinity */
+        "KG/SM3", /* concentration */
         "SM3/SM3/DAY",
         "KG-M",
         "PPM",
         "GPa",
         "KJ/M/SEC/K",
         "DAY/SM3",
+        "M/DAY"
     };
 
     static_assert(numElems(from_pvt_m_offset) == static_cast<std::size_t>(UnitSystem::measure::_count),
@@ -993,7 +993,7 @@ namespace {
         0.0,
         0.0,
         0.0,
-        0.0,
+        0.0
     };
 
     static const double to_input[] = {
@@ -1044,7 +1044,7 @@ namespace {
         1,
         1,
         1,
-        1,
+        1
     };
 
     static const double from_input[] = {
@@ -1095,7 +1095,7 @@ namespace {
         1,
         1,
         1,
-        1,
+        1
     };
 
     static constexpr const char* input_names[static_cast<int>(UnitSystem::measure::_count)] = {
@@ -1139,14 +1139,14 @@ namespace {
         "KJ/DAY", /* energy rate*/
         "BARS/(RM3/DAY)2", /* ICD strength parameter */
         "BARS/(KG/SM3)/(RM3/DAY)2", /* AICD strength parameter */
-        "KG/SM3", /*polymer density */
-        "KG/SM3", /*salinity */
+        "KG/SM3", /* concentration */
         "SM3/SM3/DAY",
         "g-M",
         "PPM",
         "GPa",
         "KJ/M/DAY/K",
         "DAY/SM3",
+        "M/DAY"
     };
 
     static_assert(numElems(from_input_offset) == static_cast<std::size_t>(UnitSystem::measure::_count),
@@ -1206,10 +1206,8 @@ namespace {
         this->addDimension("ReservoirVolume", 1.0);
         this->addDimension("GeometricVolume", 1.0 );
         this->addDimension("Density"   , 1.0);
-        this->addDimension("PolymerDensity", 1.0);
+        this->addDimension("Concentration", 1.0);
         this->addDimension("FoamDensity", 1.0);
-        this->addDimension("FoamSurfactantConcentration", 1.0);
-        this->addDimension("Salinity", 1.0);
         this->addDimension("Viscosity" , 1.0);
         this->addDimension("Timestep"  , 1.0);
         this->addDimension("SurfaceTension"  , 1.0);
@@ -1247,10 +1245,8 @@ namespace {
         this->addDimension("ReservoirVolume", PVT_M::ReservoirVolume );
         this->addDimension("GeometricVolume", PVT_M::GeomVolume );
         this->addDimension("Density"   , PVT_M::Density );
-        this->addDimension("PolymerDensity", PVT_M::PolymerDensity);
+        this->addDimension("Concentration", PVT_M::Concentration);
         this->addDimension("FoamDensity", PVT_M::FoamDensity);
-        this->addDimension("FoamSurfactantConcentration", PVT_M::FoamSurfactantConcentration);
-        this->addDimension("Salinity", PVT_M::Salinity);
         this->addDimension("Viscosity" , PVT_M::Viscosity);
         this->addDimension("Timestep"  , PVT_M::Timestep);
         this->addDimension("SurfaceTension"  , PVT_M::SurfaceTension);
@@ -1290,10 +1286,8 @@ namespace {
         this->addDimension("ReservoirVolume", Lab::ReservoirVolume );
         this->addDimension("GeometricVolume", Lab::GeomVolume );
         this->addDimension("Density", Lab::Density );
-        this->addDimension("PolymerDensity", Lab::PolymerDensity);
+        this->addDimension("Concentration", Lab::Concentration);
         this->addDimension("FoamDensity", Lab::FoamDensity);
-        this->addDimension("FoamSurfactantConcentration", Lab::FoamSurfactantConcentration);
-        this->addDimension("Salinity", Lab::Salinity);
         this->addDimension("Viscosity", Lab::Viscosity);
         this->addDimension("Timestep", Lab::Timestep);
         this->addDimension("SurfaceTension"  , Lab::SurfaceTension);
@@ -1334,10 +1328,8 @@ namespace {
         this->addDimension("ReservoirVolume", Metric::ReservoirVolume );
         this->addDimension("GeometricVolume", Metric::GeomVolume );
         this->addDimension("Density"   , Metric::Density );
-        this->addDimension("PolymerDensity", Metric::PolymerDensity);
+        this->addDimension("Concentration", Metric::Concentration);
         this->addDimension("FoamDensity", Metric::FoamDensity);
-        this->addDimension("FoamSurfactantConcentration", Metric::FoamSurfactantConcentration);
-        this->addDimension("Salinity", Metric::Salinity);
         this->addDimension("Viscosity" , Metric::Viscosity);
         this->addDimension("Timestep"  , Metric::Timestep);
         this->addDimension("SurfaceTension"  , Metric::SurfaceTension);
@@ -1376,10 +1368,8 @@ namespace {
         this->addDimension("ReservoirVolume", Field::ReservoirVolume );
         this->addDimension("GeometricVolume", Field::GeomVolume );
         this->addDimension("Density", Field::Density );
-        this->addDimension("PolymerDensity", Field::PolymerDensity);
+        this->addDimension("Concentration", Field::Concentration);
         this->addDimension("FoamDensity", Field::FoamDensity);
-        this->addDimension("FoamSurfactantConcentration", Field::FoamSurfactantConcentration);
-        this->addDimension("Salinity", Field::Salinity);
         this->addDimension("Viscosity", Field::Viscosity);
         this->addDimension("Timestep", Field::Timestep);
         this->addDimension("SurfaceTension"  , Field::SurfaceTension);
@@ -1529,6 +1519,7 @@ namespace {
         case UDAControl::WCONINJE_RESV:
         case UDAControl::WCONPROD_RESV:
         case UDAControl::WELTARG_RESV:
+        case UDAControl::GCONPROD_RESV_TARGET:
         case UDAControl::GCONINJE_RESV_MAX_RATE:
             return this->getDimension(UnitSystem::measure::geometric_volume_rate);
 
@@ -1544,10 +1535,21 @@ namespace {
         case UDAControl::WELTARG_BHP:   case UDAControl::WELTARG_THP:
             return this->getDimension(UnitSystem::measure::pressure);
 
-        case UDAControl::GCONINJE_TARGET_REINJ_FRACTION:
-        case UDAControl::GCONINJE_TARGET_VOID_FRACTION:
         case UDAControl::GCONINJE_SURFACE_MAX_RATE:
         case UDAControl::WCONINJE_RATE:
+            // Note: GCONINJE_SURFACE_MAX_RATE and WCONINJE_RATE are *very*
+            // special cases.  We *intentionally* use 'identity' for these
+            // quantities since the actual unit conversion depends on the
+            // injected phase, which may change throughout the simulation
+            // run.  We effectively ignore the fact that we know the
+            // injected phase at restart time and defer said unit conversion
+            // to the helper functions Opm::UDA::eval_well_uda_rate() and
+            // Opm::UDA::eval_group_uda_rate().  Both these functions in
+            // turn *depend* on the Dimension being 'identity' here.
+            return this->getDimension(UnitSystem::measure::identity);
+
+        case UDAControl::GCONINJE_TARGET_REINJ_FRACTION:
+        case UDAControl::GCONINJE_TARGET_VOID_FRACTION:
             return this->getDimension(UnitSystem::measure::identity);
 
         default:
@@ -1604,7 +1606,7 @@ namespace {
     }
 
     Dimension UnitSystem::parse(const std::string& dimension) const {
-        const size_t divCount = std::count( dimension.begin() , dimension.end() , '/' );
+        const std::size_t divCount = std::ranges::count(dimension, '/');
 
         if( divCount > 1 )
                 throw std::invalid_argument("Dimension string can only have one division sign '/'");
@@ -1674,7 +1676,7 @@ namespace {
         double factor = this->measure_table_from_si[ static_cast< int >( m ) ];
         double offset = this->measure_table_to_si_offset[ static_cast< int >( m ) ];
         auto scale = [=](double x) { return (x - offset) * factor; };
-        std::transform( data.begin() , data.end() , data.begin() , scale);
+        std::ranges::transform(data, data.begin(), scale);
     }
 
 
@@ -1682,7 +1684,7 @@ namespace {
         double factor = this->measure_table_to_si[ static_cast< int >( m ) ];
         double offset = this->measure_table_to_si_offset[ static_cast< int >( m ) ];
         auto scale = [=](double x) { return x * factor + offset; };
-        std::transform( data.begin() , data.end() , data.begin() , scale);
+        std::ranges::transform(data, data.begin(), scale);
     }
 
     const char* UnitSystem::name( measure m ) const {

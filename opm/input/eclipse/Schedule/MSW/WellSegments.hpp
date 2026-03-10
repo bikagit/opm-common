@@ -20,15 +20,22 @@
 #ifndef SEGMENTSET_HPP_HEADER_INCLUDED
 #define SEGMENTSET_HPP_HEADER_INCLUDED
 
-#include <map>
-#include <set>
-#include <vector>
-
 #include <opm/input/eclipse/Schedule/MSW/Segment.hpp>
 
+#include <cstddef>
+#include <map>
+#include <set>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
 namespace Opm {
-    class SICD;
     class AutoICD;
+    class ErrorGuard;
+    class KeywordLocation;
+    class ParseContext;
+    class SICD;
     class UnitSystem;
     class Valve;
     class WellConnections;
@@ -71,6 +78,9 @@ namespace Opm {
         WellSegments(CompPressureDrop compDrop,
                      const std::vector<Segment>& segments);
         void loadWELSEGS( const DeckKeyword& welsegsKeyword, const UnitSystem& unit_system);
+        void addWellSegmentsFromLengthsAndDepths(const std::string &wname,
+                                                 const std::vector<std::pair<double, double>>& lengths_and_depths,
+                                                 double diameter, const UnitSystem& unit_system);
 
         static WellSegments serializationTestObject();
 
@@ -87,13 +97,10 @@ namespace Opm {
         // mapping the segment number to the index in the vector of segments
         int segmentNumberToIndex(const int segment_number) const;
 
-
-
         const Segment& getFromSegmentNumber(const int segment_number) const;
 
         const Segment& operator[](size_t idx) const;
         void orderSegments();
-        void updatePerfLength(const WellConnections& connections);
 
         bool operator==( const WellSegments& ) const;
         bool operator!=( const WellSegments& ) const;
@@ -104,14 +111,31 @@ namespace Opm {
         std::set<int> branches() const;
 
         // it returns true if there is no error encountered during the update
-        bool updateWSEGSICD(const std::vector<std::pair<int, SICD> >& sicd_pairs);
 
-        bool updateWSEGVALV(const std::vector<std::pair<int, Valve> >& valve_pairs);
-        bool updateWSEGAICD(const std::vector<std::pair<int, AutoICD> >& aicd_pairs, const KeywordLocation& location);
-        const std::vector<Segment>::const_iterator begin() const;
-        const std::vector<Segment>::const_iterator end() const;
+        bool updateWSEGAICD(std::string_view                            well_name,
+                            const std::vector<std::pair<int, AutoICD>>& aicd_pairs,
+                            const KeywordLocation&                      location,
+                            const ParseContext&                         parseContext,
+                            ErrorGuard&                                 errors);
+
+        bool updateWSEGSICD(std::string_view                         well_name,
+                            const std::vector<std::pair<int, SICD>>& sicd_pairs,
+                            const KeywordLocation&                   location,
+                            const ParseContext&                      parseContext,
+                            ErrorGuard&                              errors);
+
+        bool updateWSEGVALV(std::string_view                          well_name,
+                            const std::vector<std::pair<int, Valve>>& valve_pairs,
+                            const KeywordLocation&                    location,
+                            const ParseContext&                       parseContext,
+                            ErrorGuard&                               errors);
+
+        auto begin() const { return this->m_segments.begin(); }
+        auto end() const { return this->m_segments.end(); }
 
         void checkSegmentDepthConsistency(const std::string& well_name, const UnitSystem& unit_system) const;
+
+        bool updateICDScalingFactors(const WellConnections& connections);
 
         template<class Serializer>
         void serializeOp(Serializer& serializer)
@@ -130,8 +154,8 @@ namespace Opm {
         void addSegment(const int segment_number,
                         const int branch,
                         const int outlet_segment,
-                        const double length,
                         const double depth,
+                        const double length,
                         const double internal_diameter,
                         const double roughness,
                         const double cross_area,

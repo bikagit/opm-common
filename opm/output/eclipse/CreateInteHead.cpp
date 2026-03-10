@@ -22,6 +22,7 @@
 
 #include <opm/output/eclipse/InteHEAD.hpp>
 #include <opm/output/eclipse/VectorItems/intehead.hpp>
+#include <opm/output/eclipse/VectorItems/well.hpp>
 
 #include <opm/input/eclipse/EclipseState/Aquifer/AquiferConfig.hpp>
 #include <opm/input/eclipse/EclipseState/EclipseState.hpp>
@@ -112,6 +113,21 @@ namespace {
         return ngmax - 1;
     }
 
+    int numGroupsInField(const Opm::Schedule& sched,
+                         const std::size_t    lookup_step,
+                         [[maybe_unused]] const std::string&   lgr_tag)
+    {
+        return numGroupsInField(sched, lookup_step);
+        // Following code should be enabled when AggregateGroupData.cpp is fixed
+        // if (lgr_tag == "GLOBAL" or  lgr_tag.empty()){
+        //     return numGroupsInField(sched, lookup_step);
+        // }
+        // else {
+        //     // This is the default value and correspond to a single well group for LGR grids.
+        //     return 1;
+        // }
+    }
+
     int GroupControl(const Opm::Schedule& sched,
                      const std::size_t    report_step,
                      const std::size_t    lookup_step)
@@ -167,16 +183,19 @@ namespace {
         return std::accumulate(iuap.begin(), iuap.end(), 0,
             [](const int n, const auto& rec)
         {
-            const auto kw = Opm::UDQ::keyword(rec.control);
+            switch (Opm::UDQ::keyword(rec.control)) {
+            case Opm::UDAKeyword::GCONINJE:
+                // Group level injection UDA
+                return n + 3;
 
-            const auto is_field_uda =
-                ((kw == Opm::UDAKeyword::GCONPROD) ||
-                 (kw == Opm::UDAKeyword::GCONINJE))
-                && (rec.wgname == "FIELD");
+            case Opm::UDAKeyword::GCONPROD:
+                // Group level production UDA
+                return n + 2;
 
-            // One IUAP entry for each "regular" UDA in WCON* or GCON*.  Two
-            // IUAP entries for each field level UDA in GCON*.
-            return n + 1 + static_cast<int>(is_field_uda);
+            default:
+                // Well level UDA.
+                return n + 1;
+            }
         });
     }
 
@@ -188,11 +207,9 @@ namespace {
 
         const auto& wnames = sched.wellNames(lookup_step);
 
-        return std::count_if(std::begin(wnames), std::end(wnames),
-            [&sched, lookup_step](const std::string& wname) -> bool
-        {
-            return sched.getWell(wname, lookup_step).isMultiSegment();
-        });
+        return std::ranges::count_if(wnames,
+                                    [&sched, lookup_step](const std::string& wname) -> bool
+                                    { return sched.getWell(wname, lookup_step).isMultiSegment(); });
     }
 
     int maxNumSegments(const ::Opm::Schedule& sched,
@@ -262,10 +279,57 @@ namespace {
         };
     }
 
+
+    Opm::RestartIO::InteHEAD::WellTableDim
+    getWellTableDims(const int              nwgmax,
+                     const int              ngmax,
+                     const ::Opm::Runspec&  rspec,
+                     const ::Opm::Schedule& sched,
+                     const std::size_t      report_step,
+                     const std::size_t      lookup_step,
+                     const std::string&     lgr_tag)
+    {
+        if ((lgr_tag == "GLOBAL") or (lgr_tag.empty()))
+        {
+            return getWellTableDims(nwgmax,ngmax,rspec,sched,report_step,lookup_step);
+        }
+
+        const auto& wd = rspec.wellDimensions();
+
+        const auto schedule_state = sched[lookup_step];
+        const auto wnames = sched.wellNames(lookup_step);
+        int numWells =
+            std::ranges::count_if(wnames,
+                                  [&lgr_tag, &sched = sched[lookup_step]](const auto& wname)
+                                  { return sched.wells(wname).get_lgr_well_tag().value_or("") == lgr_tag; });
+
+        const auto maxPerf =
+            std::max(wd.maxConnPerWell(),
+                     maxConnPerWell(sched, report_step, lookup_step));
+
+        const auto maxWellInGroup =
+             std::max(wd.maxWellsPerGroup(), nwgmax); // WellsPerGroup computed in terms of the Global Grid
+
+        // This seems to be some sort of default value for LGR grid and should be enabled when AggregateGroupData.cpp is fixed.
+        const auto maxGroupInField = 1;
+
+        const auto nWMaxz = wd.maxWellsInField();
+
+        return {
+            (report_step > 0) ? numWells : 0,
+            maxPerf,
+            maxWellInGroup,
+            maxGroupInField,
+            (report_step > 0) ? std::max(nWMaxz, numWells) : nWMaxz,
+            wd.maxWellListsPrWell(),
+            wd.maxDynamicWellLists()
+        };
+    }
+
     std::array<int, 4>
     getNGRPZ(const int             grpsz,
              const int             ngrp,
-             const int             num_water_tracer,
+             const int             num_tracers,
              const ::Opm::Runspec& rspec)
     {
         const auto& wd = rspec.wellDimensions();
@@ -275,7 +339,7 @@ namespace {
 
         const int nigrpz = 97 + std::max(nwgmax, ngmax);
         const int nsgrpz = 112;
-        const int nxgrpz = 180 + 4*num_water_tracer;
+        const int nxgrpz = 181 + 4*num_tracers;
         const int nzgrpz = 5;
 
         return {{
@@ -285,6 +349,7 @@ namespace {
             nzgrpz,
         }};
     }
+
 
     Opm::RestartIO::InteHEAD::Phases
     getActivePhases(const ::Opm::Runspec& rspec)
@@ -349,7 +414,7 @@ namespace {
         const auto max_lines_pr_action = acts.max_input_lines();
         const auto max_cond_per_action = rspec.actdims().max_conditions();
         const auto max_characters_per_line = rspec.actdims().max_characters();
-        
+
         return {
             static_cast<int>(no_act),
             max_lines_pr_action,
@@ -360,7 +425,7 @@ namespace {
 
 
     Opm::RestartIO::InteHEAD::WellSegDims
-    getWellSegDims(const int              num_water_tracer,
+    getWellSegDims(const int              num_tracers,
                    const ::Opm::Runspec&  rspec,
                    const ::Opm::Schedule& sched,
                    const std::size_t      report_step,
@@ -377,10 +442,10 @@ namespace {
             std::max(numMSW, wsd.maxSegmentedWells()),
             std::max(maxNumSeg, wsd.maxSegmentsPerWell()),
             std::max(maxNumBr, wsd.maxLateralBranchesPerWell()),
-            22,           // Number of entries per segment in ISEG (2017.2)
+            22,           // #ISEG elems per segment
             Opm::RestartIO::InteHEAD::numRsegElem(rspec.phases())
-               + 8*num_water_tracer, // Number of entries per segment in RSEG
-            10            // Number of entries per segment in ILBR (2017.2)
+               + 8*num_tracers, // #RSEG elems per segment
+            10            // #ILBR elems per branch
         };
     }
 
@@ -428,10 +493,10 @@ namespace {
         const auto& guideCFG = sched[lookup_step].guide_rate();
         if (guideCFG.has_model()) {
             const auto& guideRateModel = guideCFG.model();
-            
+
             const auto& targPhase = guideRateModel.target();
             const auto& allow_incr = guideRateModel.allow_increase();
-            
+
             const auto it_nph = nph_enumToECL.find(targPhase);
             if (it_nph != nph_enumToECL.end()) {
                 nom_phase = it_nph->second;
@@ -562,53 +627,62 @@ createInteHead(const EclipseState& es,
                const int           report_step,
                const int           lookup_step)
 {
+
     const auto nwgmax = (report_step == 0)
         ? 0 : maxGroupSize(sched, lookup_step);
-
     const auto ngmax  = (report_step == 0)
-        ? 0 : numGroupsInField(sched, lookup_step);
+        ? 0 : numGroupsInField(sched, lookup_step, grid.get_lgr_tag());
 
     const auto& acts  = sched[lookup_step].actions.get();
     const auto& rspec = es.runspec();
     const auto& tdim  = es.getTableManager();
     const auto& rdim  = tdim.getRegdims();
     const auto& rckcfg = es.getSimulationConfig().rock_config();
-    auto num_water_tracer = es.runspec().tracers().water_tracers();
-    int nxwelz_tracer_shift = num_water_tracer*5 + 2 * (num_water_tracer > 0);
+    const auto& tracers = es.runspec().tracers();
+    // TEMP is a tracer, oil&gas tracers have both free and solution parts.
+    const auto num_tracers = tracers.water_tracers() + tracers.oil_tracers() + tracers.gas_tracers() + (es.runspec().temp() ? 1 : 0);
+    const auto num_tracer_comps = num_tracers + tracers.oil_tracers() + tracers.gas_tracers();
+    int nxwelz_tracer_shift = num_tracer_comps*5 + 2 * (num_tracers > 0);
 
     const auto ih = InteHEAD{}
         .dimensions         (grid.getNXYZ())
         .numActive          (static_cast<int>(grid.getNumActive()))
         .unitConventions    (es.getDeckUnitSystem())
         .wellTableDimensions(getWellTableDims(nwgmax, ngmax, rspec, sched,
-                                              report_step, lookup_step))
+                                              report_step, lookup_step, grid.get_lgr_tag()))
         .calendarDate       (getSimulationTimePoint(sched.posixStartTime(), simTime))
         .activePhases       (getActivePhases(rspec))
              // The numbers below have been determined experimentally to work
              // across a range of reference cases, but are not guaranteed to be
              // universally valid.
         .drsdt(sched, lookup_step)
-        .params_NWELZ       (155 + num_water_tracer, 122 + 2*num_water_tracer, 130 + nxwelz_tracer_shift, 3) // n{isxz}welz: number of data elements per well in {ISXZ}WELL
-        .params_NCON        (25, 41, 58 + 5*num_water_tracer)       // n{isx}conz: number of data elements per completion in ICON
-        .params_GRPZ        (getNGRPZ(nwgmax, ngmax, num_water_tracer, rspec))
+             // -----------------------------------------------------------------------------------
+             //              NIWELZ                | NSWELZ                     | NXWELZ                                                      | NZWELZ
+             //              #IWEL elems per well  | #SWEL elems per well       | #XWEL elems per well                                        | #ZWEL elems per well
+        .params_NWELZ       (155 + num_tracers,      122 + 2 * num_tracer_comps, VectorItems::XWell::index::TracerOffset + nxwelz_tracer_shift, 3)
+             // -----------------------------------------------------------------------------------
+             //              NICONZ               | NSCONZ               | NXCONZ
+             //              #ICON elems per conn | #SCON elems per conn | #XCON elems per conn
+        .params_NCON        (26,                    42,                    58 + 5*num_tracer_comps)
+        .params_GRPZ        (getNGRPZ(nwgmax, ngmax, num_tracer_comps, rspec))
         .aquiferDimensions  (inferAquiferDimensions(es, sched[lookup_step]))
         .stepParam          (num_solver_steps, report_step)
         .tuningParam        (getTuningPars(sched[lookup_step].tuning()))
         .liftOptParam       (getLiftOptPar(sched, report_step, lookup_step))
-        .wellSegDimensions  (getWellSegDims(num_water_tracer, rspec, sched, report_step, lookup_step))
+        .wellSegDimensions  (getWellSegDims(num_tracer_comps, rspec, sched, report_step, lookup_step))
         .regionDimensions   (getRegDims(tdim, rdim))
         .ngroups            ({ ngmax })
         .params_NGCTRL      (GroupControl(sched, report_step, lookup_step))
-        .variousParam       (201802, 100)  // Output should be compatible with Eclipse 100, 2017.02 version.
+        .variousParam       (202204, 100, num_tracer_comps)  // Output should be compatible with Eclipse 100, 2022.04 version.
         .udqParam_1         (getUdqParam(rspec, sched, report_step, lookup_step))
         .actionParam        (getActionParam(rspec, acts, report_step))
         .variousUDQ_ACTIONXParam()
         .nominatedPhaseGuideRate(setGuideRateNominatedPhase(sched, report_step, lookup_step))
         .whistControlMode   (getWhistctlMode(sched, report_step, lookup_step))
-        .activeNetwork  (getActiveNetwork(sched, lookup_step))
+        .activeNetwork      (getActiveNetwork(sched, lookup_step))
         .networkDimensions  (getNetworkDims(sched, lookup_step, rspec))
-        .netBalanceData  (getNetworkBalanceParameters(sched, report_step))
-        .rockOpts(getRockOpts(rckcfg,rdim))
+        .netBalanceData     (getNetworkBalanceParameters(sched, report_step))
+        .rockOpts           (getRockOpts(rckcfg, rdim))
         ;
 
     return ih.data();

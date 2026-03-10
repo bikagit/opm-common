@@ -36,11 +36,9 @@
 
 namespace Opm {
 
-#if HAVE_ECL_INPUT
 class EclipseState;
 class Schedule;
 class SimpleTable;
-#endif
 
 /*!
  * \brief This class represents the Pressure-Volume-Temperature relations of the oil phas
@@ -55,7 +53,6 @@ public:
     using TabulatedTwoDFunction = UniformXTabulated2DFunction<Scalar>;
     using TabulatedOneDFunction = Tabulated1DFunction<Scalar>;
 
-#if HAVE_ECL_INPUT
     /*!
      * \brief Initialize the oil parameters via the data specified by the PVTO ECL keyword.
      */
@@ -68,8 +65,6 @@ private:
                           const SimpleTable& masterTable);
 
 public:
-#endif // HAVE_ECL_INPUT
-
     void setNumRegions(size_t numRegions);
 
     void setVapPars(const Scalar, const Scalar par2)
@@ -88,6 +83,7 @@ public:
     /*!
      * \brief Initialize the function for the gas dissolution factor \f$R_s\f$
      *
+     * \param regionIdx Region index to use
      * \param samplePoints A container of (x,y) values.
      */
     void setSaturatedOilGasDissolutionFactor(unsigned regionIdx,
@@ -215,6 +211,36 @@ public:
     }
 
     /*!
+     * \brief Returns the formation volume factor [-] and viscosity [Pa s] of the fluid phase.
+     */
+    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    std::pair<LhsEval, LhsEval>
+    inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState, unsigned regionIdx)
+    {
+        const LhsEval& p = decay<LhsEval>(fluidState.pressure(FluidState::oilPhaseIdx));
+        const LhsEval& Rs = decay<LhsEval>(fluidState.Rs());
+
+        const auto satSegIdx = this->saturatedGasDissolutionFactorTable_[regionIdx].findSegmentIndex(p, /*extrapolate=*/ true);
+        const auto RsSat = this->saturatedGasDissolutionFactorTable_[regionIdx].eval(p, SegmentIndex{satSegIdx});
+        const bool useSaturatedTables = (fluidState.saturation(FluidState::gasPhaseIdx) > 0.0) && (Rs >= (1.0 - 1e-10) * RsSat);
+
+        if (useSaturatedTables) {
+            const LhsEval b = this->inverseSaturatedOilBTable_[regionIdx].eval(p, SegmentIndex{satSegIdx});
+            const LhsEval invBMu = this->inverseSaturatedOilBMuTable_[regionIdx].eval(p, SegmentIndex{satSegIdx});
+            const LhsEval mu = b / invBMu;
+            return { b, mu };
+        } else {
+            unsigned ii, jj1, jj2;
+            LhsEval alpha, beta1, beta2;
+            this->inverseOilBTable_[regionIdx].findPoints(ii, jj1, jj2, alpha, beta1, beta2, Rs, p, /*extrapolate =*/ true);
+            const LhsEval b = this->inverseOilBTable_[regionIdx].eval(ii, jj1, jj2, alpha, beta1, beta2);
+            const LhsEval invBMu = this->inverseOilBMuTable_[regionIdx].eval(ii, jj1, jj2, alpha, beta1, beta2);
+            const LhsEval mu = b / invBMu;
+            return { b, mu };
+        }
+    }
+
+    /*!
      * \brief Returns the formation volume factor [-] of the fluid phase.
      */
     template <class Evaluation>
@@ -268,6 +294,7 @@ public:
      * \brief Returns the saturation pressure of the oil phase [Pa]
      *        depending on its mass fraction of the gas component
      *
+     * \param regionIdx Region index to use
      * \param Rs The surface volume of gas component dissolved in what will yield one cubic meter of oil at the surface [-]
      */
     template <class Evaluation>

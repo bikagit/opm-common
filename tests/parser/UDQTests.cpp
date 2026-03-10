@@ -42,6 +42,7 @@
 #include <opm/input/eclipse/Schedule/UDQ/UDQAssign.hpp>
 #include <opm/input/eclipse/Schedule/UDQ/UDQConfig.hpp>
 #include <opm/input/eclipse/Schedule/UDQ/UDQContext.hpp>
+#include <opm/input/eclipse/Schedule/UDQ/UDQDefine.hpp>
 #include <opm/input/eclipse/Schedule/UDQ/UDQEnums.hpp>
 #include <opm/input/eclipse/Schedule/UDQ/UDQFunction.hpp>
 #include <opm/input/eclipse/Schedule/UDQ/UDQFunctionTable.hpp>
@@ -61,11 +62,15 @@
 #include <opm/input/eclipse/Parser/ParseContext.hpp>
 #include <opm/input/eclipse/Parser/Parser.hpp>
 
+#include <opm/input/eclipse/Parser/ParserKeywords/D.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <memory>
 #include <limits>
+#include <memory>
+#include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -74,12 +79,18 @@
 using namespace Opm;
 
 namespace {
-    Schedule make_schedule(const std::string& input)
+    Schedule make_schedule(const std::string&  input,
+                           const ParseContext& ctx)
     {
-        auto deck = Parser{}.parseString(input);
-        if (deck.hasKeyword("DIMENS")) {
-            EclipseState es(deck);
-            return { deck, es, std::make_shared<Python>() };
+        const auto deck = Parser{}.parseString(input, ctx);
+
+        if (deck.hasKeyword<ParserKeywords::DIMENS>()) {
+            const auto es = EclipseState { deck };
+            auto errors = ErrorGuard{};
+
+            return {
+                deck, es, ctx, errors, std::make_shared<Python>()
+            };
         }
         else {
             EclipseGrid grid(10,10,10);
@@ -87,16 +98,28 @@ namespace {
             const FieldPropsManager fp(deck, Phases{true, true, true}, grid, table);
             const Runspec runspec(deck);
 
+            auto errors = ErrorGuard{};
+
             return {
-                deck, grid, fp, NumericalAquifers{},
-                runspec, std::make_shared<Python>()
+                deck, grid, fp,
+                NumericalAquifers{},
+                runspec, ctx, errors,
+                std::make_shared<Python>()
             };
         }
     }
 
+    Schedule make_schedule(const std::string& input)
+    {
+        auto ctx = ParseContext{};
+        ctx.update(ParseContext::UDQ_DEFINE_CANNOT_EVAL, InputErrorAction::IGNORE);
+
+        return make_schedule(input, ctx);
+    }
+
     Opm::Segment makeSegment(const int segmentNumber)
     {
-        return { segmentNumber, 1, 1, 1.0, 0.0, 0.5, 0.01, 0.25, 1.23, true, 0.0, 0.0 };
+        return { segmentNumber, 1, 1, 0.0, 1.0, 0.5, 0.01, 0.25, 1.23, true, 0.0, 0.0 };
     }
 
     std::shared_ptr<Opm::WellSegments> makeSegments(const int numSegments)
@@ -543,6 +566,98 @@ BOOST_AUTO_TEST_CASE(UDQ_DEFINETEST) {
     }
 }
 
+BOOST_AUTO_TEST_CASE(Define_Update_Status)
+{
+    using namespace std::string_literals;
+
+    auto def = UDQDefine {
+        UDQParams{}, "WUHOO"s, 0, KeywordLocation{},
+        std::vector {"WBHP"s, "*"s, "0.07"s, }
+    };
+
+    BOOST_CHECK_MESSAGE(def.status().first == UDQUpdate::ON,
+                        R"(Default update setting must be "ON")");
+
+    BOOST_CHECK_MESSAGE(! def.clear_update_next_for_new_report_step(),
+                        R"(Clear "NEXT" must not change object)");
+
+    def.update_status(UDQUpdate::NEXT, 0);
+
+    BOOST_CHECK_MESSAGE(def.status().first == UDQUpdate::NEXT,
+                        R"(Update setting must be "NEXT" after status update)");
+
+    BOOST_CHECK_MESSAGE(def.clear_update_next_for_new_report_step(),
+                        R"(Clear "NEXT" must change object when status is "NEXT)");
+
+    BOOST_CHECK_MESSAGE(def.status().first == UDQUpdate::OFF,
+                        R"(Update setting must be "OFF" after clear "NEXT")");
+
+    BOOST_CHECK_MESSAGE(! def.clear_update_next_for_new_report_step(),
+                        R"(Clear "NEXT" must not change object)");
+}
+
+BOOST_AUTO_TEST_CASE(Update_Next_Must_Reset_at_End_of_Report_Step)
+{
+    const auto deck = Parser{}.parseString(R"(RUNSPEC
+DIMENS
+10 10 3 /
+TABDIMS
+/
+START
+1 OCT 2025 /
+GRID
+DXV
+10*100.0 /
+DYV
+10*100.0 /
+DZV
+3*5.0 /
+DEPTHZ
+121*2000.0 /
+EQUALS
+ PERMX 100.0 /
+ PERMY 100.0 /
+ PERMZ  10.0 /
+ PORO    0.25 /
+/
+PROPS
+DENSITY
+ 800 1000 1 /
+SCHEDULE
+UDQ
+DEFINE WUHOO WBHP * 0.07 /
+UPDATE WUHOO NEXT /
+/
+DATES
+ 2 OCT 2025 /
+/
+)");
+
+    const auto es = EclipseState { deck };
+    const auto sched = Schedule { deck, es };
+
+    {
+        const auto update = sched[0].udq().define("WUHOO").status().first;
+
+        BOOST_CHECK_MESSAGE(update == UDQUpdate::NEXT,
+                            R"(Update setting must be "NEXT")");
+    }
+
+    {
+        const auto update = sched[1].udq().define("WUHOO").status().first;
+
+        BOOST_CHECK_MESSAGE(update == UDQUpdate::OFF,
+                            R"(Update setting must be "OFF")");
+    }
+
+    {
+        const auto update = sched.back().udq().define("WUHOO").status().first;
+
+        BOOST_CHECK_MESSAGE(update == UDQUpdate::OFF,
+                            R"(Update setting must be "OFF")");
+    }
+}
+
 BOOST_AUTO_TEST_CASE(KEYWORDS) {
     const std::string input = R"(
 RUNSPEC
@@ -884,7 +999,7 @@ BOOST_AUTO_TEST_CASE(CMP_FUNCTIONS) {
         BOOST_CHECK_EQUAL( result[2].get(), 0);
         BOOST_CHECK_EQUAL( result[4].get(), 1);
 
-        result = UDQBinaryFunction::EQ(0.20, arg1, arg2);
+        result = UDQBinaryFunction::EQ(0.15, arg1, arg2);
         BOOST_CHECK_EQUAL( result[0].get(), 1);
         BOOST_CHECK_EQUAL( result[2].get(), 0);
         BOOST_CHECK_EQUAL( result[4].get(), 1);
@@ -939,8 +1054,6 @@ BOOST_AUTO_TEST_CASE(CMP_FUNCTIONS) {
         BOOST_CHECK_EQUAL( result[0].get(), 0);
         BOOST_CHECK_EQUAL( result[2].get(), 1);
         BOOST_CHECK_EQUAL( result[4].get(), 1);
-
-
     }
 }
 
@@ -951,6 +1064,258 @@ BOOST_AUTO_TEST_CASE(CMP_FUNCTIONS2) {
 
     auto eq = UDQBinaryFunction::EQ(0, arg1, arg2);
     BOOST_CHECK_EQUAL(eq[0].get(), 1);
+}
+
+BOOST_AUTO_TEST_CASE(Compare_Less_Equal)
+{
+    using namespace std::string_literals;
+
+    auto wu_a = UDQSet::wells("WU_A", std::vector { "W1"s, "W2"s, "W3"s });
+    wu_a.assign("W1"s,  9.9);
+    wu_a.assign("W3"s, 10.3);
+
+    auto wu_b = UDQSet::wells("WU_B", std::vector { "W1"s, "W2"s, "W3"s });
+    wu_b.assign("W1"s,  9.9005);
+    wu_b.assign("W2"s, 10.0);
+    wu_b.assign("W3"s, 10.1);
+
+    const auto scalar = UDQSet::scalar("FUNNY"s, std::make_optional(10.0));
+
+    const auto ftbl = UDQFunctionTable { UDQParams {
+            Parser{}.parseString(R"(UDQPARAM
+  3* 0.01 / -- Relative tolerance 0.01
+)")
+        }
+    };
+
+    const auto cmp_a_le_b = dynamic_cast<const UDQBinaryFunction&>
+        (ftbl.get("<="s)).eval(wu_a, wu_b);
+
+    BOOST_REQUIRE_MESSAGE(cmp_a_le_b["W1"s].defined(),
+                          R"(There must be a defined "a <= b" result for well "W1")");
+    BOOST_CHECK_MESSAGE(! cmp_a_le_b["W2"s].defined(),
+                        R"(There must NOT be a defined "a <= b" result for well "W2")");
+    BOOST_REQUIRE_MESSAGE(cmp_a_le_b["W3"s].defined(),
+                          R"(There must be a defined "a <= b" result for well "W3")");
+
+    BOOST_CHECK_CLOSE(cmp_a_le_b["W1"s].get(), 1.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_a_le_b["W3"s].get(), 0.0, 1.0e-8);
+
+    const auto cmp_a_le_scalar = dynamic_cast<const UDQBinaryFunction&>
+        (ftbl.get("<="s)).eval(wu_a, scalar);
+
+    BOOST_REQUIRE_MESSAGE(cmp_a_le_scalar["W1"s].defined(),
+                          R"(There must be a defined "a <= scalar" result for well "W1")");
+    BOOST_CHECK_MESSAGE(! cmp_a_le_scalar["W2"s].defined(),
+                        R"(There must NOT be a defined "a <= scalar" result for well "W2")");
+    BOOST_REQUIRE_MESSAGE(cmp_a_le_scalar["W3"s].defined(),
+                          R"(There must be a defined "a <= scalar" result for well "W3")");
+
+    BOOST_CHECK_CLOSE(cmp_a_le_scalar["W1"s].get(), 1.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_a_le_scalar["W3"s].get(), 0.0, 1.0e-8);
+
+    const auto cmp_scalar_le_b = dynamic_cast<const UDQBinaryFunction&>
+        (ftbl.get("<="s)).eval(scalar, wu_b);
+
+    BOOST_REQUIRE_MESSAGE(cmp_scalar_le_b["W1"s].defined(),
+                          R"(There must be a defined "scalar <= b" result for well "W1")");
+    BOOST_REQUIRE_MESSAGE(cmp_scalar_le_b["W2"s].defined(),
+                          R"(There must be a defined "scalar <= b" result for well "W2")");
+    BOOST_REQUIRE_MESSAGE(cmp_scalar_le_b["W3"s].defined(),
+                          R"(There must be a defined "scalar <= b" result for well "W3")");
+
+    BOOST_CHECK_CLOSE(cmp_scalar_le_b["W1"s].get(), 1.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_scalar_le_b["W2"s].get(), 1.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_scalar_le_b["W3"s].get(), 1.0, 1.0e-8);
+}
+
+BOOST_AUTO_TEST_CASE(Compare_Equal)
+{
+    using namespace std::string_literals;
+
+    auto wu_a = UDQSet::wells("WU_A", std::vector { "W1"s, "W2"s, "W3"s });
+    wu_a.assign("W1"s,  9.9);
+    wu_a.assign("W3"s, 10.3);
+
+    auto wu_b = UDQSet::wells("WU_B", std::vector { "W1"s, "W2"s, "W3"s });
+    wu_b.assign("W1"s,  9.9005);
+    wu_b.assign("W2"s, 10.0);
+    wu_b.assign("W3"s, 10.1);
+
+    const auto scalar = UDQSet::scalar("FUNNY"s, std::make_optional(10.0));
+
+    const auto ftbl = UDQFunctionTable { UDQParams {
+            Parser{}.parseString(R"(UDQPARAM
+  3* 0.01 / -- Relative tolerance 0.01
+)")
+        }
+    };
+
+    const auto cmp_a_eq_b = dynamic_cast<const UDQBinaryFunction&>
+        (ftbl.get("=="s)).eval(wu_a, wu_b);
+
+    BOOST_REQUIRE_MESSAGE(cmp_a_eq_b["W1"s].defined(),
+                          R"(There must be a defined "a == b" result for well "W1")");
+    BOOST_CHECK_MESSAGE(! cmp_a_eq_b["W2"s].defined(),
+                        R"(There must NOT be a defined "a == b" result for well "W2")");
+    BOOST_REQUIRE_MESSAGE(cmp_a_eq_b["W3"s].defined(),
+                          R"(There must be a defined "a == b" result for well "W3")");
+
+    BOOST_CHECK_CLOSE(cmp_a_eq_b["W1"s].get(), 1.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_a_eq_b["W3"s].get(), 0.0, 1.0e-8);
+
+    const auto cmp_a_eq_scalar = dynamic_cast<const UDQBinaryFunction&>
+        (ftbl.get("=="s)).eval(wu_a, scalar);
+
+    BOOST_REQUIRE_MESSAGE(cmp_a_eq_scalar["W1"s].defined(),
+                          R"(There must be a defined "a == scalar" result for well "W1")");
+    BOOST_CHECK_MESSAGE(! cmp_a_eq_scalar["W2"s].defined(),
+                        R"(There must NOT be a defined "a == scalar" result for well "W2")");
+    BOOST_REQUIRE_MESSAGE(cmp_a_eq_scalar["W3"s].defined(),
+                          R"(There must be a defined "a == scalar" result for well "W3")");
+
+    BOOST_CHECK_CLOSE(cmp_a_eq_scalar["W1"s].get(), 1.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_a_eq_scalar["W3"s].get(), 0.0, 1.0e-8);
+
+    const auto cmp_scalar_eq_b = dynamic_cast<const UDQBinaryFunction&>
+        (ftbl.get("=="s)).eval(scalar, wu_b);
+
+    BOOST_REQUIRE_MESSAGE(cmp_scalar_eq_b["W1"s].defined(),
+                          R"(There must be a defined "scalar == b" result for well "W1")");
+    BOOST_REQUIRE_MESSAGE(cmp_scalar_eq_b["W2"s].defined(),
+                          R"(There must be a defined "scalar == b" result for well "W2")");
+    BOOST_REQUIRE_MESSAGE(cmp_scalar_eq_b["W3"s].defined(),
+                          R"(There must be a defined "scalar == b" result for well "W3")");
+
+    BOOST_CHECK_CLOSE(cmp_scalar_eq_b["W1"s].get(), 1.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_scalar_eq_b["W2"s].get(), 1.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_scalar_eq_b["W3"s].get(), 1.0, 1.0e-8);
+}
+
+BOOST_AUTO_TEST_CASE(Compare_Not_Equal)
+{
+    using namespace std::string_literals;
+
+    auto wu_a = UDQSet::wells("WU_A", std::vector { "W1"s, "W2"s, "W3"s });
+    wu_a.assign("W1"s,  9.9);
+    wu_a.assign("W3"s, 10.3);
+
+    auto wu_b = UDQSet::wells("WU_B", std::vector { "W1"s, "W2"s, "W3"s });
+    wu_b.assign("W1"s,  9.9005);
+    wu_b.assign("W2"s, 10.0);
+    wu_b.assign("W3"s, 10.1);
+
+    const auto scalar = UDQSet::scalar("FUNNY"s, std::make_optional(10.0));
+
+    const auto ftbl = UDQFunctionTable { UDQParams {
+            Parser{}.parseString(R"(UDQPARAM
+  3* 0.01 / -- Relative tolerance 0.01
+)")
+        }
+    };
+
+    const auto cmp_a_ne_b = dynamic_cast<const UDQBinaryFunction&>
+        (ftbl.get("!="s)).eval(wu_a, wu_b);
+
+    BOOST_REQUIRE_MESSAGE(cmp_a_ne_b["W1"s].defined(),
+                          R"(There must be a defined "a != b" result for well "W1")");
+    BOOST_CHECK_MESSAGE(! cmp_a_ne_b["W2"s].defined(),
+                        R"(There must NOT be a defined "a != b" result for well "W2")");
+    BOOST_REQUIRE_MESSAGE(cmp_a_ne_b["W3"s].defined(),
+                          R"(There must be a defined "a != b" result for well "W3")");
+
+    BOOST_CHECK_CLOSE(cmp_a_ne_b["W1"s].get(), 0.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_a_ne_b["W3"s].get(), 1.0, 1.0e-8);
+
+    const auto cmp_a_ne_scalar = dynamic_cast<const UDQBinaryFunction&>
+        (ftbl.get("!="s)).eval(wu_a, scalar);
+
+    BOOST_REQUIRE_MESSAGE(cmp_a_ne_scalar["W1"s].defined(),
+                          R"(There must be a defined "a != scalar" result for well "W1")");
+    BOOST_CHECK_MESSAGE(! cmp_a_ne_scalar["W2"s].defined(),
+                        R"(There must NOT be a defined "a != scalar" result for well "W2")");
+    BOOST_REQUIRE_MESSAGE(cmp_a_ne_scalar["W3"s].defined(),
+                          R"(There must be a defined "a != scalar" result for well "W3")");
+
+    BOOST_CHECK_CLOSE(cmp_a_ne_scalar["W1"s].get(), 0.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_a_ne_scalar["W3"s].get(), 1.0, 1.0e-8);
+
+    const auto cmp_scalar_ne_b = dynamic_cast<const UDQBinaryFunction&>
+        (ftbl.get("!="s)).eval(scalar, wu_b);
+
+    BOOST_REQUIRE_MESSAGE(cmp_scalar_ne_b["W1"s].defined(),
+                          R"(There must be a defined "scalar != b" result for well "W1")");
+    BOOST_REQUIRE_MESSAGE(cmp_scalar_ne_b["W2"s].defined(),
+                          R"(There must be a defined "scalar != b" result for well "W2")");
+    BOOST_REQUIRE_MESSAGE(cmp_scalar_ne_b["W3"s].defined(),
+                          R"(There must be a defined "scalar != b" result for well "W3")");
+
+    BOOST_CHECK_CLOSE(cmp_scalar_ne_b["W1"s].get(), 0.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_scalar_ne_b["W2"s].get(), 0.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_scalar_ne_b["W3"s].get(), 0.0, 1.0e-8);
+}
+
+BOOST_AUTO_TEST_CASE(Compare_Greater_Equal)
+{
+    using namespace std::string_literals;
+
+    auto wu_a = UDQSet::wells("WU_A", std::vector { "W1"s, "W2"s, "W3"s });
+    wu_a.assign("W1"s,  9.8);
+    wu_a.assign("W3"s, 10.3);
+
+    auto wu_b = UDQSet::wells("WU_B", std::vector { "W1"s, "W2"s, "W3"s });
+    wu_b.assign("W1"s,  9.9005);
+    wu_b.assign("W2"s, 10.0);
+    wu_b.assign("W3"s, 10.1);
+
+    const auto scalar = UDQSet::scalar("FUNNY"s, std::make_optional(10.0));
+
+    const auto ftbl = UDQFunctionTable { UDQParams {
+            Parser{}.parseString(R"(UDQPARAM
+  3* 0.01 / -- Relative tolerance 0.01
+)")
+        }
+    };
+
+    const auto cmp_a_ge_b = dynamic_cast<const UDQBinaryFunction&>
+        (ftbl.get(">="s)).eval(wu_a, wu_b);
+
+    BOOST_REQUIRE_MESSAGE(cmp_a_ge_b["W1"s].defined(),
+                          R"(There must be a defined "a >= b" result for well "W1")");
+    BOOST_CHECK_MESSAGE(! cmp_a_ge_b["W2"s].defined(),
+                        R"(There must NOT be a defined "a >= b" result for well "W2")");
+    BOOST_REQUIRE_MESSAGE(cmp_a_ge_b["W3"s].defined(),
+                          R"(There must be a defined "a >= b" result for well "W3")");
+
+    BOOST_CHECK_CLOSE(cmp_a_ge_b["W1"s].get(), 0.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_a_ge_b["W3"s].get(), 1.0, 1.0e-8);
+
+    const auto cmp_a_ge_scalar = dynamic_cast<const UDQBinaryFunction&>
+        (ftbl.get(">="s)).eval(wu_a, scalar);
+
+    BOOST_REQUIRE_MESSAGE(cmp_a_ge_scalar["W1"s].defined(),
+                          R"(There must be a defined "a >= scalar" result for well "W1")");
+    BOOST_CHECK_MESSAGE(! cmp_a_ge_scalar["W2"s].defined(),
+                        R"(There must NOT be a defined "a >= scalar" result for well "W2")");
+    BOOST_REQUIRE_MESSAGE(cmp_a_ge_scalar["W3"s].defined(),
+                          R"(There must be a defined "a >= scalar" result for well "W3")");
+
+    BOOST_CHECK_CLOSE(cmp_a_ge_scalar["W1"s].get(), 0.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_a_ge_scalar["W3"s].get(), 1.0, 1.0e-8);
+
+    const auto cmp_scalar_ge_b = dynamic_cast<const UDQBinaryFunction&>
+        (ftbl.get(">="s)).eval(scalar, wu_b);
+
+    BOOST_REQUIRE_MESSAGE(cmp_scalar_ge_b["W1"s].defined(),
+                          R"(There must be a defined "scalar >= b" result for well "W1")");
+    BOOST_REQUIRE_MESSAGE(cmp_scalar_ge_b["W2"s].defined(),
+                          R"(There must be a defined "scalar >= b" result for well "W2")");
+    BOOST_REQUIRE_MESSAGE(cmp_scalar_ge_b["W3"s].defined(),
+                          R"(There must be a defined "scalar >= b" result for well "W3")");
+
+    BOOST_CHECK_CLOSE(cmp_scalar_ge_b["W1"s].get(), 1.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_scalar_ge_b["W2"s].get(), 1.0, 1.0e-8);
+    BOOST_CHECK_CLOSE(cmp_scalar_ge_b["W3"s].get(), 1.0, 1.0e-8);
 }
 
 BOOST_AUTO_TEST_CASE(ELEMENTAL_UNARY_FUNCTIONS) {
@@ -1200,6 +1565,84 @@ BOOST_AUTO_TEST_CASE(UDQ_POW_TEST) {
     auto res_pow2 = def_pow2.eval(context);
     BOOST_CHECK_EQUAL( res_pow1["P1"].get() , 1 + 2 * std::pow(3,4));
     BOOST_CHECK_EQUAL( res_pow2["P1"].get() , std::pow(1 + 2, 1 + 3*4 - 7));
+}
+
+BOOST_AUTO_TEST_CASE(POW_Set_Raised_to_Scalar)
+{
+    using namespace std::string_literals;
+
+    auto wset = UDQSet::wells("WUZZY"s, std::vector { "W1"s, "W2"s, "W3"s });
+
+    wset.assign("W1"s, 0.5);
+    wset.assign("W3"s, 2.7);
+
+    const auto scalar = UDQSet::scalar("FUNNY"s, std::make_optional(1.2));
+
+    const auto pow = dynamic_cast<const UDQBinaryFunction&>
+        (UDQFunctionTable{}.get("^"s)).eval(wset, scalar);
+
+    BOOST_REQUIRE_MESSAGE(pow["W1"s].defined(), R"(There must be a defined result for well "W1")");
+    BOOST_CHECK_MESSAGE(! pow["W2"s].defined(), R"(There must NOT be a defined result for well "W2")");
+    BOOST_REQUIRE_MESSAGE(pow["W3"s].defined(), R"(There must be a defined result for well "W3")");
+
+    BOOST_CHECK_CLOSE(pow["W1"s].get(), std::pow(0.5, 1.2), 1.0e-8);
+    BOOST_CHECK_CLOSE(pow["W3"s].get(), std::pow(2.7, 1.2), 1.0e-8);
+}
+
+BOOST_AUTO_TEST_CASE(POW_Scalar_Raised_to_Set)
+{
+    using namespace std::string_literals;
+
+    auto wset = UDQSet::wells("WUZZY"s, std::vector { "W1"s, "W2"s, "W3"s });
+
+    wset.assign("W1"s, 0.5);
+    wset.assign("W3"s, 2.7);
+
+    const auto scalar = UDQSet::scalar("FUNNY"s, std::make_optional(1.2));
+
+    const auto pow = dynamic_cast<const UDQBinaryFunction&>
+        (UDQFunctionTable{}.get("^"s)).eval(scalar, wset);
+
+    BOOST_REQUIRE_MESSAGE(pow["W1"s].defined(), R"(There must be a defined result for well "W1")");
+    BOOST_CHECK_MESSAGE(! pow["W2"s].defined(), R"(There must NOT be a defined result for well "W2")");
+    BOOST_REQUIRE_MESSAGE(pow["W3"s].defined(), R"(There must be a defined result for well "W3")");
+
+    BOOST_CHECK_CLOSE(pow["W1"s].get(), std::pow(1.2, 0.5), 1.0e-8);
+    BOOST_CHECK_CLOSE(pow["W3"s].get(), std::pow(1.2, 2.7), 1.0e-8);
+}
+
+BOOST_AUTO_TEST_CASE(POW_Set_Raised_to_Incompatible_Set_Type)
+{
+    using namespace std::string_literals;
+
+    auto wset = UDQSet::wells("WUZZY"s, std::vector { "W1"s, "W2"s, "W3"s });
+    wset.assign("W1"s, 0.5);
+    wset.assign("W3"s, 2.7);
+
+    auto gset = UDQSet::groups("GUPPY", std::vector { "G1"s, "G2"s, "G3"s });
+    gset.assign("G1"s, 0.5);
+    gset.assign("G2"s, 2.7);
+
+    BOOST_CHECK_THROW(dynamic_cast<const UDQBinaryFunction&>
+                      (UDQFunctionTable{}.get("^"s)).eval(gset, wset),
+                      std::logic_error);
+}
+
+BOOST_AUTO_TEST_CASE(POW_Set_Raised_to_Incompatible_Set_Size)
+{
+    using namespace std::string_literals;
+
+    auto wset_1 = UDQSet::wells("WUZZY"s, std::vector { "W1"s, "W2"s, "W3"s });
+    wset_1.assign("W1"s, 0.5);
+    wset_1.assign("W3"s, 2.7);
+
+    auto wset_2 = UDQSet::groups("WUHU", std::vector { "W1"s, "W2"s });
+    wset_2.assign("W1"s, 0.5);
+    wset_2.assign("W2"s, 2.7);
+
+    BOOST_CHECK_THROW(dynamic_cast<const UDQBinaryFunction&>
+                      (UDQFunctionTable{}.get("^"s)).eval(wset_1, wset_2),
+                      std::logic_error);
 }
 
 BOOST_AUTO_TEST_CASE(UDQ_CMP_TEST) {
@@ -1763,28 +2206,29 @@ BOOST_AUTO_TEST_CASE(UDQControl_Keyword)
 
 BOOST_AUTO_TEST_CASE(UDAControl_IUAD_0)
 {
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_ORAT), 300'004);
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_GRAT), 500'004);
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_WRAT), 400'004);
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_LRAT), 600'004);
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_RESV), 700'004);
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_BHP),  800'004);
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_THP),  900'004);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_ORAT),   300'004);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_GRAT),   500'004);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_WRAT),   400'004);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_LRAT),   600'004);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_RESV),   700'004);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_BHP),    800'004);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_THP),    900'004);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONPROD_LIFT), 1'100'004);
 
     BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONINJE_RATE), 400'003);
     BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONINJE_RESV), 500'003);
     BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONINJE_BHP),  600'003);
     BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WCONINJE_THP),  700'003);
 
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONPROD_OIL_TARGET),     200'019);
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONPROD_WATER_TARGET),   300'019);
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONPROD_GAS_TARGET),     400'019);
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONPROD_LIQUID_TARGET),  500'019);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONPROD_OIL_TARGET),    200'020);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONPROD_WATER_TARGET),  300'020);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONPROD_GAS_TARGET),    400'020);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONPROD_LIQUID_TARGET), 500'020);
 
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONINJE_SURFACE_MAX_RATE),       300'017);
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONINJE_RESV_MAX_RATE),          400'017);
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONINJE_TARGET_REINJ_FRACTION),  500'017);
-    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONINJE_TARGET_VOID_FRACTION),   600'017);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONINJE_SURFACE_MAX_RATE),      300'018);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONINJE_RESV_MAX_RATE),         400'018);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONINJE_TARGET_REINJ_FRACTION), 500'018);
+    BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::GCONINJE_TARGET_VOID_FRACTION),  600'018);
 
     BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WELTARG_ORAT),        16);
     BOOST_CHECK_EQUAL(UDQ::udaCode(UDAControl::WELTARG_WRAT),   100'016);
@@ -2260,7 +2704,7 @@ DEFINE WUGASRA  750000 - WGLIR '*' /
         udq.required_summary(keys);
 
         auto required = std::vector<std::string>{ keys.begin(), keys.end() };
-        std::sort(required.begin(), required.end());
+        std::ranges::sort(required);
 
         return required;
     }();
@@ -2366,8 +2810,8 @@ DEFINE FU_VAR36 FU_P1BL + FU_P2BL + FU_VAR32 + FU_VAR33 + FU_VAR34 + FU_VAR35  /
 
 -----XX xxxx xxxx
 ASSIGN FU_VAR37 2300 /
-ASSIGN FU_VAR38 0 /   --  xxxxxx  xx xxxx  xxxx  XX  xxxx 
-ASSIGN FU_VAR39 2300  /  -- xxxx * Y  xxxx xx Z xxxx XX  xxxx 
+ASSIGN FU_VAR38 0 /   --  xxxxxx  xx xxxx  xxxx  XX  xxxx
+ASSIGN FU_VAR39 2300  /  -- xxxx * Y  xxxx xx Z xxxx XX  xxxx
 -- xxxx  xxxx xxxx xxxx
 ASSIGN FU_VAR40 0  /
 DEFINE FU_VAR40 FU_VAR37 + FU_VAR38 + FU_VAR39 /
@@ -2517,7 +2961,7 @@ UDQ
         udq.required_summary(keys);
 
         auto required = std::vector<std::string>{ keys.begin(), keys.end() };
-        std::sort(required.begin(), required.end());
+        std::ranges::sort(required);
 
         return required;
     }();
@@ -3036,4 +3480,135 @@ DEFINE WU_WBHP TU_FBHP[WOPR] UMIN WU_WBHP0 /
 
     BOOST_CHECK_EQUAL(wu_wbhp1, 100.0 + (180.0 - 100.0) * (120.0 - 100.0) / (500.0 - 100.0));
     BOOST_CHECK_EQUAL(wu_wbhp2, 100.0 + (180.0 - 100.0) * (450.0 - 100.0) / (500.0 - 100.0));
+}
+
+BOOST_AUTO_TEST_CASE(UDQ_REQUIRED_WELL_OBJECTS)
+{
+    const auto schedule = make_schedule(R"(RUNSPEC
+UDQDIMS
+   10* 'Y'/
+UDQPARAM
+  3* 0.25 /
+SCHEDULE
+UDQ
+DEFINE FUNNY (WBP 'XD-1H') + ((WGIR 'XD-2H')/((WPI4 'XD-1Z') + 1.0)) /
+/
+)");
+
+    const auto reqObj = schedule[0].udq().define("FUNNY").requiredObjects();
+
+    const auto expect = std::vector<std::string> {
+        "XD-1H", "XD-1Z", "XD-2H",
+    };
+
+    BOOST_CHECK_EQUAL_COLLECTIONS(reqObj.wells.begin(), reqObj.wells.end(),
+                                  expect.begin(), expect.end());
+}
+
+BOOST_AUTO_TEST_CASE(UDQ_REQUIRED_GROUP_OBJECTS)
+{
+    const auto schedule = make_schedule(R"(RUNSPEC
+UDQDIMS
+   10* 'Y'/
+UDQPARAM
+  3* 0.25 /
+SCHEDULE
+UDQ
+DEFINE GUITAR (GGOR HELLO) + ((GWCT 'FIELD')/((GOPT 'PR*') + 1.0)) /
+/
+)");
+
+    const auto reqObj = schedule[0].udq().define("GUITAR").requiredObjects();
+
+    const auto expect = std::vector<std::string> {
+        "FIELD", "HELLO", "PR*",
+    };
+
+    BOOST_CHECK_EQUAL_COLLECTIONS(reqObj.groups.begin(), reqObj.groups.end(),
+                                  expect.begin(), expect.end());
+}
+
+BOOST_AUTO_TEST_CASE(UDQ_REQUIRED_REGION_OBJECTS)
+{
+    const auto schedule = make_schedule(R"(RUNSPEC
+UDQDIMS
+   10* 'Y'/
+UDQPARAM
+  3* 0.25 /
+SCHEDULE
+UDQ
+DEFINE FUNNY (RPR__NUM 42) + ((ROPR__F0 11)/((RODENT 4) + 1.0)) /
+/
+)");
+
+    const auto reqObj = schedule[0].udq().define("FUNNY").requiredObjects();
+
+    {
+        const auto regPos = reqObj.regions.find("FIPNUM");
+        BOOST_REQUIRE_MESSAGE(regPos != reqObj.regions.end(),
+                              R"("FIPNUM" region must be named in "FUNNY" UDQ)");
+
+        const auto expect = std::vector { std::size_t{42} };
+
+        BOOST_CHECK_EQUAL_COLLECTIONS(regPos->second.begin(), regPos->second.end(),
+                                      expect.begin(), expect.end());
+    }
+
+    {
+        const auto regPos = reqObj.regions.find("FIP_F0");
+        BOOST_REQUIRE_MESSAGE(regPos != reqObj.regions.end(),
+                              R"("FIP_F0" region must be named in "FUNNY" UDQ)");
+
+        const auto expect = std::vector { std::size_t{11} };
+
+        BOOST_CHECK_EQUAL_COLLECTIONS(regPos->second.begin(), regPos->second.end(),
+                                      expect.begin(), expect.end());
+    }
+
+    {
+        const auto regPos = reqObj.regions.find("FIPT");
+        BOOST_REQUIRE_MESSAGE(regPos != reqObj.regions.end(),
+                              R"("FIPT" region must be named in "FUNNY" UDQ)");
+
+        const auto expect = std::vector { std::size_t{4} };
+
+        BOOST_CHECK_EQUAL_COLLECTIONS(regPos->second.begin(), regPos->second.end(),
+                                      expect.begin(), expect.end());
+    }
+}
+
+BOOST_AUTO_TEST_CASE(UDQ_REQUIRED_SEGMENT_OBJECTS)
+{
+    const auto schedule = make_schedule(R"(RUNSPEC
+UDQDIMS
+   10* 'Y'/
+UDQPARAM
+  3* 0.25 /
+SCHEDULE
+UDQ
+DEFINE SUSHI (SOFR 'W1' 42) + ((SWCT W1 11)/((SGLR W2) + 1.0)) /
+/
+)");
+
+    const auto reqObj = schedule[0].udq().define("SUSHI").requiredObjects();
+
+    {
+        const auto mswPos = reqObj.msWells.find("W1");
+        BOOST_REQUIRE_MESSAGE(mswPos != reqObj.msWells.end(),
+                              R"(Well "W1" must be named in "SUSHI" UDQ)");
+
+        const auto expect = std::vector { std::size_t{11}, std::size_t{42} };
+
+        BOOST_CHECK_EQUAL_COLLECTIONS(mswPos->second.begin(), mswPos->second.end(),
+                                      expect.begin(), expect.end());
+    }
+
+    {
+        const auto mswPos = reqObj.msWells.find("W2");
+        BOOST_REQUIRE_MESSAGE(mswPos != reqObj.msWells.end(),
+                              R"(Well "W2" must be named in "SUSHI" UDQ)");
+
+        BOOST_CHECK_MESSAGE(mswPos->second.empty(),
+                            R"(Well "W2" must not have any associate segments in "SUSHI" UDQ)");
+    }
 }

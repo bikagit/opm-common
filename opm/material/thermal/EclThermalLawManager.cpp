@@ -29,7 +29,7 @@
 #include <opm/input/eclipse/EclipseState/EclipseState.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/TableManager.hpp>
 
-#include <opm/material/fluidsystems/BlackOilDefaultIndexTraits.hpp>
+#include <opm/material/fluidsystems/BlackOilDefaultFluidSystemIndices.hpp>
 #include <opm/material/fluidsystems/BlackOilFluidSystem.hpp>
 
 #include <cassert>
@@ -242,6 +242,7 @@ initThc_(const EclipseState& eclState, size_t numElems,
         thcwaterData = fieldPropsDoubleOnLeafAssigner(fp, "THCWATER");
 
     const std::vector<double>& poroData = fieldPropsDoubleOnLeafAssigner(fp, "PORO");
+    const std::vector<double>& ntgData = fieldPropsDoubleOnLeafAssigner(fp, "NTG");
 
     thermalConductionLawParams_.resize(numElems);
     for (unsigned elemIdx = 0; elemIdx < numElems; ++elemIdx) {
@@ -249,7 +250,7 @@ initThc_(const EclipseState& eclState, size_t numElems,
         elemParams.setThermalConductionApproach(EclThermalConductionApproach::Thc);
         auto& thcElemParams = elemParams.template getRealParams<EclThermalConductionApproach::Thc>();
 
-        thcElemParams.setPorosity(poroData[elemIdx]);
+        thcElemParams.setPorosity(poroData[elemIdx]*ntgData[elemIdx]);
         double thcrock = thcrockData.empty()    ? 0.0 : thcrockData[elemIdx];
         double thcoil = thcoilData.empty()      ? 0.0 : thcoilData[elemIdx];
         double thcgas = thcgasData.empty()      ? 0.0 : thcgasData[elemIdx];
@@ -274,7 +275,10 @@ initNullCond_()
     thermalConductionLawParams_[0].finalize();
 }
 
-using FS = BlackOilFluidSystem<double,BlackOilDefaultIndexTraits>;
-template class EclThermalLawManager<double,FS>;
+template<class T>
+using FS = BlackOilFluidSystem<T, BlackOilDefaultFluidSystemIndices>;
+
+template class EclThermalLawManager<double, FS<double>>;
+template class EclThermalLawManager<float,  FS<float>>;
 
 } // namespace Opm

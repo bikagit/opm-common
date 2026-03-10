@@ -368,10 +368,7 @@ EclHysterConfig::EclHysterConfig(const Opm::Deck& deck)
         const auto& satoptsItem = deck["SATOPTS"].back().getRecord(0).getItem(0);
         for (unsigned i = 0; i < satoptsItem.data_size(); ++i) {
             std::string satoptsValue = satoptsItem.get< std::string >(0);
-            std::transform(satoptsValue.begin(),
-                           satoptsValue.end(),
-                           satoptsValue.begin(),
-                           ::toupper);
+            std::ranges::transform(satoptsValue, satoptsValue.begin(), ::toupper);
 
             if (satoptsValue == "HYSTER")
                 activeHyst = true;
@@ -394,7 +391,7 @@ EclHysterConfig::EclHysterConfig(const Opm::Deck& deck)
         }
 
         if (!deck.hasKeyword("EHYSTR")) {
-            std::string msg = "Hysteresis is enabled via the HYST parameter for SATOPTS, but the EHYSTR " 
+            std::string msg = "Hysteresis is enabled via the HYST parameter for SATOPTS, but the EHYSTR "
                               "keyword is not present in the deck. \n"
                               "Default values are used for the EHYSTR keyword.";
 
@@ -446,6 +443,26 @@ EclHysterConfig::EclHysterConfig(const Opm::Deck& deck)
         // Killough model: Regularisation for trapped critical saturation calculations
         if (pcHystMod == 0 || krHystMod == 2 || krHystMod == 3)
             modParamTrappedValue = ehystrKeyword.getRecord(0).getItem("mod_param_trapped").get<double>(0);
+
+        if (krHystMod >= 0) {
+            const int fix_wetting_phase_killough = ehystrKeyword.getRecord(0).getItem("fix_wetting_phase_killough").get<int>(0);
+            if (fix_wetting_phase_killough != 0 && fix_wetting_phase_killough != 1) {
+                throw std::runtime_error(
+                    "Only 0 and 1 allowed for the 'fix wetting phase killough flag' "
+                    "(the 13 item of the 'EHYSTR' keyword).");
+            }
+            enableKilloughWettingFix = fix_wetting_phase_killough;
+        }
+
+        if (pcHystMod >= 0) {
+            const int pc_scaling_value = ehystrKeyword.getRecord(0).getItem("enable_pc_scaling").get<int>(0);
+            if (pc_scaling_value != 0 && pc_scaling_value != 1) {
+                throw std::runtime_error(
+                    "Only 0 and 1 allowed for the 'capillary pressure scaling parameter' "
+                    "(the 14 item of the 'EHYSTR' keyword).");
+            }
+            enablePcScaling = pc_scaling_value;
+        }
     }
 
 EclHysterConfig EclHysterConfig::serializationTestObject()
@@ -457,6 +474,8 @@ EclHysterConfig EclHysterConfig::serializationTestObject()
     result.modParamTrappedValue = 3;
     result.curvatureCapPrsValue = 4;
     result.activeWagHyst = true;
+    result.enablePcScaling = false;
+    result.enableKilloughWettingFix = false;
 
     return result;
 }
@@ -479,6 +498,12 @@ double EclHysterConfig::curvatureCapPrs() const
 bool EclHysterConfig::activeWag() const
 { return activeWagHyst; }
 
+bool EclHysterConfig::doPcScaling() const
+{ return enablePcScaling; }
+
+bool EclHysterConfig::fixWettingPhaseKillough() const
+{ return enableKilloughWettingFix; }
+
 bool EclHysterConfig::operator==(const EclHysterConfig& data) const
 {
     return (this->active() == data.active())
@@ -487,6 +512,8 @@ bool EclHysterConfig::operator==(const EclHysterConfig& data) const
         && (this->modParamTrapped() == data.modParamTrapped())
         && (this->curvatureCapPrs() == data.curvatureCapPrs())
         && (this->activeWag() == data.activeWag())
+        && (this->doPcScaling() == data.doPcScaling())
+        && (this->fixWettingPhaseKillough() == data.fixWettingPhaseKillough())
         ;
 }
 
@@ -598,6 +625,12 @@ Tracers Tracers::serializationTestObject() {
 int Tracers::water_tracers() const {
     return this->m_water_tracers;
 }
+int Tracers::gas_tracers() const {
+    return this->m_gas_tracers;
+}
+int Tracers::oil_tracers() const {
+    return this->m_oil_tracers;
+}
 
 
 Tracers::Tracers(const Deck& deck) {
@@ -653,6 +686,7 @@ Runspec::Runspec(const Deck& deck)
     , m_micp       (false)
     , m_mech       (false)
     , m_temp       (false)
+    , m_biof       (false)
 {
     if (DeckSection::hasRUNSPEC(deck)) {
         const RUNSPECSection runspecSection{deck};
@@ -768,6 +802,12 @@ Runspec::Runspec(const Deck& deck)
             OpmLog::note(msg);
         }
 
+        if (runspecSection.hasKeyword<ParserKeywords::FRAC>()) {
+            m_frac = true;
+
+            OpmLog::note("\nSimulation will solve with fractures in wells");
+        }
+
         if (runspecSection.hasKeyword<ParserKeywords::TEMP>()) {
             m_temp = true;
 
@@ -777,6 +817,14 @@ Runspec::Runspec(const Deck& deck)
 
             OpmLog::note(msg);
 
+        }
+
+        if (runspecSection.hasKeyword<ParserKeywords::BIOFILM>()) {
+            m_biof = true;
+
+            const std::string msg = "\nSimulation will solve for biofilm quantities";
+
+            OpmLog::note(msg);
         }
     }
 }
@@ -807,6 +855,7 @@ Runspec Runspec::serializationTestObject()
     result.m_micp = true;
     result.m_mech = true;
     result.m_temp = true;
+    result.m_biof = true;
 
     return result;
 }
@@ -906,6 +955,11 @@ bool Runspec::mech() const noexcept
     return this->m_mech;
 }
 
+bool Runspec::frac() const noexcept
+{
+    return this->m_frac;
+}
+
 bool Runspec::temp() const noexcept
 {
     return this->m_temp;
@@ -915,6 +969,11 @@ bool Runspec::compositional() const noexcept
 {
     // Note: co2store and h2store are only in blackoil setting for now
     return (this->m_comps > 0) && !this->m_co2storage && !this->m_h2storage;
+}
+
+bool Runspec::biof() const noexcept
+{
+    return this->m_biof;
 }
 
 std::time_t Runspec::start_time() const noexcept
@@ -964,7 +1023,9 @@ bool Runspec::rst_cmp(const Runspec& full_spec, const Runspec& rst_spec)
         full_spec.m_h2storage == rst_spec.m_h2storage &&
         full_spec.m_micp == rst_spec.m_micp &&
         full_spec.m_mech == rst_spec.m_mech &&
+        full_spec.m_frac == rst_spec.m_frac &&
         full_spec.m_temp == rst_spec.m_temp &&
+        full_spec.m_biof == rst_spec.m_biof &&
         Welldims::rst_cmp(full_spec.wellDimensions(), rst_spec.wellDimensions());
 }
 
@@ -992,7 +1053,9 @@ bool Runspec::operator==(const Runspec& data) const
         && (this->m_h2storage == data.m_h2storage)
         && (this->m_micp == data.m_micp)
         && (this->m_mech == data.m_mech)
+        && (this->m_frac == data.m_frac)
         && (this->m_temp == data.m_temp)
+        && (this->m_biof == data.m_biof)
         ;
 }
 

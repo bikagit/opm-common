@@ -83,7 +83,7 @@ UDQSet UDQScalarFunction::UDQ_MIN(const UDQSet& arg)
         return UDQSet::empty("MIN");
     }
 
-    return UDQSet::scalar("MIN", *std::min_element(defined_values.begin(), defined_values.end()));
+    return UDQSet::scalar("MIN", *std::ranges::min_element(defined_values));
 }
 
 UDQSet UDQScalarFunction::UDQ_MAX(const UDQSet& arg)
@@ -93,7 +93,7 @@ UDQSet UDQScalarFunction::UDQ_MAX(const UDQSet& arg)
         return UDQSet::empty("MAX");
     }
 
-    return UDQSet::scalar("MAX", *std::max_element(defined_values.begin(), defined_values.end()));
+    return UDQSet::scalar("MAX", *std::ranges::max_element(defined_values));
 }
 
 UDQSet UDQScalarFunction::SUM(const UDQSet& arg)
@@ -135,7 +135,8 @@ UDQSet UDQScalarFunction::AVEG(const UDQSet& arg)
         return UDQSet::empty("AVEG");
     }
 
-    if (std::find_if(defined_values.begin(), defined_values.end(), [](double x) { return x <= 0; }) != defined_values.end())
+    if (std::ranges::find_if(defined_values,
+                             [](double x) { return x <= 0; }) != defined_values.end())
     {
         throw std::invalid_argument("Function AVEG must have only positive arguments");
     }
@@ -381,11 +382,10 @@ UDQSet sortOrder(const UDQSet& arg, Compare&& cmp)
         return result;
     }
 
-    std::sort(ix.begin(), ix.end(), [&arg, cmp = std::forward<Compare>(cmp)]
-              (const int i1, const int i2)
-    {
-        return cmp(*arg[i1].value(), *arg[i2].value());
-    });
+    std::ranges::sort(ix,
+                      [&arg, cmp = std::forward<Compare>(cmp)]
+                      (const int i1, const int i2)
+                      { return cmp(*arg[i1].value(), *arg[i2].value()); });
 
     auto sort_value = 1.0;
     for (const auto& i : ix) {
@@ -394,6 +394,34 @@ UDQSet sortOrder(const UDQSet& arg, Compare&& cmp)
 
     return result;
 }
+
+    bool is_scalar(const UDQSet& s)
+    {
+        return (s.var_type() == UDQVarType::SCALAR)
+            || (s.var_type() == UDQVarType::FIELD_VAR);
+    }
+
+    template <typename Cmp>
+    UDQSet applyBinaryFunction(const UDQSet& lhs, const UDQSet& rhs, Cmp&& func)
+    {
+        auto result = lhs + rhs;
+
+        const auto scalar_lhs = is_scalar(lhs);
+        const auto scalar_rhs = is_scalar(rhs);
+
+        const auto numElem = result.size();
+
+        for (auto index = 0*numElem; index < numElem; ++index) {
+            if (! result[index].defined()) {
+                continue;
+            }
+
+            result.assign(index, func(scalar_lhs ? lhs[0] : lhs[index],
+                                      scalar_rhs ? rhs[0] : rhs[index]));
+        }
+
+        return result;
+    }
 
 } // Anonymous namespace
 
@@ -409,7 +437,8 @@ UDQSet UDQUnaryElementalFunction::SORTD(const UDQSet& arg)
     return sortOrder(arg, std::greater<>{});
 }
 
-UDQBinaryFunction::UDQBinaryFunction(const std::string& name, std::function<UDQSet(const UDQSet& lhs, const UDQSet& rhs)> f)
+UDQBinaryFunction::UDQBinaryFunction(const std::string& name,
+                                     std::function<UDQSet(const UDQSet& lhs, const UDQSet& rhs)> f)
     : UDQFunction(name)
     , func(std::move(f))
 {}
@@ -419,70 +448,57 @@ UDQSet UDQBinaryFunction::eval(const UDQSet& lhs, const UDQSet& rhs) const
     return this->func(lhs, rhs);
 }
 
-UDQSet UDQBinaryFunction::LE(double eps, const UDQSet& lhs, const UDQSet& rhs)
+UDQSet UDQBinaryFunction::LE(const double eps, const UDQSet& lhs, const UDQSet& rhs)
 {
-    auto result = lhs - rhs;
-    auto rel_diff = result / lhs;
+    return applyBinaryFunction(lhs, rhs, [eps](const UDQScalar& x, const UDQScalar& y)
+    {
+        const auto xval = x.get();
+        const auto yval = y.get();
 
-    for (std::size_t index = 0; index < result.size(); ++index) {
-        if (auto elm = result[index]; elm) {
-            if (const double abs_diff = elm.get(); abs_diff == 0) {
-                result.assign(index, 1);
-            }
-            else {
-                result.assign(index, ! (rel_diff[index].get() > eps));
-            }
-        }
-    }
-
-    return result;
+        // x <= y ~ x <= y + e <=> ! (y + e < x)
+        return (xval == yval)
+            || ! (yval + eps * std::max(std::abs(xval), std::abs(yval)) < xval);
+    });
 }
 
-UDQSet UDQBinaryFunction::GE(double eps, const UDQSet& lhs, const UDQSet& rhs)
+UDQSet UDQBinaryFunction::GE(const double eps, const UDQSet& lhs, const UDQSet& rhs)
 {
-    auto result = lhs - rhs;
-    auto rel_diff = result / lhs;
+    return applyBinaryFunction(lhs, rhs, [eps](const UDQScalar& x, const UDQScalar& y)
+    {
+        const auto xval = x.get();
+        const auto yval = y.get();
 
-    for (std::size_t index = 0; index < result.size(); ++index) {
-        if (auto elm = result[index]; elm) {
-            if (const double abs_diff = elm.get(); abs_diff == 0) {
-                result.assign(index, 1);
-            }
-            else {
-                result.assign(index, ! (rel_diff[index].get() < -eps));
-            }
-        }
-    }
-
-    return result;
+        // x >= y ~ x >= y - e <=> ! (x < y - e).
+        return (xval == yval)
+            || ! (xval < yval - eps * std::max(std::abs(xval), std::abs(yval)));
+    });
 }
 
-UDQSet UDQBinaryFunction::EQ(double eps, const UDQSet& lhs, const UDQSet& rhs)
+UDQSet UDQBinaryFunction::EQ(const double eps, const UDQSet& lhs, const UDQSet& rhs)
 {
-    auto result = lhs - rhs;
-    auto rel_diff = result / lhs;
+    return applyBinaryFunction(lhs, rhs, [eps](const UDQScalar& x, const UDQScalar& y)
+    {
+        const auto xval = x.get();
+        const auto yval = y.get();
 
-    for (std::size_t index = 0; index < result.size(); ++index) {
-        if (auto elm = result[index]; elm) {
-            if (const double abs_diff = elm.get(); abs_diff == 0) {
-                result.assign(index, 1);
-            }
-            else {
-                result.assign(index, ! (std::fabs(rel_diff[index].get()) > eps));
-            }
-        }
-    }
+        const auto ubound = eps * std::max(std::abs(xval), std::abs(yval));
 
-    return result;
+        return ! (std::abs(xval - yval) > ubound);
+    });
 }
 
 UDQSet UDQBinaryFunction::NE(double eps, const UDQSet& lhs, const UDQSet& rhs)
 {
     auto result = UDQBinaryFunction::EQ(eps, lhs, rhs);
-    for (std::size_t index = 0; index < result.size(); ++index) {
-        if (auto elm = result[index]; elm) {
-            result.assign(index, 1 - elm.get());
+
+    const auto numElem = result.size();
+
+    for (auto index = 0*numElem; index < numElem; ++index) {
+        if (! result[index].defined()) {
+            continue;
         }
+
+        result.assign(index, 1 - result[index].get());
     }
 
     return result;
@@ -492,9 +508,11 @@ UDQSet UDQBinaryFunction::GT(const UDQSet& lhs, const UDQSet& rhs)
 {
     auto result = lhs - rhs;
 
-    for (std::size_t index = 0; index < result.size(); ++index) {
-        if (auto elm = result[index]; elm) {
-            result.assign(index, elm.get() > 0.0);
+    const auto numElem = result.size();
+
+    for (auto index = 0*numElem; index < numElem; ++index) {
+        if (const auto& elem = result[index]; elem.defined()) {
+            result.assign(index, elem.get() > 0.0);
         }
     }
 
@@ -505,9 +523,11 @@ UDQSet UDQBinaryFunction::LT(const UDQSet& lhs, const UDQSet& rhs)
 {
     auto result = lhs - rhs;
 
-    for (std::size_t index = 0; index < result.size(); ++index) {
-        if (auto elm = result[index]; elm) {
-            result.assign(index, elm.get() < 0.0);
+    const auto numElem = result.size();
+
+    for (auto index = 0*numElem; index < numElem; ++index) {
+        if (const auto& elem = result[index]; elem.defined()) {
+            result.assign(index, elem.get() < 0.0);
         }
     }
 
@@ -596,13 +616,19 @@ UDQSet UDQBinaryFunction::DIV(const UDQSet& lhs, const UDQSet& rhs)
 
 UDQSet UDQBinaryFunction::POW(const UDQSet& lhs, const UDQSet& rhs)
 {
-    UDQSet result = lhs;
-    for (std::size_t index = 0; index < result.size(); ++index) {
-        auto& lhs_elm = lhs[index];
-        auto& rhs_elm = rhs[index];
+    auto result = lhs + rhs;
 
-        if (lhs_elm && rhs_elm) {
-            result.assign(index, std::pow(lhs_elm.get(), rhs_elm.get()));
+    const auto scalar_lhs = is_scalar(lhs);
+    const auto scalar_rhs = is_scalar(rhs);
+
+    const auto numElem = result.size();
+
+    for (auto index = 0*numElem; index < numElem; ++index) {
+        const auto base     = scalar_lhs ? 0 : index;
+        const auto exponent = scalar_rhs ? 0 : index;
+
+        if (lhs[base].defined() && rhs[exponent].defined()) {
+            result.assign(index, std::pow(lhs[base].get(), rhs[exponent].get()));
         }
     }
 

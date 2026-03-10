@@ -110,7 +110,7 @@ namespace Opm {
 	    }
 
         template <typename StringArray>
-	ParameterGroup::ParameterGroup(int argc, StringArray argv, bool verify_syntax,
+        ParameterGroup::ParameterGroup(int argc, StringArray argv, bool verify_syntax,
                                        const bool enable_output)
             : path_(ID_path_root), parent_(0), output_is_enabled_(enable_output)
 	{
@@ -262,7 +262,7 @@ namespace Opm {
 		T val = this->translate<T>(*it, r);
 		it->second->setUsed();
 		if (output_is_enabled_) {
-            	    OpmLog::debug(name + " found at " + path() + ID_delimiter_path 
+            	    OpmLog::debug(name + " found at " + path() + ID_delimiter_path
                          + ", value is '" + to_string(val) + "'.");
 		}
 		return val;

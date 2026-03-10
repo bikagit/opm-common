@@ -71,11 +71,9 @@ static bool has_result_files(const std::string& rootName)
 {
     std::vector<std::string> extList = { "EGRID", "INIT", "UNRST", "SMSPEC", "RFT" };
 
-    return std::any_of(extList.begin(), extList.end(),
-                       [&rootName](const auto& ext)
-                       {
-                           return std::filesystem::exists(rootName + '.' + ext);
-                       });
+    return std::ranges::any_of(extList,
+                               [&rootName](const auto& ext)
+                               { return std::filesystem::exists(rootName + '.' + ext); });
 }
 
 //------------------------------------------------//

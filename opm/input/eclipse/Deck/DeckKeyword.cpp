@@ -38,6 +38,14 @@ namespace Opm {
     {
     }
 
+    DeckKeyword::DeckKeyword(const KeywordLocation& location, const ParserKeyword& parserKeyword) :
+        m_keywordName(parserKeyword.getName()),
+        m_location(location),
+        m_isDataKeyword(false),
+        m_slashTerminated(!parserKeyword.hasFixedSize())
+    {
+    }
+
     DeckKeyword::DeckKeyword(const KeywordLocation& location, const std::string& keywordName) :
         m_keywordName(keywordName),
         m_location(location),
@@ -163,8 +171,8 @@ namespace Opm {
         }
     }
 
-    DeckKeyword::DeckKeyword(const ParserKeyword& parserKeyword, const std::vector<int>& data) :
-        DeckKeyword(parserKeyword)
+    DeckKeyword::DeckKeyword(const ParserKeyword& parserKeyword, const std::vector<int>& data, const KeywordLocation& location) :
+        DeckKeyword(location, parserKeyword)
     {
         if (!parserKeyword.isDataKeyword())
             throw std::invalid_argument("Deckkeyword '" + name() + "' is not a data keyword.");
@@ -177,7 +185,7 @@ namespace Opm {
             throw std::invalid_argument("Input to DeckKeyword '" + name() + "': cannot be std::vector<int>.");
 
         DeckItem item(parser_item.name(), int() );
-        std::for_each(data.begin(), data.end(), [&item](const int val) { item.push_back(val); });
+        std::ranges::for_each(data, [&item](const int val) { item.push_back(val); });
 
         DeckRecord deck_record;
         deck_record.addItem( std::move(item) );
@@ -185,8 +193,8 @@ namespace Opm {
     }
 
 
-    DeckKeyword::DeckKeyword(const ParserKeyword& parserKeyword, const std::vector<double>& data, const UnitSystem& system_active, const UnitSystem& system_default) :
-        DeckKeyword(parserKeyword)
+    DeckKeyword::DeckKeyword(const ParserKeyword& parserKeyword, const std::vector<double>& data, const UnitSystem& system_active, const UnitSystem& system_default, const KeywordLocation& location) :
+        DeckKeyword(location, parserKeyword)
     {
         if (!parserKeyword.isDataKeyword())
             throw std::invalid_argument("Deckkeyword '" + name() + "' is not a data keyword.");
@@ -206,7 +214,7 @@ namespace Opm {
              default_dimensions.push_back( system_default.parse(dim[0]) );
         }
         DeckItem item(parser_item.name(), double(), active_dimensions, default_dimensions);
-        std::for_each(data.begin(), data.end(), [&item](const double val) { item.push_back(val); });
+        std::ranges::for_each(data, [&item](const double val) { item.push_back(val); });
 
         DeckRecord deck_record;
         deck_record.addItem( std::move(item) );
@@ -291,16 +299,25 @@ namespace Opm {
         return this->getDataRecord().getDataItem().data_size();
     }
 
-
-    const std::vector<int>& DeckKeyword::getIntData() const {
-        return this->getDataRecord().getDataItem().getData< int >();
+    std::vector<int>& DeckKeyword::getIntData()
+    {
+         return this->getRecord(0).getItem(0).getData<int>();
     }
 
-
-    const std::vector<std::string>& DeckKeyword::getStringData() const {
-        return this->getDataRecord().getDataItem().getData< std::string >();
+    const std::vector<int>& DeckKeyword::getIntData() const
+    {
+        return this->getDataRecord().getDataItem().getData<int>();
     }
 
+    const std::vector<std::string>& DeckKeyword::getStringData() const
+    {
+        return this->getDataRecord().getDataItem().getData<std::string>();
+    }
+
+    std::vector<double>& DeckKeyword::getRawDoubleData()
+    {
+        return this->getRecord(0).getItem(0).getData<double>();
+    }
 
     const std::vector<double>& DeckKeyword::getRawDoubleData() const {
         return this->getDataRecord().getDataItem().getData< double >();
@@ -380,4 +397,3 @@ namespace Opm {
     }
 
 }
-

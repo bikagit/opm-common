@@ -21,13 +21,11 @@
 #define CONNECTIONSET_HPP_
 
 #include <opm/input/eclipse/Schedule/Well/Connection.hpp>
-#include <external/resinsight/LibGeometry/cvfBoundingBoxTree.h>
 
 #include <array>
 #include <cstddef>
 #include <optional>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include <stddef.h>
@@ -40,6 +38,7 @@ namespace Opm {
     class KeywordLocation;
     class ScheduleGrid;
     class WDFAC;
+    struct WellTrajInfo;
 } // namespace Opm
 
 namespace Opm {
@@ -86,13 +85,6 @@ namespace Opm {
                            const std::size_t seqIndex = 0,
                            int lgr_grid_number = 0,
                            const bool defaultSatTabId = true);
-        
-        void loadCOMPDATX(const DeckRecord&      record,
-                         const ScheduleGrid&    grid,
-                         const std::string&     wname,
-                         const WDFAC&           wdfac,
-                         const KeywordLocation& location,
-                         std::optional<std::string> lgr_label);
 
         void loadCOMPDAT(const DeckRecord&      record,
                          const ScheduleGrid&    grid,
@@ -104,13 +96,13 @@ namespace Opm {
                           const ScheduleGrid&    grid,
                           const std::string&     wname,
                           const WDFAC&           wdfac,
-                          const KeywordLocation& location);                         
+                          const KeywordLocation& location);
 
         void loadCOMPTRAJ(const DeckRecord&      record,
                           const ScheduleGrid&    grid,
                           const std::string&     wname,
                           const KeywordLocation& location,
-                          external::cvf::ref<external::cvf::BoundingBoxTree>& cellSearchTree);
+                          WellTrajInfo&         wellTraj);
 
         void loadWELTRAJ(const DeckRecord&      record,
                          const ScheduleGrid&    grid,
@@ -140,7 +132,6 @@ namespace Opm {
         const_iterator end() const { return this->m_connections.end(); }
         auto begin() { return this->m_connections.begin(); }
         auto end() { return this->m_connections.end(); }
-        void filter(const ActiveGridCells& grid);
         bool allConnectionsShut() const;
         /// Order connections irrespective of input order.
         /// The algorithm used is the following:
@@ -219,6 +210,13 @@ namespace Opm {
         void orderTRACK();
         void orderMSW();
         void orderDEPTH();
+
+        void loadCOMPDATX(const DeckRecord&                 record,
+                          const ScheduleGrid&               grid,
+                          const std::string&                wname,
+                          const WDFAC&                      wdfac,
+                          const KeywordLocation&            location,
+                          const std::optional<std::string>& lgr_label);
     };
 
     std::optional<int>

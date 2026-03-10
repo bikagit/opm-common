@@ -42,21 +42,20 @@ namespace {
 
     std::vector<std::string> normalisedRegsetNames(std::vector<std::string> regSets)
     {
-        if (std::find(regSets.begin(), regSets.end(), "FIPNUM") == regSets.end()) {
+        if (std::ranges::find(regSets, "FIPNUM") == regSets.end()) {
             // Standard region set FIPNUM is always present, even if not
             // explicitly mentioned in the input.
             regSets.push_back("FIPNUM");
         }
 
-        std::transform(regSets.begin(), regSets.end(), regSets.begin(),
-                        &normalisedRegsetName);
+        std::ranges::transform(regSets, regSets.begin(), &normalisedRegsetName);
 
         return regSets;
     }
 
     std::vector<std::string> sorted(std::vector<std::string> strings)
     {
-        std::sort(strings.begin(), strings.end());
+        std::ranges::sort(strings);
         return strings;
     }
 
@@ -66,7 +65,7 @@ namespace {
 
         return regID.empty()
             ? -1
-            : *std::max_element(regID.begin(), regID.end());
+            : *std::ranges::max_element(regID);
     }
 
     std::vector<int> localMaxRegionID(const std::vector<std::string>& regSets,
@@ -74,11 +73,9 @@ namespace {
     {
         auto maxRegionID = std::vector<int>(regSets.size());
 
-        std::transform(regSets.begin(), regSets.end(), maxRegionID.begin(),
-                       [&fldPropsMgr](const std::string& regSet)
-                       {
-                           return localMaxRegionID("FIP" + regSet, fldPropsMgr);
-                       });
+        std::ranges::transform(regSets, maxRegionID.begin(),
+                               [&fldPropsMgr](const std::string& regSet)
+                               { return localMaxRegionID("FIP" + regSet, fldPropsMgr); });
 
         return maxRegionID;
     }

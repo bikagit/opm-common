@@ -166,9 +166,11 @@ ESmry::ESmry(const std::string &filename, bool loadBaseRunData) :
         auto arrays = smspecList.back().getList();
         std::vector<int> vectIndices;
 
-        for (size_t n = 0; n < arrays.size(); n++)
-            if(std::find(vectList.begin(), vectList.end(), std::get<0>(arrays[n])) != vectList.end())
+        for (size_t n = 0; n < arrays.size(); n++) {
+            if (std::ranges::find(vectList, std::get<0>(arrays[n])) != vectList.end()) {
                vectIndices.push_back(static_cast<int>(n));
+            }
+        }
 
         smspecList.back().loadData(vectIndices);
 
@@ -311,9 +313,11 @@ ESmry::ESmry(const std::string &filename, bool loadBaseRunData) :
         auto arrays = smspecList.back().getList();
         std::vector<int> vectIndices;
 
-        for (size_t n = 0; n < arrays.size(); n++)
-            if(std::find(vectList.begin(), vectList.end(), std::get<0>(arrays[n])) != vectList.end())
+        for (size_t n = 0; n < arrays.size(); n++) {
+            if (std::ranges::find(vectList, std::get<0>(arrays[n])) != vectList.end()) {
                vectIndices.push_back(static_cast<int>(n));
+            }
+        }
 
         smspecList.back().loadData(vectIndices);
 
@@ -589,7 +593,7 @@ ESmry::ESmry(const std::string &filename, bool loadBaseRunData) :
 
             i++;
 
-            if (std::find(dataFileList.begin(), dataFileList.end(), std::get<1>(arraySourceList[i])) == dataFileList.end())
+            if (std::ranges::find(dataFileList, std::get<1>(arraySourceList[i])) == dataFileList.end())
             {
                 dataFileList.push_back(std::get<1>(arraySourceList[i]));
                 dataFileIndex++;
@@ -826,7 +830,7 @@ std::vector<int> ESmry::makeKeywPosVector(int specInd) const
 
     auto has_index = [&keywpos](const int ix)
     {
-        return std::find(keywpos.begin(), keywpos.end(), ix) != keywpos.end();
+        return std::ranges::find(keywpos, ix) != keywpos.end();
     };
 
     const auto& kwList = keywordListSpecFile[specInd];
@@ -1023,7 +1027,8 @@ ESmry::getListOfArrays(const std::string& filename, bool formatted)
 
             fseek(ptr, 8, SEEK_CUR);
 
-            if ((strcmp(arrName, "SEQHDR  ") == 0) || (strcmp(arrName, "MINISTEP") == 0))
+            if ((strcmp(arrName, "SEQHDR  ") == 0) || (strcmp(arrName, "MINISTEP") == 0)
+                  || (strcmp(arrName, "TNAVHEAD") == 0) || (strcmp(arrName, "TNAVTIME") == 0) )
                 arrType = Opm::EclIO::INTE;
             else if (strcmp(arrName, "PARAMS  ") == 0)
                 arrType = Opm::EclIO::REAL;
@@ -1032,11 +1037,13 @@ ESmry::getListOfArrays(const std::string& filename, bool formatted)
             }
         }
 
-        uint64_t filePos = static_cast<uint64_t>(ftell(ptr));
 
-        std::tuple <std::string, uint64_t> t1;
-        t1 = std::make_tuple(Opm::EclIO::trimr(arrName), filePos);
-        resultVect.push_back(t1);
+        if (std::ranges::find(ignore_keyword_list, std::string(arrName)) == ignore_keyword_list.end()) {
+            uint64_t filePos = static_cast<uint64_t>(ftell(ptr));
+            std::tuple <std::string, uint64_t> t1;
+            t1 = std::make_tuple(Opm::EclIO::trimr(arrName), filePos);
+            resultVect.push_back(t1);
+        }
 
         if (num > 0) {
             if (formatted) {
@@ -1085,11 +1092,16 @@ bool ESmry::make_esmry_file()
         std::vector<int> is_rstep;
         is_rstep.reserve(timeStepList.size());
 
-        for (size_t i = 0; i < timeStepList.size(); i++)
-            if(std::find(seqIndex.begin(), seqIndex.end(), i) != seqIndex.end())
-                is_rstep.push_back(1);
-            else
+        int rstep_num = 0;
+
+        for (size_t i = 0; i < timeStepList.size(); ++i) {
+            if (std::ranges::find(seqIndex, i) != seqIndex.end()) {
+                is_rstep.push_back(++rstep_num);
+            }
+            else {
                 is_rstep.push_back(0);
+            }
+        }
 
         this->loadData();
 
@@ -1108,8 +1120,8 @@ bool ESmry::make_esmry_file()
             std::vector<std::string> units;
             units.reserve(keyword.size());
 
-            std::transform(keyword.begin(), keyword.end(), std::back_inserter(units),
-                           [this](const auto& key) { return kwunits.at(key); });
+            std::ranges::transform(keyword, std::back_inserter(units),
+                                   [this](const auto& key) { return kwunits.at(key); });
 
             Opm::EclIO::EclOutput outFile(smryDataFile.generic_string(), false, std::ios::out);
 
@@ -1155,7 +1167,7 @@ std::vector<std::string> ESmry::checkForMultipleResultFiles(const std::filesyste
         }
     }
 
-    std::sort(fileList.begin(), fileList.end());
+    std::ranges::sort(fileList);
 
     return fileList;
 }
@@ -1186,7 +1198,7 @@ void ESmry::updatePathAndRootName(std::filesystem::path& dir, std::filesystem::p
 
 bool ESmry::hasKey(const std::string &key) const
 {
-    return std::find(keyword.begin(), keyword.end(), key) != keyword.end();
+    return std::ranges::find(keyword, key) != keyword.end();
 }
 
 
@@ -1359,8 +1371,7 @@ const std::string& ESmry::get_unit(const SummaryNode& node) const {
 
 const std::vector<float>& ESmry::get(const std::string& name) const
 {
-    auto it = std::find(keyword.begin(), keyword.end(), name);
-
+    const auto it = std::ranges::find(keyword, name);
     if (it == keyword.end()) {
         OPM_THROW(std::invalid_argument, "keyword " + name + " not found ");
     }
@@ -1408,8 +1419,8 @@ std::vector<std::string> ESmry::keywordList(const std::string& pattern) const
 {
     std::vector<std::string> list;
 
-    std::copy_if(keyword.begin(), keyword.end(), std::back_inserter(list),
-                 [&pattern](const auto& key) { return shmatch(pattern, key); });
+    std::ranges::copy_if(keyword, std::back_inserter(list),
+                         [&pattern](const auto& key) { return shmatch(pattern, key); });
     return list;
 }
 
@@ -1424,15 +1435,13 @@ std::vector<Opm::time_point> ESmry::dates() const
     double time_unit = 24 * 3600;
     std::vector<Opm::time_point> d;
 
-    std::transform(this->get("TIME").begin(),
-                   this->get("TIME").end(),
-                   std::back_inserter(d),
-                   [this, time_unit](const auto& t)
-                   {
-                       using Seconds = std::chrono::duration<double, std::chrono::seconds::period>;
-                       return this->tp_startdat +
-                           std::chrono::duration_cast<time_point::duration>(Seconds{t * time_unit});
-                   });
+    std::ranges::transform(this->get("TIME"), std::back_inserter(d),
+                           [this, time_unit](const auto& t)
+                           {
+                               using Seconds = std::chrono::duration<double, std::chrono::seconds::period>;
+                               return this->tp_startdat +
+                                      std::chrono::duration_cast<time_point::duration>(Seconds{t * time_unit});
+                           });
 
     return d;
 }

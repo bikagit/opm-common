@@ -104,6 +104,11 @@ namespace {
         return UnitSystem::newMETRIC().to_si(UnitSystem::measure::liquid_productivity_index, 1.0);
     }
 
+    double sm3_per_day()
+    {
+        return UnitSystem::newMETRIC().to_si(UnitSystem::measure::liquid_surface_rate, 1.0);
+    }
+
     double cp_rm3_per_db()
     {
         return UnitSystem::newMETRIC().to_si(UnitSystem::measure::transmissibility, 1.0);
@@ -158,6 +163,11 @@ WELSPECS
     std::string createDeckWTEST()
     {
         return { R"(
+RUNSPEC
+OIL
+WATER
+GAS
+
 START             -- 0
 10 MAI 2007 /
 GRID
@@ -224,6 +234,7 @@ WELSPECS
 WLIST
   '*ILIST'  'NEW'  I1 /
   '*ILIST'  'ADD'  I2 /
+  '*EMPTY'  'NEW' /
 /
 
 WCONPROD
@@ -260,6 +271,11 @@ WCONINJH
     std::string createDeckForTestingCrossFlow()
     {
         return { R"(
+RUNSPEC
+OIL
+WATER
+GAS
+
 START             -- 0
 10 MAI 2007 /
 GRID
@@ -371,56 +387,12 @@ WELSPECS
 )" };
     }
 
-    std::string createDeckWithWellsAndCompletionData()
-    {
-        return { R"(
-START             -- 0
-1 NOV 1979 /
-GRID
-PORO
-    1000*0.1 /
-PERMX
-    1000*1 /
-PERMY
-    1000*0.1 /
-PERMZ
-    1000*0.01 /
-SCHEDULE
-DATES             -- 1
- 1 DES 1979/
-/
-WELSPECS
-    'OP_1'       'OP'   9   9 1*     'OIL' 1*      1*  1*   1*  1*   1*  1*  /
-    'OP_2'       'OP'   8   8 1*     'OIL' 1*      1*  1*   1*  1*   1*  1*  /
-    'OP_3'       'OP'   7   7 1*     'OIL' 1*      1*  1*   1*  1*   1*  1*  /
-/
-COMPDAT
- 'OP_1'  9  9   1   1 'OPEN' 1*   32.948   0.311  3047.839 1*  1*  'X'  22.100 /
- 'OP_1'  9  9   2   2 'OPEN' 1*   46.825   0.311  4332.346 1*  1*  'X'  22.123 /
- 'OP_2'  8  8   1   3 'OPEN' 1*    1.168   0.311   107.872 1*  1*  'Y'  21.925 /
- 'OP_2'  8  7   3   3 'OPEN' 1*   15.071   0.311  1391.859 1*  1*  'Y'  21.920 /
- 'OP_2'  8  7   3   6 'OPEN' 1*    6.242   0.311   576.458 1*  1*  'Y'  21.915 /
- 'OP_3'  7  7   1   1 'OPEN' 1*   27.412   0.311  2445.337 1*  1*  'Y'  18.521 /
- 'OP_3'  7  7   2   2 'OPEN' 1*   55.195   0.311  4923.842 1*  1*  'Y'  18.524 /
-/
-DATES             -- 2,3
- 10  JUL 2007 /
- 10  AUG 2007 /
-/
-COMPDAT // with defaulted I and J
- 'OP_1'  0  *   3  9 'OPEN' 1*   32.948   0.311  3047.839 1*  1*  'X'  22.100 /
-/
-)" };
-    }
-
     bool has_name(const std::vector<std::string>& names,
                   const std::string& name)
     {
-        return std::any_of(names.begin(), names.end(),
-                           [&name](const std::string& search)
-                           {
-                               return search == name;
-                           });
+        return std::ranges::any_of(names,
+                                   [&name](const std::string& search)
+                                   { return search == name; });
     }
 
 } // Anonymous namespace
@@ -467,9 +439,9 @@ BOOST_AUTO_TEST_CASE(CreateScheduleDeckWellsOrderedGRUPTREE)
     const auto schedule = make_schedule(createDeckWithWellsOrderedGRUPTREE());
     const auto group_names = schedule.groupNames("P*", 0);
 
-    BOOST_CHECK( std::find(group_names.begin(), group_names.end(), "PG1") != group_names.end() );
-    BOOST_CHECK( std::find(group_names.begin(), group_names.end(), "PG2") != group_names.end() );
-    BOOST_CHECK( std::find(group_names.begin(), group_names.end(), "PLATFORM") != group_names.end() );
+    BOOST_CHECK(std::ranges::find(group_names, "PG1") != group_names.end());
+    BOOST_CHECK(std::ranges::find(group_names, "PG2") != group_names.end());
+    BOOST_CHECK(std::ranges::find(group_names, "PLATFORM") != group_names.end());
 }
 
 
@@ -526,6 +498,10 @@ BOOST_AUTO_TEST_CASE(EmptyScheduleHasFIELDGroup) {
 
 BOOST_AUTO_TEST_CASE(HasGroup_At_Time) {
     const auto input = std::string { R"(
+RUNSPEC
+OIL
+WATER
+
 SCHEDULE
 WELSPECS
 -- Group 'P' exists from the first report step
@@ -1220,6 +1196,11 @@ DATES             -- 6
 
 BOOST_AUTO_TEST_CASE(createDeckWithWeltArg) {
     std::string input = R"(
+RUNSPEC
+OIL
+WATER
+GAS
+
 START             -- 0
 19 JUN 2007 /
 GRID
@@ -1341,6 +1322,11 @@ I1 THP 4 /
 
 BOOST_AUTO_TEST_CASE(createDeckWithWeltArg_UDA) {
     std::string input = R"(
+RUNSPEC
+OIL
+WATER
+GAS
+
 START             -- 0
 19 JUN 2007 /
 GRID
@@ -1448,7 +1434,132 @@ WELTARG
     BOOST_CHECK_THROW(make_schedule(input), std::exception);
 }
 
+BOOST_AUTO_TEST_CASE(Weltarg_Empty_WList)
+{
+    const auto deck = Parser{}.parseString(R"(RUNSPEC
+DIMENS
+ 6 5 7 /
 
+OIL
+WATER
+GAS
+
+METRIC
+
+START
+ 3 'JUL' 2025 /
+
+--
+WELLDIMS
+--max.well  max.con/well  max.grup  max.w/grup  WLISTDYN
+  10        10            30        30    6*      2      /
+
+--
+TABDIMS
+--ntsfun     ntpvt  max.nssfun  max.nppvt  max.ntfip  max.nrpvt
+  1          1      50          60         72         60 /
+
+GRID
+
+DXV
+ 6*123.4 /
+
+DYV
+ 5*123.4 /
+
+DZV
+ 7*12.34 /
+
+DEPTHZ
+ 42*2000.0 /
+
+EQUALS
+  PORO 0.3 /
+  PERMX 100.0 /
+  PERMY 100.0 /
+  PERMZ  10.0 /
+  NTG  0.82 /
+/
+
+PROPS
+
+SWOF
+  0 0 1 0
+  1 1 0 0 /
+
+SGOF
+  0 0 1 0
+  1 1 0 0 /
+
+PVTW
+  1 2 3 4 5 /
+
+PVDG
+   1 1     0.001
+ 250 0.001 0.001 /
+
+PVDO
+   1 1     0.25
+ 250 0.99  0.25 /
+
+SOLUTION
+
+SWAT
+  210*0.25 /
+
+SGAS
+  210*0.6 /
+
+PRESSURE
+  210*100 /
+
+SCHEDULE
+
+WELSPECS
+  'P-1'   'TEST'  1  1  1*  'OIL'  2*  'STOP' /
+/
+
+COMPDAT
+-- WELL    I   J  K1   K2            Sat.   CF   DIAM
+   'P-1'   1   1   1	4    'OPEN'  1*     1*   0.25 /
+/
+
+WCONPROD
+  'P-1' 'OPEN'  'ORAT'  123.4 /
+/
+
+WLIST
+ '*EMPTY' NEW /
+/
+
+WELTARG
+-- Resetting a target on an empty WLIST is a no-op.
+ '*EMPTY' GRAT 13500 /
+/
+
+DATES
+ 10 JUL 2025 /
+/
+END
+)");
+
+    const auto es = EclipseState { deck };
+
+    // This is the real test here.  We're supposed to be able to create a
+    // Schedule object even when there is a WELTARG applied to an '*EMPTY'
+    // WLIST.  The rest of the statements are just to ensure that there is
+    // an actual assertion in this unit test.
+    const auto schedule = Schedule { deck, es };
+
+    const auto udq_default = 0.0;
+    const auto st = SummaryState { TimeService::now(), udq_default };
+
+    const auto controls = schedule.back().wells("P-1")
+        .getProductionProperties()
+        .controls(st, udq_default);
+
+    BOOST_CHECK_CLOSE(controls.oil_rate, 123.4*sm3_per_day(), 1.0e-8);
+}
 
 BOOST_AUTO_TEST_CASE(createDeckWithWeltArgException) {
     std::string input = R"(
@@ -1692,7 +1803,7 @@ WPIMULT
  'OP_2'  7.0 /
 /
 DATES             -- 7
- 20  FEB 2014 /
+ 21  FEB 2014 /
 /
 END
 )";
@@ -2322,6 +2433,11 @@ WCONHIST
 
 BOOST_AUTO_TEST_CASE(fromWCONHISTtoWCONPROD) {
     std::string input = R"(
+RUNSPEC
+OIL
+WATER
+GAS
+
 START             -- 0
 19 JUN 2007 /
 GRID
@@ -3030,11 +3146,11 @@ WELOPEN
     BOOST_CHECK_EQUAL( conn1.size(), 3);
     for (const auto& conn : conn_all) {
         if (conn.complnum() == 1) {
-            auto conn_iter = std::find_if(conn1.begin(), conn1.end(), [&conn](const Connection * cptr)
-                                                                      {
-                                                                          return *cptr == conn;
-                                                                      });
-            BOOST_CHECK( conn_iter != conn1.end() );
+            const auto conn_iter =
+                    std::ranges::find_if(conn1,
+                                         [&conn](const Connection* cptr)
+                                         { return *cptr == conn; });
+            BOOST_CHECK(conn_iter != conn1.end());
         }
     }
 
@@ -3607,6 +3723,11 @@ WEFAC
 
 BOOST_AUTO_TEST_CASE(historic_BHP_and_THP) {
     const std::string input = R"(
+RUNSPEC
+OIL
+WATER
+GAS
+
 START             -- 0
 19 JUN 2007 /
 SCHEDULE
@@ -3660,48 +3781,6 @@ WCONINJH
             const auto& wtest_config = schedule[1].wtest_config.get();
             BOOST_CHECK(wtest_config.empty());
         }
-    }
-}
-
-BOOST_AUTO_TEST_CASE(FilterCompletions2) {
-    const auto& deck = Parser{}.parseString(createDeckWithWellsAndCompletionData());
-    EclipseGrid grid1(10,10,10);
-    const TableManager table ( deck );
-    const FieldPropsManager fp( deck, Phases{true, true, true}, grid1, table);
-    const Runspec runspec (deck);
-
-    /* mutable */ Schedule schedule {
-        deck, grid1, fp, NumericalAquifers{},
-        runspec, std::make_shared<Python>()
-    };
-
-    std::vector<int> actnum = grid1.getACTNUM();
-
-    {
-        const auto& c1_1 = schedule.getWell("OP_1", 1).getConnections();
-        const auto& c1_3 = schedule.getWell("OP_1", 3).getConnections();
-        BOOST_CHECK_EQUAL(2U, c1_1.size());
-        BOOST_CHECK_EQUAL(9U, c1_3.size());
-    }
-
-    actnum[grid1.getGlobalIndex(8,8,1)] = 0;
-    {
-        std::vector<int> globalCell(grid1.getNumActive());
-        for(std::size_t i = 0; i < grid1.getNumActive(); ++i) {
-            if (actnum[grid1.getGlobalIndex(i)]) {
-                globalCell[i] = grid1.getGlobalIndex(i);
-            }
-        }
-
-        ActiveGridCells active(grid1.getNXYZ(), globalCell.data(),
-                               grid1.getNumActive());
-
-        schedule.filterConnections(active);
-
-        const auto& c1_1 = schedule.getWell("OP_1", 1).getConnections();
-        const auto& c1_3 = schedule.getWell("OP_1", 3).getConnections();
-        BOOST_CHECK_EQUAL(1U, c1_1.size());
-        BOOST_CHECK_EQUAL(8U, c1_3.size());
     }
 }
 
@@ -3969,11 +4048,9 @@ namespace {
 
     bool has(const std::vector<std::string>& l, const std::string& s)
     {
-        return std::any_of(l.begin(), l.end(),
-                           [&s](const std::string& search)
-                           {
-                               return search == s;
-                           });
+        return std::ranges::any_of(l,
+                                   [&s](const std::string& search)
+                                   { return search == s; });
     }
 }
 
@@ -4214,10 +4291,108 @@ BOOST_AUTO_TEST_CASE(GroupOrderTest)
     }
 }
 
+BOOST_AUTO_TEST_CASE(Has_Well)
+{
+    const auto schedule = make_schedule(createDeckWTEST());
 
+    // Start of simulation
+    {
+        const auto wm = schedule.wellMatcher(0);
 
+        BOOST_CHECK_MESSAGE(  wm.hasWell("W1"), R"(Well "W1" must exist at time zero)");
+        BOOST_CHECK_MESSAGE(! wm.hasWell("W4"), R"(Well "W4" must NOT exist at time zero)");
+        BOOST_CHECK_MESSAGE(  wm.hasWell("W?"), R"(Wells matching pattern "W?" must exist at time zero)");
+        BOOST_CHECK_MESSAGE(  wm.hasWell("W*"), R"(Wells matching pattern "W*" must exist at time zero)");
+        BOOST_CHECK_MESSAGE(  wm.hasWell("DEF*"), R"(Wells matching pattern "DEF*" must exist at time zero)");
+        BOOST_CHECK_MESSAGE(! wm.hasWell("*ILIST"), R"(Wells matching pattern "*ILIST" must NOT exist at time zero)");
+    }
+
+    // Report step 2--injectors and well lists introduced
+    {
+        const auto wm = schedule.wellMatcher(2);
+
+        BOOST_CHECK_MESSAGE(  wm.hasWell("W1"), R"(Well "W1" must exist at report step 2)");
+        BOOST_CHECK_MESSAGE(! wm.hasWell("W4"), R"(Well "W4" must NOT exist at report step 2)");
+        BOOST_CHECK_MESSAGE(  wm.hasWell("W?"), R"(Wells matching pattern "W?" must exist at report step 2)");
+        BOOST_CHECK_MESSAGE(  wm.hasWell("W*"), R"(Wells matching pattern "W*" must exist at report step 2)");
+        BOOST_CHECK_MESSAGE(  wm.hasWell("DEF*"), R"(Wells matching pattern "DEF*" must exist at report step 2)");
+
+        BOOST_CHECK_MESSAGE(  wm.hasWell("I1"), R"(Well "I1" must exist at report step 2)");
+        BOOST_CHECK_MESSAGE(! wm.hasWell("I4"), R"(Well "I4" must NOT exist at report step 2)");
+        BOOST_CHECK_MESSAGE(  wm.hasWell("I?"), R"(Wells matching pattern "I?" must exist at report step 2)");
+        BOOST_CHECK_MESSAGE(  wm.hasWell("I*"), R"(Wells matching pattern "I*" must exist at report step 2)");
+        BOOST_CHECK_MESSAGE(  wm.hasWell("*ILIST"), R"(Wells matching pattern "*ILIST" must exist at report step 2)");
+        BOOST_CHECK_MESSAGE(  wm.hasWell("*IL*"), R"(Wells matching pattern "*IL*" must exist at report step 2)");
+
+        // Well list '*EMPTY' exists, but has no wells => hasWell() returns 'false'.
+        BOOST_CHECK_MESSAGE(! wm.hasWell("*EMPTY"), R"(Wells matching pattern "*EMPTY" must NOT exist at report step 2)");
+    }
+}
+
+BOOST_AUTO_TEST_CASE(Has_Group_Simple)
+{
+    const auto schedule = make_schedule(createDeckWTEST());
+
+    // Start of simulation
+    const auto& go = schedule[0].group_order();
+
+    BOOST_CHECK_MESSAGE(  go.anyGroupMatches("OP"), R"(Group "OP" must exist at time zero)");
+    BOOST_CHECK_MESSAGE(! go.anyGroupMatches("OPE"), R"(Group "OPE" must NOT exist at time zero)");
+    BOOST_CHECK_MESSAGE(  go.anyGroupMatches("OP*"), R"(Groups matching pattern "OP*" must exist at time zero)");
+    BOOST_CHECK_MESSAGE(  go.anyGroupMatches("O*"), R"(Groups matching pattern "O*" must exist at time zero)");
+    BOOST_CHECK_MESSAGE(! go.anyGroupMatches("NO*"), R"(Groups matching pattern "NO*" must NOT exist at time zero)");
+    BOOST_CHECK_MESSAGE(  go.anyGroupMatches("FI*"), R"(Groups matching pattern "FI*" must exist at time zero)");
+}
+
+BOOST_AUTO_TEST_CASE(Has_Group_GroupTree)
+{
+    const auto schedule = make_schedule(createDeckWithWellsOrderedGRUPTREE());
+
+    // Start of simulation
+    const auto& go = schedule[0].group_order();
+
+    BOOST_CHECK_MESSAGE(  go.anyGroupMatches("FIELD"), R"(Group "FIELD" must exist at time zero)");
+    BOOST_CHECK_MESSAGE(  go.anyGroupMatches("FI*"), R"(Groups matching pattern "FI*" must exist at time zero)");
+    BOOST_CHECK_MESSAGE(  go.anyGroupMatches("PLATFORM"), R"(Group "OP" must exist at time zero)");
+    BOOST_CHECK_MESSAGE(  go.anyGroupMatches("PLAT*"), R"(Groups matching the pattern "PLAT*" must exist at time zero)");
+    BOOST_CHECK_MESSAGE(! go.anyGroupMatches("PG13"), R"(Group "PG13" must NOT exist at time zero)");
+    BOOST_CHECK_MESSAGE(  go.anyGroupMatches("PG*"), R"(Groups matching "PG*" must exist at time zero)");
+    BOOST_CHECK_MESSAGE(  go.anyGroupMatches("PG1*"), R"(Groups matching "PG1*" must exist at time zero)");
+}
 
 BOOST_AUTO_TEST_CASE(nupcol) {
+    std::string input = R"(
+RUNSPEC
+START             -- 0
+19 JUN 2007 /
+
+NUPCOL
+  20 /
+SCHEDULE
+DATES             -- 1
+ 10  OKT 2008 /
+/
+NUPCOL
+  1* /
+DATES             -- 1
+ 10  OKT 2009 /
+/
+NUPCOL
+  4 /
+DATES             -- 1
+ 10  OKT 2010 /
+/
+)";
+    const auto& schedule = make_schedule(input);
+    {
+        // Flow uses 3 as default
+        BOOST_CHECK_EQUAL(schedule[0].nupcol(),20);
+        BOOST_CHECK_EQUAL(schedule[1].nupcol(), 3);
+        BOOST_CHECK_EQUAL(schedule[2].nupcol(), 4);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(nupcol_minnpcol) {
     std::string input = R"(
 RUNSPEC
 START             -- 0
@@ -4243,15 +4418,21 @@ DATES             -- 1
 )";
     const auto& schedule = make_schedule(input);
     {
-        // Flow uses 12 as default
+        // Flow uses 3 as default, but this deck
+        // has MINNPCOL 6
         BOOST_CHECK_EQUAL(schedule[0].nupcol(),20);
-        BOOST_CHECK_EQUAL(schedule[1].nupcol(),12);
+        BOOST_CHECK_EQUAL(schedule[1].nupcol(), 6);
         BOOST_CHECK_EQUAL(schedule[2].nupcol(), 6);
     }
 }
 
 BOOST_AUTO_TEST_CASE(TESTGuideRateConfig) {
     const std::string input = R"(
+RUNSPEC
+OIL
+WATER
+GAS
+
 START             -- 0
 10 MAI 2007 /
 GRID
@@ -4385,7 +4566,7 @@ COMPDAT
         const auto& changed_wells = schedule.changed_wells(0);
         BOOST_CHECK_EQUAL( changed_wells.size() , 3U);
         for (const auto& wname : {"W1", "W2", "W2"}) {
-            auto find_well = std::find(changed_wells.begin(), changed_wells.end(), wname);
+            const auto find_well = std::ranges::find(changed_wells, wname);
             BOOST_CHECK(find_well != changed_wells.end());
         }
     }
@@ -4464,6 +4645,9 @@ END
 
 BOOST_AUTO_TEST_CASE(Production_Control_Mode_From_Well) {
     const auto input = R"(RUNSPEC
+OIL
+WATER
+GAS
 
 SCHEDULE
 VFPPROD
@@ -4519,43 +4703,12 @@ END
     BOOST_CHECK_EQUAL(Well::eclipseControlMode(sched.getWell("W8", 10), st), 6);
 }
 
-BOOST_AUTO_TEST_CASE(SKIPREST_VFP) {
-    auto parser = Parser{};
-
-    const auto deck = parser.parseFile("MODEL2_RESTART.DATA");
-    const EclipseState es{ deck };
-    const auto& init_config = es.getInitConfig();
-    const auto report_step = init_config.getRestartStep();
-    const auto rst_filename = es.getIOConfig()
-        .getRestartFileName(init_config.getRestartRootName(), report_step, false);
-
-    auto rst_file = std::make_shared<EclIO::ERst>(rst_filename);
-    auto rst_view = std::make_shared<EclIO::RestartFileView>(std::move(rst_file), report_step);
-    const auto rst = RestartIO::RstState::load(std::move(rst_view), es.runspec(), parser);
-    const auto sched = Schedule {
-        deck, es, std::make_shared<Python>(),
-        /* lowActionParsingStrictness = */ false,
-        /* slave_mode = */ false,
-        /* keepKeywords = */ true,
-        /* output_interval = */ {},
-        &rst
-    };
-
-    BOOST_CHECK_NO_THROW( sched[3].vfpprod(5) );
-
-    for (std::size_t index = 0; index < sched.size(); ++index) {
-        const auto& state = sched[index];
-        BOOST_CHECK_EQUAL(index, state.sim_step());
-    }
-}
-
 BOOST_AUTO_TEST_CASE(GASLIFT_OPT) {
     GasLiftOpt glo{};
     BOOST_CHECK(!glo.active());
     BOOST_CHECK_THROW(glo.group("NO_SUCH_GROUP"), std::out_of_range);
     BOOST_CHECK_THROW(glo.well("NO_SUCH_WELL"), std::out_of_range);
 }
-
 
 BOOST_AUTO_TEST_CASE(GASLIFT_OPT_DECK) {
     const auto input = R"(-- Turns on gas lift optimization
@@ -5225,6 +5378,10 @@ END
 
 BOOST_AUTO_TEST_CASE(WELL_STATUS) {
     const std::string deck_string = R"(
+RUNSPEC
+OIL
+WATER
+
 START
 7 OCT 2020 /
 
@@ -5261,7 +5418,7 @@ COMPDAT
 /
 
 WCONPROD
-  'P1' 'OPEN' 'ORAT'  123.4  4*  50.0 /
+  'P1' 'OPEN' 'ORAT'  123.4 456. 789. 2*  50.0 /
 /
 
 
@@ -5431,10 +5588,77 @@ BOOST_AUTO_TEST_CASE(ScheduleDeckTest) {
     }
 }
 
+BOOST_AUTO_TEST_CASE(ScheduleDeck_DATES_RESTART_Too_Early_Missing_SKIPREST)
+{
+    const auto start = asTimePoint(TimeStampUTC { TimeStampUTC::YMD { 2025, 12, 24 }, 17, 0, 0, 0 });
 
+    auto restart = ScheduleRestartInfo{};
+    restart.time = asTimeT(TimeStampUTC { TimeStampUTC::YMD { 2026, 2, 3 }, 10, 0, 0, 0 });
+    restart.report_step = 42;
+    restart.skiprest = false;
+
+    const auto deck = Parser{}.parseString(R"(SCHEDULE
+DATES
+  3 FEB 2026 10:00:00 /
+  4 FEB 2026 00:00:00 /
+/
+END
+)");
+
+    BOOST_CHECK_THROW(ScheduleDeck(start, deck, restart), OpmInputError);
+}
+
+BOOST_AUTO_TEST_CASE(ScheduleDeck_DATES_RESTART_Have_SKIPREST)
+{
+    const auto start = asTimePoint(TimeStampUTC { TimeStampUTC::YMD { 2025, 12, 24 }, 17, 0, 0, 0 });
+
+    auto restart = ScheduleRestartInfo{};
+    restart.time = asTimeT(TimeStampUTC { TimeStampUTC::YMD { 2026, 2, 3 }, 10, 0, 0, 0 });
+    restart.report_step = 42;
+    restart.skiprest = true;
+
+    const auto deck = Parser{}.parseString(R"(SCHEDULE
+DATES
+  3 FEB 2026 10:00:00 /
+  4 FEB 2026 00:00:00 /
+/
+END
+)");
+
+    const auto sd = ScheduleDeck { start, deck, restart };
+
+    BOOST_CHECK_EQUAL(sd.size(), restart.report_step + std::size_t{2});
+}
+
+BOOST_AUTO_TEST_CASE(ScheduleDeck_DATES_RESTART_Later)
+{
+    const auto start = asTimePoint(TimeStampUTC { TimeStampUTC::YMD { 2025, 12, 24 }, 17, 0, 0, 0 });
+
+    auto restart = ScheduleRestartInfo{};
+    restart.time = asTimeT(TimeStampUTC { TimeStampUTC::YMD { 2026, 2, 3 }, 10, 0, 0, 0 });
+    restart.report_step = 42;
+    restart.skiprest = false;
+
+    const auto deck = Parser{}.parseString(R"(SCHEDULE
+DATES
+  3 FEB 2026 10:00:01 /
+  4 FEB 2026 00:00:00 /
+/
+END
+)");
+
+    const auto sd = ScheduleDeck { start, deck, restart };
+
+    BOOST_CHECK_EQUAL(sd.size(), restart.report_step + std::size_t{3});
+}
 
 BOOST_AUTO_TEST_CASE(WCONPROD_UDA) {
     const std::string deck_string = R"(
+RUNSPEC
+OIL
+WATER
+GAS
+
 START
 7 OCT 2020 /
 
@@ -5523,6 +5747,67 @@ WCONPROD
     BOOST_CHECK_CLOSE(controls2.alq_value, dim.convertRawToSi(123), 1e-13);
 
     BOOST_CHECK(!sched[0].has_gpmaint());
+}
+
+BOOST_AUTO_TEST_CASE(WCONPROD)
+{
+    const std::string deck_string = R"(
+RUNSPEC
+GAS
+
+START
+7 OCT 2020 /
+
+DIMENS
+  10 10 3 /
+
+GRID
+DXV
+  10*100.0 /
+DYV
+  10*100.0 /
+DZV
+  3*10.0 /
+
+DEPTHZ
+  121*2000.0 /
+
+PORO
+  300*0.3 /
+PERMX
+    300*1 /
+PERMY
+    300*0.1 /
+PERMZ
+    300*0.01 /
+
+SCHEDULE
+
+WELSPECS -- 0
+  'P1' 'G' 10 10 2005 'GAS' /
+/
+
+COMPDAT
+  'P1'  9  9   1   1 'OPEN' 1*   32.948   0.311  3047.839 1*  1*  'X'  22.100 /
+/
+
+WCONPROD
+  'P1' 'OPEN' 'GRAT'  123.4  1.0  2.0  3.0  9.0 100/
+/
+
+)";
+    const auto deck = Parser{}.parseString(deck_string);
+    const auto es    = EclipseState{ deck };
+    auto       sched = Schedule{ deck, es };
+    const auto& well1 = sched.getWell("P1", 0);
+    SummaryState st(TimeService::now(), 0.0);
+    const auto& controls1 = well1.productionControls(st);
+    BOOST_CHECK(!controls1.hasControl(WellProducerCMode::ORAT));
+    BOOST_CHECK(!controls1.hasControl(WellProducerCMode::WRAT));
+    BOOST_CHECK(controls1.hasControl(WellProducerCMode::GRAT));
+    BOOST_CHECK(!controls1.hasControl(WellProducerCMode::LRAT));
+    BOOST_CHECK(controls1.hasControl(WellProducerCMode::RESV));
+    BOOST_CHECK(controls1.hasControl(WellProducerCMode::BHP));
 }
 
 BOOST_AUTO_TEST_CASE(WCONHIST_WCONINJH_VFP) {
@@ -6479,9 +6764,9 @@ END
     }
 }
 
-BOOST_AUTO_TEST_CASE(Well_Fracture_Seeds_No_MECH)
+BOOST_AUTO_TEST_CASE(Well_Fracture_Seeds_With_Size)
 {
-    const auto inputString = std::string { R"(RUNSPEC
+    const auto deck = Parser{}.parseString(R"(RUNSPEC
 DIMENS
   10 10 10 /
 
@@ -6533,24 +6818,49 @@ DATES             -- 1, 2
 /
 
 WSEED
-  'OP_1'  9 9 1   1.0   -1.0      1.0  /
-  'OP_1'  9 9 2   0.0    0.0     17.29 /
-  'OP_3'  7 7 2   3.1   41.592  653.5  /
+  'OP_1'  9 9 1   1.0   -1.0      1.0  0.12 34.567 891.01112 /
+  'OP_1'  9 9 2   0.0    0.0     17.29 8.91 0.111 0.2222 /
+  'OP_3'  7 7 2   3.1   41.592  653.5  12.13 14.151617 1819.202122 /
 /
 
 DATES
   1 SEP 2007 /
 /
 END
-)" };
+)");
 
-    // No MECH keyword means that parsing, by default, should fail in WSEED.
-    BOOST_CHECK_THROW(Parser().parseString(inputString), OpmInputError);
+    const auto es    = EclipseState { deck };
+    const auto sched = Schedule { deck, es };
 
-    auto ctx = ParseContext{};
-    ctx.update(ParseContext::PARSE_INVALID_KEYWORD_COMBINATION,
-               InputErrorAction::IGNORE);
+    const auto& wseed = sched[2].wseed;
 
-    // Allow parsing the input if we ignore incompatible keywords.
-    BOOST_CHECK_NO_THROW(Parser().parseString(inputString, ctx));
+    {
+        const auto& op_1 = wseed("OP_1");
+
+        const auto& seedCells = op_1.seedCells();
+
+        const auto* s0 = op_1.getSize(WellFractureSeeds::SeedCell { seedCells[0] });
+
+        BOOST_CHECK_CLOSE(s0->verticalExtent(), 0.12, 1.0e-8);
+        BOOST_CHECK_CLOSE(s0->horizontalExtent(), 34.567, 1.0e-8);
+        BOOST_CHECK_CLOSE(s0->width(), 891.01112, 1.0e-8);
+
+        const auto* s1 = op_1.getSize(WellFractureSeeds::SeedCell { seedCells[1] });
+
+        BOOST_CHECK_CLOSE(s1->verticalExtent(), 8.91 , 1.0e-8);
+        BOOST_CHECK_CLOSE(s1->horizontalExtent(), 0.111, 1.0e-8);
+        BOOST_CHECK_CLOSE(s1->width(), 0.2222, 1.0e-8);
+    }
+
+    {
+        const auto& op_3 = wseed("OP_3");
+
+        const auto& seedCells = op_3.seedCells();
+
+        const auto* s = op_3.getSize(WellFractureSeeds::SeedCell { seedCells[0] });
+
+        BOOST_CHECK_CLOSE(s->verticalExtent(), 12.13, 1.0e-8);
+        BOOST_CHECK_CLOSE(s->horizontalExtent(), 14.151617, 1.0e-8);
+        BOOST_CHECK_CLOSE(s->width(), 1819.202122, 1.0e-8);
+    }
 }

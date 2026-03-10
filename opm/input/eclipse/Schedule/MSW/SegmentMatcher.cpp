@@ -129,11 +129,9 @@ candidateWells(const std::vector<std::string>& allWells) const
     auto candidates = std::vector<std::string>{};
     candidates.reserve(allWells.size());
 
-    std::copy_if(allWells.begin(), allWells.end(), std::back_inserter(candidates),
-                 [this](const std::string& well)
-                 {
-                     return this->mswInputData_.get().wells(well).isMultiSegment();
-                 });
+    std::ranges::copy_if(allWells, std::back_inserter(candidates),
+                         [this](const std::string& well)
+                         { return this->mswInputData_.get().wells(well).isMultiSegment(); });
 
     return candidates;
 }
@@ -179,8 +177,8 @@ Opm::SegmentMatcher::Impl::matchingSegments(const std::string& wellname) const
     const auto& segSet = well.getSegments();
 
     segments.reserve(segSet.size());
-    std::transform(segSet.begin(), segSet.end(), std::back_inserter(segments),
-                   [](const Segment& segment) { return segment.segmentNumber(); });
+    std::ranges::transform(segSet, std::back_inserter(segments),
+                           [](const Segment& segment) { return segment.segmentNumber(); });
 
     return segments;
 }
@@ -348,11 +346,9 @@ void Opm::SegmentSet::establishNameLookupIndex()
 
     this->wellNameIndex_.resize(this->wells_.size());
     std::iota(this->wellNameIndex_.begin(), this->wellNameIndex_.end(), Ix{0});
-    std::sort(this->wellNameIndex_.begin(), this->wellNameIndex_.end(),
-              [this](const Ix i1, const Ix i2)
-              {
-                  return this->wells_[i1] < this->wells_[i2];
-              });
+    std::ranges::sort(this->wellNameIndex_,
+                      [this](const Ix i1, const Ix i2)
+                      { return this->wells_[i1] < this->wells_[i2]; });
 }
 
 void Opm::SegmentSet::addWellSegments(const std::string&      well,

@@ -48,7 +48,7 @@ BOOST_AUTO_TEST_CASE( CreateTest ) {
 
     {
         std::vector<double> cp(column.size());
-        std::copy( column.begin() , column.end() , cp.begin());
+        std::ranges::copy(column, cp.begin());
 
         for (size_t i = 0; i < column.size(); i++)
             BOOST_CHECK_EQUAL( column[i] , cp[i] );

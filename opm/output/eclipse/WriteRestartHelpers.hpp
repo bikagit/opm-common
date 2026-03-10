@@ -31,6 +31,7 @@ namespace Opm {
     class EclipseGrid;
     class EclipseState;
     class Schedule;
+    class ScheduleState;
     class Well;
     class UnitSystem;
     class UDQActive;
@@ -57,8 +58,33 @@ namespace Opm::RestartIO::Helpers {
                    const int           report_step,
                    const int           lookup_step);
 
+    std::vector<int>
+    createLgrHeadi(const EclipseState& es,
+                   const int           lgr_index);
+
+    std::vector<bool>
+    createLgrHeadq(const EclipseState& es);
+
+    std::vector<double>
+    createLgrHeadd();
+
+    /// Static flags, mostly for INIT file purposes.
+    ///
+    /// \param[in] es Static properties and run settings.
+    ///
+    /// \return Output file's logical flag settings.
     std::vector<bool>
     createLogiHead(const EclipseState& es);
+
+    /// Dynamic flags, mostly for restart file purposes.
+    ///
+    /// \param[in] es Static properties and run settings.
+    ///
+    /// \param[in] sched Dynamic simulation objects and settings.
+    ///
+    /// \return Output file's logical flag settings.
+    std::vector<bool>
+    createLogiHead(const EclipseState& es, const ScheduleState& sched);
 
     std::size_t
     entriesPerSACT();

@@ -47,11 +47,11 @@ appendNode(const std::array<T,3>& X, const std::array<T,3>& Y, const std::array<
     std::array<T,4> tX;
     std::array<T,4> tY;
     std::array<T,4> tZ;
-    std::copy(X.begin(), X.end(), tX.begin());
+    std::ranges::copy(X, tX.begin());
     tX[3]= xc;
-    std::copy(Y.begin(), Y.end(), tY.begin());
+    std::ranges::copy(Y, tY.begin());
     tY[3]= yc;
-    std::copy(Z.begin(), Z.end(), tZ.begin());
+    std::ranges::copy(Z, tZ.begin());
     tZ[3]= zc;
     return std::make_tuple(tX,tY,tZ);
 }
@@ -64,8 +64,8 @@ std::vector<T> vectorOperation(const std::vector<T>& vecA, const std::vector<T>&
     }
     std::vector<T> result;
     result.reserve(vecA.size());
-    // Use std::transform with the passed operation
-    std::transform(vecA.begin(), vecA.end(), vecB.begin(), std::back_inserter(result), op);
+    // Use std::ranges::transform with the passed operation
+    std::ranges::transform(vecA, vecB.begin(), std::back_inserter(result), op);
     return result;
 }
 
@@ -74,9 +74,9 @@ template <typename T, typename Operation>
 std::vector<T> vectorScalarOperation(const std::vector<T>& vecA, const T& scalar, Operation op) {
     std::vector<T> result;
     result.reserve(vecA.size());
-    // Use std::transform with the passed operation
-    std::transform(vecA.begin(), vecA.end(), std::back_inserter(result),
-        [&scalar, &op](const T& a) { return op(scalar, a); });
+    // Use std::ranges::transform with the passed operation
+    std::ranges::transform(vecA, std::back_inserter(result),
+                           [&scalar, &op](const T& a) { return op(scalar, a); });
     return result;
 }
 
@@ -85,16 +85,34 @@ template <typename T, typename Operation>
 std::vector<T> scalarVectorOperation(const T& scalar, const std::vector<T>& vecA,  Operation op) {
     std::vector<T> result;
     result.reserve(vecA.size());
-    // Use std::transform with the passed operation
-    std::transform(vecA.begin(), vecA.end(), std::back_inserter(result),
-        [&scalar, &op](const T& a) { return op(a, scalar); });
+    // Use std::ranges::transform with the passed operation
+    std::ranges::transform(vecA, std::back_inserter(result),
+                          [&scalar, &op](const T& a) { return op(a, scalar); });
     return result;
 }
 
-std::tuple<std::array<double,4>, std::array<double,4>, std::array<double,4>> 
-appendNode(const std::array<double,3>&, const std::array<double,3>&, 
-           const std::array<double,3>&, const double&, const double&, 
+
+template <typename T, typename Operation>
+void scalarVectorOperation(const T& scalar, std::vector<T>& vecA, Operation op) {
+    std::ranges::transform(vecA, vecA.begin(),
+                           [&scalar, &op](const T& a) { return op(a, scalar); });
+}
+
+
+std::tuple<std::array<double,4>, std::array<double,4>, std::array<double,4>>
+appendNode(const std::array<double,3>&, const std::array<double,3>&,
+           const std::array<double,3>&, const double&, const double&,
            const double&);
+
+template <typename T>
+std::vector<T> filterArray(const std::vector<T>& X, const std::vector<int>& ind){
+    std::vector<T> filtered_vectorX(ind.size(),0);
+    for (std::size_t index = 0; index < ind.size(); index++) {
+        filtered_vectorX[index] = X[ind[index]];
+    }
+    return filtered_vectorX;
+}
+
 template <typename T>
 std::vector<T> filterArray(const std::vector<std::size_t>& X, const std::vector<int>& ind){
     std::vector<T> filtered_vectorX(ind.size(),0);

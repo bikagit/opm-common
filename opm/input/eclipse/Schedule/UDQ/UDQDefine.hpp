@@ -77,6 +77,13 @@ public:
 
     static UDQDefine serializationTestObject();
 
+    /// All specific objects required for the defining expression.
+    ///
+    /// Could, for instance, be a collection of specific well names in a
+    /// field level UDQ, or a set of group name patterns for a group level
+    /// UDQ.
+    UDQ::RequisiteEvaluationObjects requiredObjects() const;
+
     UDQSet eval(const UDQContext& context) const;
     const std::string& keyword() const;
     const std::string& input_string() const { return this->input_string_; }
@@ -92,6 +99,32 @@ public:
         if (this->m_update_status == UDQUpdate::NEXT) {
             this->m_update_status = UDQUpdate::OFF;
         }
+    }
+
+    /// Clear "UPDATE NEXT" flag
+    ///
+    /// This is required by the way we form ScheduleState objects.  The
+    /// function resets UPDATE NEXT to UPDATE OFF, and should typically be
+    /// called at the end of a report step/beginning of the next report
+    /// step.  If we do not do this, then a UDQ define statement with an
+    /// UPDATE NEXT status will behave as if there is an implicit UPDATE
+    /// NEXT statement at the beginning of each subsequent report step and
+    /// that, in turn, will generate unwanted value updates for the
+    /// quantity.
+    ///
+    /// \return Whether or not UPDATE NEXT was reset to UPDATE OFF.  Allows
+    /// client code to take action, if needed, based on the knowledge that
+    /// all such value updates have been applied and to prepare for the next
+    /// report step.
+    bool clear_update_next_for_new_report_step()
+    {
+        if (this->m_update_status == UDQUpdate::NEXT) {
+            this->m_update_status = UDQUpdate::OFF;
+
+            return true;
+        }
+
+        return false;
     }
 
     bool operator==(const UDQDefine& data) const;
