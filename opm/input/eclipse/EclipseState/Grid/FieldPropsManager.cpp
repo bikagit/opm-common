@@ -115,6 +115,23 @@ void FieldPropsManager::apply_schedule_keywords(const std::vector<DeckKeyword>& 
     this->fp->handle_schedule_keywords(keywords);
 }
 
+// template <typename T> new bk
+void FieldPropsManager::extendGrid(const FieldPropsManager& fp2) {
+
+for (auto it = fp2.fp->double_data.begin(); it != fp2.fp->double_data.end(); ++it)
+{
+    auto& destination = fp->double_data[it->first];
+    destination.data.insert(destination.data.end(), it->second.data.begin(), it->second.data.end());
+}
+
+for (auto it = fp2.fp->int_data.begin(); it != fp2.fp->int_data.end(); ++it)
+{
+    auto& destination = fp->int_data[it->first];
+    destination.data.insert(destination.data.end(), it->second.data.begin(), it->second.data.end());
+}
+    fp->active_size += fp2.fp->active_size;
+}
+
 
 template <typename T>
 const std::vector<T>& FieldPropsManager::get(const std::string& keyword) const {

@@ -57,6 +57,9 @@ public:
     virtual std::vector<double> porv(bool global = false) const;
 
 
+    // new bk
+    void extendGrid(const FieldPropsManager& fp2);
+
     void apply_schedule_keywords(const std::vector<DeckKeyword>& keywords);
 
     /// \brief Whether we can call methods on the manager

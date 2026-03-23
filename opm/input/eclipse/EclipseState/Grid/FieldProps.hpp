@@ -704,6 +704,8 @@ public:
     void set_active_indices(const std::vector<int>& indices);
 
 private:
+    friend class FieldPropsManager;
+
     void processMULTREGP(const Deck& deck);
     void scanGRIDSection(const GRIDSection& grid_section);
     void scanGRIDSectionOnlyACTNUM(const GRIDSection& grid_section);
