@@ -42,41 +42,41 @@ namespace Opm {
  *        multi-phase, multi-component fluid system _not_ assuming
  *        thermodynamic equilibrium.
  */
-template <class Scalar, class FluidSystem, bool storeEnthalpy=true>
+template <class ValueT, class FluidSystem, bool storeEnthalpy=true>
 class NonEquilibriumFluidState;
 
 
 // specialization for the enthalpy enabled case
-template <class Scalar, class FluidSystem>
-class NonEquilibriumFluidState<Scalar, FluidSystem, true>
-    : public ModularFluidState<Scalar,
+template <class ValueType, class FluidSystem>
+class NonEquilibriumFluidState<ValueType, FluidSystem, true>
+    : public ModularFluidState<ValueType,
                                FluidSystem::numPhases,
                                FluidSystem::numComponents,
-                               FluidStateExplicitPressureModule<Scalar, FluidSystem::numPhases, NonEquilibriumFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitTemperatureModule<Scalar, FluidSystem::numPhases, NonEquilibriumFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitCompositionModule<Scalar, FluidSystem, NonEquilibriumFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitFugacityModule<Scalar, FluidSystem::numPhases, FluidSystem::numComponents, NonEquilibriumFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitSaturationModule<Scalar, FluidSystem::numPhases, NonEquilibriumFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitDensityModule<Scalar, FluidSystem::numPhases, NonEquilibriumFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitViscosityModule<Scalar, FluidSystem::numPhases, NonEquilibriumFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitEnthalpyModule<Scalar, FluidSystem::numPhases, NonEquilibriumFluidState<Scalar, FluidSystem, true> > >
+                               FluidStateExplicitPressureModule<ValueType, FluidSystem::numPhases, NonEquilibriumFluidState<ValueType, FluidSystem, true> >,
+                               FluidStateExplicitTemperatureModule<ValueType, FluidSystem::numPhases, NonEquilibriumFluidState<ValueType, FluidSystem, true> >,
+                               FluidStateExplicitCompositionModule<ValueType, FluidSystem, NonEquilibriumFluidState<ValueType, FluidSystem, true> >,
+                               FluidStateExplicitFugacityModule<ValueType, FluidSystem::numPhases, FluidSystem::numComponents, NonEquilibriumFluidState<ValueType, FluidSystem, true> >,
+                               FluidStateExplicitSaturationModule<ValueType, FluidSystem::numPhases, NonEquilibriumFluidState<ValueType, FluidSystem, true> >,
+                               FluidStateExplicitDensityModule<ValueType, FluidSystem::numPhases, NonEquilibriumFluidState<ValueType, FluidSystem, true> >,
+                               FluidStateExplicitViscosityModule<ValueType, FluidSystem::numPhases, NonEquilibriumFluidState<ValueType, FluidSystem, true> >,
+                               FluidStateExplicitEnthalpyModule<ValueType, FluidSystem::numPhases, NonEquilibriumFluidState<ValueType, FluidSystem, true> > >
 {
 };
 
 // specialization for the enthalpy disabled case
-template <class Scalar, class FluidSystem>
-class NonEquilibriumFluidState<Scalar, FluidSystem, false>
-    : public ModularFluidState<Scalar,
+template <class ValueType, class FluidSystem>
+class NonEquilibriumFluidState<ValueType, FluidSystem, false>
+    : public ModularFluidState<ValueType,
                                FluidSystem::numPhases,
                                FluidSystem::numComponents,
-                               FluidStateExplicitPressureModule<Scalar, FluidSystem::numPhases, NonEquilibriumFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitTemperatureModule<Scalar, FluidSystem::numPhases, NonEquilibriumFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitCompositionModule<Scalar, FluidSystem, NonEquilibriumFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitFugacityModule<Scalar, FluidSystem::numPhases, FluidSystem::numComponents, NonEquilibriumFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitSaturationModule<Scalar, FluidSystem::numPhases, NonEquilibriumFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitDensityModule<Scalar, FluidSystem::numPhases, NonEquilibriumFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitViscosityModule<Scalar, FluidSystem::numPhases, NonEquilibriumFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateNullEnthalpyModule<Scalar, FluidSystem::numPhases, NonEquilibriumFluidState<Scalar, FluidSystem, false> > >
+                               FluidStateExplicitPressureModule<ValueType, FluidSystem::numPhases, NonEquilibriumFluidState<ValueType, FluidSystem, false> >,
+                               FluidStateExplicitTemperatureModule<ValueType, FluidSystem::numPhases, NonEquilibriumFluidState<ValueType, FluidSystem, false> >,
+                               FluidStateExplicitCompositionModule<ValueType, FluidSystem, NonEquilibriumFluidState<ValueType, FluidSystem, false> >,
+                               FluidStateExplicitFugacityModule<ValueType, FluidSystem::numPhases, FluidSystem::numComponents, NonEquilibriumFluidState<ValueType, FluidSystem, false> >,
+                               FluidStateExplicitSaturationModule<ValueType, FluidSystem::numPhases, NonEquilibriumFluidState<ValueType, FluidSystem, false> >,
+                               FluidStateExplicitDensityModule<ValueType, FluidSystem::numPhases, NonEquilibriumFluidState<ValueType, FluidSystem, false> >,
+                               FluidStateExplicitViscosityModule<ValueType, FluidSystem::numPhases, NonEquilibriumFluidState<ValueType, FluidSystem, false> >,
+                               FluidStateNullEnthalpyModule<ValueType, FluidSystem::numPhases, NonEquilibriumFluidState<ValueType, FluidSystem, false> > >
 {
 };
 

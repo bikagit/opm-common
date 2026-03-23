@@ -1,4 +1,13 @@
+# parallel computing must be explicitly enabled
+option (USE_MPI "Use Message Passing Interface for parallel computing" ON)
+if (NOT USE_MPI)
+  set (CMAKE_DISABLE_FIND_PACKAGE_MPI TRUE)
+endif ()
+
 function(mpi_checks)
+  if(NOT USE_MPI)
+    return()
+  endif()
   cmake_parse_arguments(PARAM "" "TARGET" "" ${ARGN})
   if(NOT PARAM_TARGET)
     message(FATAL_ERROR "Function needs a TARGET parameter")
@@ -14,6 +23,10 @@ function(mpi_checks)
     set(CMAKE_REQUIRED_INCLUDES ${CMAKE_REQUIRED_INCLUDES};${MPI_C_INCLUDES})
     check_function_exists(MPI_Finalized MPI_2)
     cmake_pop_check_state()
-    target_compile_definitions(${PARAM_TARGET} PUBLIC MPI_2=${MPI_2})
+    target_compile_definitions(${PARAM_TARGET}
+      PUBLIC
+        HAVE_MPI=1
+        MPI_2=${MPI_2}
+    )
   endif()
 endfunction()

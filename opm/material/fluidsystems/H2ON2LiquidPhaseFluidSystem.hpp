@@ -246,7 +246,7 @@ public:
     }
 
     //! \copydoc BaseFluidSystem::density
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
     static LhsEval density(const FluidState& fluidState,
                            const ParameterCache<ParamCacheEval>& /*paramCache*/,
                            unsigned phaseIdx)
@@ -273,7 +273,7 @@ public:
     }
 
     //! \copydoc BaseFluidSystem::viscosity
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
     static LhsEval viscosity(const FluidState& fluidState,
                              const ParameterCache<ParamCacheEval>& /*paramCache*/,
                              unsigned phaseIdx)
@@ -288,7 +288,7 @@ public:
     }
 
     //! \copydoc BaseFluidSystem::fugacityCoefficient
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
     static LhsEval fugacityCoefficient(const FluidState& fluidState,
                                        const ParameterCache<ParamCacheEval>& /*paramCache*/,
                                        unsigned phaseIdx,
@@ -306,7 +306,7 @@ public:
     }
 
     //! \copydoc BaseFluidSystem::diffusionCoefficient
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
     static LhsEval diffusionCoefficient(const FluidState& fluidState,
                                         const ParameterCache<ParamCacheEval>& /*paramCache*/,
                                         unsigned phaseIdx,
@@ -322,7 +322,7 @@ public:
     }
 
     //! \copydoc BaseFluidSystem::enthalpy
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
     static LhsEval enthalpy(const FluidState& fluidState,
                             const ParameterCache<ParamCacheEval>& /*paramCache*/,
                             unsigned phaseIdx)
@@ -339,7 +339,7 @@ public:
     }
 
     //! \copydoc BaseFluidSystem::thermalConductivity
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
     static LhsEval thermalConductivity(const FluidState& fluidState,
                                        const ParameterCache<ParamCacheEval>& /*paramCache*/,
                                        const unsigned phaseIdx)
@@ -352,7 +352,7 @@ public:
     }
 
     //! \copydoc BaseFluidSystem::heatCapacity
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
     static LhsEval heatCapacity(const FluidState& fluidState,
                                 const ParameterCache<ParamCacheEval>& /*paramCache*/,
                                 unsigned phaseIdx)

@@ -42,7 +42,7 @@ class ViscosityModels
 public:
 
         // Improved LBC model for CO2 rich mixtures. (Lansangan, Taylor, Smith & Kovarik - 1993)
-        template <class FluidState, class Params, class LhsEval = typename FluidState::Scalar>
+        template <class FluidState, class Params, class LhsEval = typename FluidState::ValueType>
         static LhsEval LBCco2rich(const FluidState& fluidState,
                           const Params& /*paramCache*/,
                           unsigned phaseIdx)

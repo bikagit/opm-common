@@ -39,7 +39,7 @@ namespace Opm {
  * \brief Module for the modular fluid state which stores the
  *       pressures explicitly.
  */
-template <class Scalar,
+template <class ValueType,
           unsigned numPhases,
           class Implementation>
 class FluidStateExplicitPressureModule
@@ -51,14 +51,14 @@ public:
     /*!
      * \brief The pressure of a fluid phase [Pa]
      */
-    const Scalar& pressure(unsigned phaseIdx) const
+    const ValueType& pressure(unsigned phaseIdx) const
     { return pressure_[phaseIdx]; }
 
 
     /*!
      * \brief Set the pressure of a phase [Pa]
      */
-    void setPressure(unsigned phaseIdx, const Scalar& value)
+    void setPressure(unsigned phaseIdx, const ValueType& value)
     { pressure_[phaseIdx] = value; }
 
     /*!
@@ -69,7 +69,7 @@ public:
     void assign(const FluidState& fs)
     {
         for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx) {
-            pressure_[phaseIdx] = decay<Scalar>(fs.pressure(phaseIdx));
+            pressure_[phaseIdx] = decay<ValueType>(fs.pressure(phaseIdx));
         }
     }
 
@@ -87,14 +87,14 @@ public:
     }
 
 protected:
-    std::array<Scalar, numPhases> pressure_{};
+    std::array<ValueType, numPhases> pressure_{};
 };
 
 /*!
  * \brief Module for the modular fluid state which does not  the
  *        pressures but throws std::logic_error instead.
  */
-template <class Scalar>
+template <class ValueT>
 class FluidStateNullPressureModule
 {
 public:
@@ -104,7 +104,7 @@ public:
     /*!
      * \brief The pressure of a fluid phase [Pa]
      */
-    const Scalar& pressure(unsigned /* phaseIdx */) const
+    const ValueT& pressure(unsigned /* phaseIdx */) const
     { throw std::logic_error("Pressure is not provided by this fluid state"); }
 
 

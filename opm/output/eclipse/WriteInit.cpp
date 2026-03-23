@@ -908,50 +908,124 @@ namespace {
                     // needs to be changed to support different multipliers for different LGRs if fullProperties is true
                     writeSimulatorPropertiesLGRCell(grid, multipliers, initFile, global_fathers);
                 }
+                writeIntegerCellPropertiesLGRCell(es, global_fathers, initFile);
             }
             initFile.message("LGRSGONE");
             }
     }
 
-    void writeLGRLocalHeadersAndProperties(const ::Opm::EclipseState& es,
-                                           const ::Opm::EclipseGrid& grid,
-                                           const ::Opm::Schedule& schedule,
-                                                 ::Opm::EclIO::OutputStream::Init& initFile)
-    {
-        if (!grid.is_lgr())
-            return;
 
-        std::vector<std::string> all_lgr_tag = grid.get_all_lgr_labels();
-        for (std::size_t index : grid.get_print_order_lgr())
-        {
-            auto lgr_label = all_lgr_tag[index];
-            const Opm::EclipseGridLGR& lgr_grid = grid.getLGRCell(lgr_label);
-            std::vector<int> global_fathers = lgr_grid.getLGRCell_global_father(grid);
-            writeInitFileHeaderLGRCell(es, lgr_grid, schedule, initFile, index + 1, false);
-            writeIntegerCellPropertiesLGRCell(es, global_fathers, initFile);
-        }
-        initFile.message("LGRSGONE");
+    // Extract transmissibility values from NNCdata, convert units, return as single precision.
+    std::vector<float> extractTrans(const std::vector<::Opm::NNCdata>& nncs,
+                                    const ::Opm::UnitSystem&            units)
+    {
+        auto tran = std::vector<double>{};
+        tran.reserve(nncs.size());
+        std::ranges::transform(nncs, std::back_inserter(tran),
+                               [](const auto& nd) { return nd.trans; });
+        units.from_si(::Opm::UnitSystem::measure::transmissibility, tran);
+        return singlePrecision(tran);
     }
 
-    void writeLGRnnc(const ::Opm::EclipseState& es,
-                     const ::Opm::EclipseGrid& grid,
-                     const ::Opm::Schedule& schedule,
-                           ::Opm::EclIO::OutputStream::Init& initFile)
+    // Write TRANNNC for one LGR: same-grid NNCs within the LGR, or empty if none.
+    void writeLGRTranNNC(std::size_t                              lgr_grid_index,
+                         const ::Opm::NNCCollection&              nnc_col,
+                         const ::Opm::UnitSystem&                 units,
+                         ::Opm::EclIO::OutputStream::Init&        initFile)
+    {
+        if (nnc_col.hasSameGridNNC(lgr_grid_index)) {
+            writeNonNeighbourConnections(nnc_col.getNNC(lgr_grid_index).input(), units, initFile);
+        } else {
+            initFile.write("TRANNNC", std::vector<float>{});
+        }
+    }
+
+    // Write TRANGL for one LGR: global-to-local transmissibilities (skipped if none exist).
+    void writeLGRTranGL(std::size_t                              lgr_grid_index,
+                        const ::Opm::NNCCollection&              nnc_col,
+                        const ::Opm::UnitSystem&                 units,
+                        ::Opm::EclIO::OutputStream::Init&        initFile)
+    {
+        if (!nnc_col.hasCrossGridNNC(0, lgr_grid_index))
+            return;
+        initFile.write("TRANGL", extractTrans(nnc_col.getNNC(0, lgr_grid_index).input(), units));
+    }
+
+    // Write LGRJOIN + TRANLL for all LGR-to-LGR pairs owned by lgr_grid_index.
+    // Keys in diff_grid_nnc are normalised (min_grid, max_grid), so a pair is "owned"
+    // by the lower-indexed LGR (g1 == lgr_grid_index). This ensures each connection
+    // is written exactly once, in the block of the first LGR in the pair.
+    // Global-local pairs (g1==0) are naturally skipped since 0 != any lgr_grid_index.
+    void writeLGRTranLL(std::size_t                              lgr_grid_index,
+                        const ::Opm::NNCCollection&              nnc_col,
+                        const std::vector<std::string>&          all_lgr_tag,
+                        const ::Opm::UnitSystem&                 units,
+                        ::Opm::EclIO::OutputStream::Init&        initFile)
+    {
+        using PaddedString = Opm::EclIO::PaddedOutputString<8>;
+        for (const auto& [key, nnc_diff] : nnc_col.diff_grid_nnc()) {
+            const auto [g1, g2] = key;
+            if (g1 != lgr_grid_index) continue;
+            initFile.write("LGRJOIN", std::vector<PaddedString>{
+                PaddedString{all_lgr_tag[g1 - 1]},
+                PaddedString{all_lgr_tag[g2 - 1]}
+            });
+            initFile.write("TRANLL", extractTrans(nnc_diff.input(), units));
+        }
+    }
+
+    void writeLGRnnc(const ::Opm::EclipseState&              es,
+                     const ::Opm::EclipseGrid&               grid,
+                     const ::Opm::Schedule&                  schedule,
+                           ::Opm::EclIO::OutputStream::Init& initFile,
+                     const ::Opm::NNCCollection&             nnc_col)
     {
         if (!grid.is_lgr())
             return;
-        std::vector<std::string> all_lgr_tag  = grid.get_all_lgr_labels();
-        for (std::size_t index : grid.get_print_order_lgr())
-        {
-            auto lgr_label = all_lgr_tag[index];
-            const Opm::EclipseGridLGR& lgr_grid = grid.getLGRCell(lgr_label);
-            writeInitFileHeaderLGRCell(es, lgr_grid, schedule, initFile, index+1,false);
 
+        const auto& units = es.getUnits();
+        const std::vector<std::string> all_lgr_tag = grid.get_all_lgr_labels();
+
+        // Single pass: for each LGR write its NNC block in order:
+        //   LGRHEADI/Q/D  ->  TRANNNC  ->  TRANGL  ->  LGRJOIN+TRANLL (if this LGR owns any pairs)
+        // LGRs with no NNC involvement at all are skipped entirely.
+        // LGRSGONE is only written if at least one LGR block was written.
+        bool anyLGRNNCWritten = false;
+        for (std::size_t index : grid.get_print_order_lgr()) {
+            const auto lgr_label = all_lgr_tag[index];
+            const Opm::EclipseGridLGR& lgr_grid = grid.getLGRCell(lgr_label);
+            const std::size_t lgr_grid_index = index + 1;  // 0 == global in NNCCollection
+
+            if (!nnc_col.hasNNCForGrid(lgr_grid_index))
+                continue;
+
+            anyLGRNNCWritten = true;
+            writeInitFileHeaderLGRCell(es, lgr_grid, schedule, initFile, lgr_grid_index, false);
+            writeLGRTranNNC(lgr_grid_index, nnc_col, units, initFile);
+            writeLGRTranGL (lgr_grid_index, nnc_col, units, initFile);
+            writeLGRTranLL (lgr_grid_index, nnc_col, all_lgr_tag, units, initFile);
         }
-        initFile.message("LGRSGONE");
+
+        if (anyLGRNNCWritten)
+            initFile.message("LGRSGONE");
     }
 
 } // Anonymous namespace
+
+// Convert a flat list of global NNCs into an NNCCollection (grid index 0 = global).
+// Used by the legacy vector<NNCdata> overloads to delegate to the NNCCollection
+// primary implementation.
+static Opm::NNCCollection makeNNCCollection(const std::vector<::Opm::NNCdata>& nnc)
+{
+    Opm::NNCCollection nnc_col;
+    if (!nnc.empty()) {
+        Opm::NNCDataContainer global_nnc;
+        for (const auto& nd : nnc)
+            global_nnc.addNNC(nd.cell1, nd.cell2, nd.trans);
+        nnc_col.addNNC(std::move(global_nnc));
+    }
+    return nnc_col;
+}
 
 void Opm::InitIO::write(const ::Opm::EclipseState&                  es,
                         const ::Opm::EclipseGrid&                   grid,
@@ -960,11 +1034,10 @@ void Opm::InitIO::write(const ::Opm::EclipseState&                  es,
                         std::map<std::string, std::vector<int>>     int_data,
                         const std::vector<::Opm::NNCdata>&          nnc,
                         ::Opm::EclIO::OutputStream::Init&           initFile)
-    {
-        const std::vector<std::reference_wrapper<const ::Opm::data::Solution>> simPropsVec{simProps};
-        Opm::InitIO::write(es, grid, schedule, simPropsVec, std::move(int_data), nnc, initFile);
-    }
-
+{
+    const std::vector<std::reference_wrapper<const ::Opm::data::Solution>> simPropsVec{simProps};
+    Opm::InitIO::write(es, grid, schedule, simPropsVec, std::move(int_data), nnc, initFile);
+}
 
 void Opm::InitIO::write(const ::Opm::EclipseState&                  es,
                         const ::Opm::EclipseGrid&                   grid,
@@ -974,18 +1047,25 @@ void Opm::InitIO::write(const ::Opm::EclipseState&                  es,
                         const std::vector<::Opm::NNCdata>&          nnc,
                         ::Opm::EclIO::OutputStream::Init&           initFile)
 {
-    // The INIT file is a binary file.  The data is written in the
+    Opm::InitIO::write(es, grid, schedule, simProps,
+                       std::move(int_data), makeNNCCollection(nnc), initFile);
+}
+
+
+void Opm::InitIO::write(const ::Opm::EclipseState&                  es,
+                        const ::Opm::EclipseGrid&                   grid,
+                        const ::Opm::Schedule&                      schedule,
+                        const std::vector<std::reference_wrapper<const ::Opm::data::Solution>>   simProps,
+                        std::map<std::string, std::vector<int>>     int_data,
+                        const NNCCollection&                        nnc_col,
+                        ::Opm::EclIO::OutputStream::Init&           initFile)
+{
     const auto& units = es.getUnits();
 
-    // GLOBAL HEADER - ITEM 1
+    // GLOBAL HEADER (INTEHEAD, LOGIHEAD, DOUBHEAD)
     writeInitFileHeader(es, grid, schedule, initFile);
 
-    // GLOBAL PROPERTY ARRAYS - ITEM 2
-    // The PORV vector is a special case.  This particular vector always
-    // holds a total of nx*ny*nz elements, and the elements are explicitly
-    // set to zero for inactive cells.  This treatment implies that the
-    // active/inactive cell mapping can be inferred by reading the PORV
-    // vector from the result set.
+    // GLOBAL PROPERTY ARRAYS (PORV, DEPTH, TRANX/Y/Z, DX/Y/Z, PERMX/Y/Z, MULTX/Y/Z, PORO, TOPS, ...)
     const auto porv = readGlobalPoreVolume(es, units);
     writePoreVolume(porv, initFile);
 
@@ -1011,29 +1091,33 @@ void Opm::InitIO::write(const ::Opm::EclipseState&                  es,
         writeSimulatorProperties(grid, multipliers, initFile);
     }
 
-    // LOCAL PROPERTIES LGR
-    writeLGRLocalProperties(es,grid, schedule, simProps, porv, units, initFile);
-
-
-    // TABLES
-    writeTableData(es, units, initFile);
-    // GLOBAL REGION
+    // GLOBAL REGION ARRAYS (SATNUM, PVTNUM, EQLNUM, FIPNUM, ...) - before NNC per reference output
     writeIntegerCellProperties(es, initFile);
     writeIntegerMaps(std::move(int_data), initFile);
-    writeSatFuncScaling(es, units, initFile);
 
-    // LGR HEADERS AND INTERGER PROPERTIES
-    writeLGRLocalHeadersAndProperties(es, grid, schedule, initFile);
-
-    if (!nnc.empty()) {
-        writeNonNeighbourConnections(nnc, units, initFile);
+    // GLOBAL NNC - after integer region arrays, before LGR sections
+    if (!nnc_col.empty()) {
+        writeNonNeighbourConnections(nnc_col.getGlobalNNC().input(), units, initFile);
     }
 
+    // LGR NNC SECTION (per reference: after global NNC, before LGR property section)
+    // For each LGR with NNCs: LGRHEADI/Q/D, TRANNNC, TRANGL, [LGRJOIN, TRANLL] + LGRSGONE
+    writeLGRnnc(es, grid, schedule, initFile, nnc_col);
+
+    // LGR PROPERTY SECTION (per reference: after LGR NNC section)
+    // For each LGR: LGRHEADI/Q/D, PORV, DEPTH, TRANX/Y/Z, PERMX/Y/Z, MULTX/Y/Z, PORO, SATNUM, ... + LGRSGONE
+    // Not yet supported: LGR-specific aquifer and satfunc scaling - planned for upcoming versions
+    writeLGRLocalProperties(es, grid, schedule, simProps, porv, units, initFile);
+
+    // TABULAR DATA (TABDIMS, TAB, CON) - after all LGR sections per reference output
+    writeTableData(es, units, initFile);
+
+    writeSatFuncScaling(es, units, initFile);
+
+    // Aquifers
+    // TODO: LGR-specific aquifer support planned for upcoming versions
     if (es.aquifer().active()) {
         writeAquifers(es.aquifer(), grid, initFile);
     }
-
-    //LGR NNC
-    writeLGRnnc(es, grid, schedule, initFile);
 
 }

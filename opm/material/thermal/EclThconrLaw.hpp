@@ -51,7 +51,7 @@ public:
      * \brief Given a fluid state, return the total thermal conductivity [W/m^2 / (K/m)] of the porous
      *        medium.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation thermalConductivity(const Params& params,
                                           const FluidState& fluidState)
     {

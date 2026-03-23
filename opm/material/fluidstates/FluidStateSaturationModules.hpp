@@ -39,7 +39,7 @@ namespace Opm {
  * \brief Module for the modular fluid state which stores the
  *       saturations explicitly.
  */
-template <class Scalar,
+template <class ValueType,
           unsigned numPhases,
           class Implementation>
 class FluidStateExplicitSaturationModule
@@ -51,13 +51,13 @@ public:
     /*!
      * \brief The saturation of a fluid phase [-]
      */
-    const Scalar& saturation(unsigned phaseIdx) const
+    const ValueType& saturation(unsigned phaseIdx) const
     { return saturation_[phaseIdx]; }
 
     /*!
      * \brief Set the saturation of a phase [-]
      */
-    void setSaturation(unsigned phaseIdx, const Scalar& value)
+    void setSaturation(unsigned phaseIdx, const ValueType& value)
     { saturation_[phaseIdx] = value; }
 
     /*!
@@ -68,7 +68,7 @@ public:
     void assign(const FluidState& fs)
     {
         for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx) {
-            saturation_[phaseIdx] = decay<Scalar>(fs.saturation(phaseIdx));
+            saturation_[phaseIdx] = decay<ValueType>(fs.saturation(phaseIdx));
         }
     }
 
@@ -86,14 +86,14 @@ public:
     }
 
 protected:
-    std::array<Scalar, numPhases> saturation_{};
+    std::array<ValueType, numPhases> saturation_{};
 };
 
 /*!
  * \brief Module for the modular fluid state which does not  the
  *        saturations but throws std::logic_error instead.
  */
-template <class Scalar>
+template <class ValueT>
 class FluidStateNullSaturationModule
 {
 public:
@@ -103,7 +103,7 @@ public:
     /*!
      * \brief The saturation of a fluid phase [-]
      */
-    const Scalar& saturation(unsigned /* phaseIdx */) const
+    const ValueT& saturation(unsigned /* phaseIdx */) const
     { throw std::runtime_error("Saturation is not provided by this fluid state"); }
 
     /*!

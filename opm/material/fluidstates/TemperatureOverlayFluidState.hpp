@@ -42,7 +42,7 @@ template <class FluidState>
 class TemperatureOverlayFluidState
 {
 public:
-    typedef typename FluidState::Scalar Scalar;
+    using ValueType = typename FluidState::ValueType;
 
     enum { numPhases = FluidState::numPhases };
     enum { numComponents = FluidState::numComponents };
@@ -61,7 +61,7 @@ public:
     {
     }
 
-    TemperatureOverlayFluidState(Scalar T, const FluidState& fs)
+    TemperatureOverlayFluidState(ValueType T, const FluidState& fs)
         : temperature_(T), fs_(&fs)
     { }
 
@@ -167,7 +167,7 @@ public:
     /*!
      * \brief The temperature of a fluid phase [K]
      */
-    const Scalar& temperature(unsigned /*phaseIdx*/) const
+    const ValueType& temperature(unsigned /*phaseIdx*/) const
     { return temperature_; }
 
     /*!
@@ -207,7 +207,7 @@ public:
     /*!
      * \brief Set the temperature [K] of a fluid phase
      */
-    void setTemperature(const Scalar& value)
+    void setTemperature(const ValueType& value)
     { temperature_ = value; }
 
     /*!
@@ -225,7 +225,7 @@ public:
 
 protected:
     const FluidState* fs_;
-    Scalar temperature_;
+    ValueType temperature_;
 };
 
 } // namespace Opm

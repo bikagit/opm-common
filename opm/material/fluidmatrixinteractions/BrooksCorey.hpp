@@ -150,7 +150,7 @@ public:
      *               (for Brooks-Corey: Entry pressure and shape factor)
      * \param fs Fluid state
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation pcnw(const Params& params, const FluidState& fs)
     {
         const Evaluation& Sw =
@@ -190,7 +190,7 @@ public:
      *               (for Brooks-Corey: Entry pressure and shape factor)
      * \param fs Fluid state
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sw(const Params& params, const FluidState& fs)
     {
         Evaluation pC =
@@ -211,7 +211,7 @@ public:
      * \brief Calculate the non-wetting phase saturations depending on
      *        the phase pressures.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sn(const Params& params, const FluidState& fs)
     { return 1.0 - Sw<FluidState, Evaluation>(params, fs); }
 
@@ -227,7 +227,7 @@ public:
      *               (for Brooks-Corey: Entry pressure and shape factor)
      * \param fs Fluid state
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krw(const Params& params, const FluidState& fs)
     {
         const auto& sw =
@@ -259,7 +259,7 @@ public:
      *               (for Brooks-Corey: Entry pressure and shape factor)
      * \param fs Fluid state
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krn(const Params& params, const FluidState& fs)
     {
         const Evaluation& sw =

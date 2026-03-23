@@ -53,6 +53,7 @@
 #include <opm/input/eclipse/EclipseState/Tables/SwofTable.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/TLMixpar.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/Tabdims.hpp>
+#include <opm/input/eclipse/EclipseState/Tables/ZmfvdTable.hpp>
 
 #include <opm/input/eclipse/Schedule/VFPProdTable.hpp>
 #include <opm/input/eclipse/Schedule/VFPInjTable.hpp>
@@ -2991,4 +2992,79 @@ TLMIXPAR
     BOOST_CHECK_EQUAL( r1.density_parameter, 0.25);
 
     BOOST_CHECK_THROW(tlm[2], std::out_of_range);
+}
+
+
+BOOST_AUTO_TEST_CASE(ZmfvdTable_TwoComponents) {
+    // ZMFVD with 2 components, 2 equilibrium regions
+    const auto deck = Opm::Parser{}.parseString(R"(
+RUNSPEC
+COMPS
+2 /
+EQLDIMS
+2 /
+PROPS
+ZMFVD
+  100.0  0.5  0.5
+  200.0  0.6  0.4
+  300.0  0.7  0.3 /
+  100.0  0.4  0.6
+  200.0  0.5  0.5 /
+END
+)");
+
+    const auto tmgr = Opm::TableManager { deck };
+    const auto& zmfvd = tmgr.getZmfvdTables();
+    BOOST_REQUIRE_EQUAL(zmfvd.size(), std::size_t{2});
+
+    // -- Table 1 --
+    {
+        const auto& t1 = zmfvd.getTable<ZmfvdTable>(0);
+        BOOST_CHECK_EQUAL(t1.numRows(), 3);
+        BOOST_CHECK_EQUAL(t1.numColumns(), 3);  // depth + 2 components
+
+        const auto& depth = t1.getDepthColumn();
+        BOOST_REQUIRE_EQUAL(depth.size(), std::size_t{3});
+        BOOST_CHECK_CLOSE(depth[0], 100.0, epsilon());
+        BOOST_CHECK_CLOSE(depth[1], 200.0, epsilon());
+        BOOST_CHECK_CLOSE(depth[2], 300.0, epsilon());
+
+        const auto& z0 = t1.getMoleFractionColumn(0);
+        BOOST_REQUIRE_EQUAL(z0.size(), std::size_t{3});
+        BOOST_CHECK_CLOSE(z0[0], 0.5, epsilon());
+        BOOST_CHECK_CLOSE(z0[1], 0.6, epsilon());
+        BOOST_CHECK_CLOSE(z0[2], 0.7, epsilon());
+
+        const auto& z1 = t1.getMoleFractionColumn(1);
+        BOOST_REQUIRE_EQUAL(z1.size(), std::size_t{3});
+        BOOST_CHECK_CLOSE(z1[0], 0.5, epsilon());
+        BOOST_CHECK_CLOSE(z1[1], 0.4, epsilon());
+        BOOST_CHECK_CLOSE(z1[2], 0.3, epsilon());
+
+        BOOST_CHECK_THROW(t1.getMoleFractionColumn(2), std::out_of_range);
+        BOOST_CHECK_THROW(t1.getMoleFractionColumn(-1), std::out_of_range);
+    }
+
+    // -- Table 2 --
+    {
+        const auto& t2 = zmfvd.getTable<ZmfvdTable>(1);
+        BOOST_CHECK_EQUAL(t2.numRows(), 2);
+        BOOST_CHECK_EQUAL(t2.numColumns(), 3);
+
+        const auto& depth = t2.getDepthColumn();
+        BOOST_REQUIRE_EQUAL(depth.size(), std::size_t{2});
+        BOOST_CHECK_CLOSE(depth[0], 100.0, epsilon());
+        BOOST_CHECK_CLOSE(depth[1], 200.0, epsilon());
+
+        const auto& z0 = t2.getMoleFractionColumn(0);
+        BOOST_CHECK_CLOSE(z0[0], 0.4, epsilon());
+        BOOST_CHECK_CLOSE(z0[1], 0.5, epsilon());
+
+        const auto& z1 = t2.getMoleFractionColumn(1);
+        BOOST_CHECK_CLOSE(z1[0], 0.6, epsilon());
+        BOOST_CHECK_CLOSE(z1[1], 0.5, epsilon());
+
+        BOOST_CHECK_THROW(t2.getMoleFractionColumn(2), std::out_of_range);
+        BOOST_CHECK_THROW(t2.getMoleFractionColumn(-1), std::out_of_range);
+    }
 }

@@ -153,7 +153,7 @@ namespace
                 wellTraj.wellPathGeometry = new external::RigWellPath;
 
                 auto connections = std::make_shared<WellConnections>(well.getConnections());
-                connections->loadCOMPTRAJ(record, handlerContext.grid, name,
+                connections->loadCOMPTRAJ(record, name, handlerContext.grid,
                                           handlerContext.keyword.location(),
                                           wellTraj);
 
@@ -204,7 +204,7 @@ Well {} has no connections to the grid. The well will remain SHUT)", name);
                 auto well = handlerContext.state().wells.get(name);
 
                 auto connections = std::make_shared<WellConnections>(well.getConnections());
-                connections->loadWELTRAJ(record, handlerContext.grid, name,
+                connections->loadWELTRAJ(record, name, handlerContext.grid,
                                          handlerContext.keyword.location());
 
                 if (const auto& md = connections->getMD(); md.size() > 1) {

@@ -167,7 +167,7 @@ public:
      *         constitutive relation (e.g. Brooks & Corey, van
      *         Genuchten, linear...)
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation pcnw(const Params& params, const FluidState& fs)
     {
         typedef SaturationOverlayFluidState<FluidState> OverlayFluidState;
@@ -212,7 +212,7 @@ public:
      * \brief Calculate wetting liquid phase saturation given that
      *        the rest of the fluid state has been initialized
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sw(const Params& params, const FluidState& fs)
     {
         return absoluteSaturation(params,
@@ -231,7 +231,7 @@ public:
      * \brief Calculate non-wetting liquid phase saturation given that
      *        the rest of the fluid state has been initialized
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sn(const Params& params, const FluidState& fs)
     {
         return absoluteSaturation(params,
@@ -254,7 +254,7 @@ public:
      *
      * This method is only available for at least three fluid phases
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static typename std::enable_if< (Traits::numPhases > 2), Evaluation>::type
     Sg(const Params& params, const FluidState& fs)
     {
@@ -273,7 +273,7 @@ public:
      * \return          Relative permeability of the wetting phase calculated as implied by EffLaw e.g. Brooks & Corey, van Genuchten, linear... .
      *
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krw(const Params& params, const FluidState& fs)
     {
         typedef SaturationOverlayFluidState<FluidState> OverlayFluidState;
@@ -301,7 +301,7 @@ public:
     /*!
      * \brief The relative permeability of the non-wetting phase.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krn(const Params& params, const FluidState& fs)
     {
         typedef SaturationOverlayFluidState<FluidState> OverlayFluidState;
@@ -331,7 +331,7 @@ public:
      *
      * This method is only available for at least three fluid phases
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static typename std::enable_if< (Traits::numPhases > 2), Evaluation>::type
     krg(const Params& params, const FluidState& fs)
     {

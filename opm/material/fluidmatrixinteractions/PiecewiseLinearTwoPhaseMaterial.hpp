@@ -130,7 +130,7 @@ public:
     /*!
      * \brief The capillary pressure-saturation curve
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     OPM_HOST_DEVICE static Evaluation pcnw(const Params& params, const FluidState& fs)
     {
         OPM_TIMEFUNCTION_LOCAL(Subsystem::SatProps);
@@ -157,7 +157,7 @@ public:
     /*!
      * \brief The saturation-capillary pressure curve
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     OPM_HOST_DEVICE static Evaluation Sw(const Params& /* params */, const FluidState& /* fs */)
     { throw std::logic_error("Not implemented: Sw()"); }
 
@@ -169,7 +169,7 @@ public:
      * \brief Calculate the non-wetting phase saturations depending on
      *        the phase pressures.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     OPM_HOST_DEVICE static Evaluation Sn(const Params& params, const FluidState& fs)
     { return 1 - Sw<FluidState, Scalar>(params, fs); }
 
@@ -181,7 +181,7 @@ public:
      * \brief The relative permeability for the wetting phase of the
      *        porous medium
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     OPM_HOST_DEVICE static Evaluation krw(const Params& params, const FluidState& fs)
     {
         OPM_TIMEFUNCTION_LOCAL(Subsystem::SatProps);
@@ -209,7 +209,7 @@ public:
      * \brief The relative permeability for the non-wetting phase
      *        of the porous medium
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     OPM_HOST_DEVICE static Evaluation krn(const Params& params, const FluidState& fs)
     {
         OPM_TIMEFUNCTION_LOCAL(Subsystem::SatProps);

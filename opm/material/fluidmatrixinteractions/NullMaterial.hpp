@@ -124,7 +124,7 @@ public:
     /*!
      * \brief The difference between the pressures of the non-wetting and wetting phase.
      */
-    template <class FluidState, class Evaluation  = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation  = typename FluidState::ValueType>
     static typename std::enable_if<(numPhases > 1), Evaluation>::type
     pcnw(const Params& /*params*/, const FluidState& /*fluidState*/)
     { return 0; }
@@ -138,7 +138,7 @@ public:
      * \brief Calculate wetting phase saturation given that the rest
      *        of the fluid state has been initialized
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Scalar Sw(const Params& /*params*/, const FluidState& /*fluidState*/)
     { throw std::logic_error("Not defined: Sw()"); }
 
@@ -151,7 +151,7 @@ public:
      * \brief Calculate non-wetting phase saturation given that the
      *        rest of the fluid state has been initialized
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Scalar Sn(const Params& /*params*/, const FluidState& /*fluidState*/)
     { throw std::logic_error("Not defined: Sn()"); }
 
@@ -166,7 +166,7 @@ public:
      *
      * This method is only available for at least three fluid phases
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static typename std::enable_if< (numPhases > 2), Evaluation>::type
     Sg(const Params& /*params*/, const FluidState& /*fluidState*/)
     { throw std::logic_error("Not defined: Sg()"); }
@@ -174,7 +174,7 @@ public:
     /*!
      * \brief The relative permability of the wetting phase
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static typename std::enable_if<(numPhases > 1), Evaluation>::type
     krw(const Params& /*params*/, const FluidState& fluidState)
     {
@@ -192,7 +192,7 @@ public:
     /*!
      * \brief The relative permability of the liquid non-wetting phase
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static typename std::enable_if<(numPhases > 1), Evaluation>::type
     krn(const Params& /*params*/, const FluidState& fluidState)
     {
@@ -214,7 +214,7 @@ public:
      *
      * This method is only available for at least three fluid phases
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static typename std::enable_if< (numPhases > 2), Evaluation>::type
     krg(const Params& /*params*/, const FluidState& fluidState)
     {
@@ -229,7 +229,7 @@ public:
      *
      * This method is only available for at least three fluid phases
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static typename std::enable_if< (Traits::numPhases > 2), Evaluation>::type
     pcgn(const Params& /*params*/, const FluidState& /*fluidState*/)
     { return 0.0; }

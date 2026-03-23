@@ -118,7 +118,7 @@ void checkImmiscibleFlash(const FluidState& fsRef,
 
     // run the flash calculation
     ImmiscibleFlash::guessInitial(fsFlash, globalMolarities);
-    typename FluidSystem::template ParameterCache<typename FluidState::Scalar> paramCache;
+    typename FluidSystem::template ParameterCache<typename FluidState::ValueType> paramCache;
     ImmiscibleFlash::template solve<MaterialLaw>(fsFlash, matParams, paramCache, globalMolarities);
 
     // compare the "flashed" fluid state with the reference one
@@ -147,7 +147,7 @@ void completeReferenceFluidState(FluidState& fs,
                    + (pC[otherPhaseIdx] - pC[refPhaseIdx]));
 
     // set all phase densities
-    typename FluidSystem::template ParameterCache<typename FluidState::Scalar> paramCache;
+    typename FluidSystem::template ParameterCache<typename FluidState::ValueType> paramCache;
     paramCache.updateAll(fs);
     for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++ phaseIdx) {
         Scalar rho = FluidSystem::density(fs, paramCache, phaseIdx);

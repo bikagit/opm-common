@@ -300,7 +300,7 @@ public:
      * p_{c,gn} = p_g - p_n
      * \f]
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation pcgn(const Params& /* params */,
                            const FluidState& /* fs */)
     {
@@ -316,7 +316,7 @@ public:
      * p_{c,nw} = p_n - p_w
      * \f]
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation pcnw(const Params& /* params */,
                            const FluidState& /* fs */)
     {
@@ -337,7 +337,7 @@ public:
     /*!
      * \brief The saturation of the gas phase.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sg(const Params& /* params */,
                          const FluidState& /* fluidState */)
     {
@@ -347,7 +347,7 @@ public:
     /*!
      * \brief The saturation of the non-wetting (i.e., oil) phase.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sn(const Params& /* params */,
                          const FluidState& /* fluidState */)
     {
@@ -357,7 +357,7 @@ public:
     /*!
      * \brief The saturation of the wetting (i.e., water) phase.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sw(const Params& /* params */,
                          const FluidState& /* fluidState */)
     {
@@ -421,7 +421,7 @@ public:
     /*!
      * \brief The relative permeability of the gas phase.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krg(const Params& /* params */,
                           const FluidState& /* fluidState */)
     {
@@ -431,7 +431,7 @@ public:
     /*!
      * \brief The relative permeability of the wetting phase.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krw(const Params& /* params */,
                           const FluidState& /* fluidState */)
     {
@@ -441,7 +441,7 @@ public:
     /*!
      * \brief The relative permeability of the non-wetting (i.e., oil) phase.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krn(const Params& /* params */,
                           const FluidState& /* fluidState */)
     {

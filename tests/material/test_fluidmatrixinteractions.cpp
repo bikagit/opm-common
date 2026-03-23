@@ -125,7 +125,7 @@ void testGenericApi()
         }
 
         {
-            typename FluidState::Scalar destValuesEval[numPhases];
+            typename FluidState::ValueType destValuesEval[numPhases];
             MaterialLaw::capillaryPressures(destValuesEval, paramsConst, fs);
             MaterialLaw::saturations(destValuesEval, paramsConst, fs);
             MaterialLaw::relativePermeabilities(destValuesEval, paramsConst, fs);
@@ -165,7 +165,7 @@ void testTwoPhaseApi()
         v = MaterialLaw::template krw<FluidState, Scalar>(params, fs);
         v = MaterialLaw::template krn<FluidState, Scalar>(params, fs);
 
-        [[maybe_unused]] typename FluidState::Scalar vEval;
+        [[maybe_unused]] typename FluidState::ValueType vEval;
         vEval = MaterialLaw::pcnw(params, fs);
         vEval = MaterialLaw::Sw(params, fs);
         vEval = MaterialLaw::Sn(params, fs);
@@ -207,8 +207,8 @@ void testTwoPhaseSatApi()
         v = MaterialLaw::twoPhaseSatKrw(params, Sw);
         v = MaterialLaw::twoPhaseSatKrn(params, Sw);
 
-        typename FluidState::Scalar SwEval = 0;
-        [[maybe_unused]] typename FluidState::Scalar vEval;
+        typename FluidState::ValueType SwEval = 0;
+        [[maybe_unused]] typename FluidState::ValueType vEval;
         vEval = MaterialLaw::twoPhaseSatPcnw(params, SwEval);
         vEval = MaterialLaw::twoPhaseSatSw(params, SwEval);
         vEval = MaterialLaw::twoPhaseSatSn(params, SwEval);
@@ -245,7 +245,7 @@ void testThreePhaseApi()
         v = MaterialLaw::template krn<FluidState, Scalar>(params, fs);
         v = MaterialLaw::template krg<FluidState, Scalar>(params, fs);
 
-        using Eval = typename FluidState::Scalar;
+        using Eval = typename FluidState::ValueType;
         [[maybe_unused]] Eval vEval;
         vEval = MaterialLaw::template pcnw<FluidState, Eval>(params, fs);
         vEval = MaterialLaw::template Sw<FluidState, Eval>(params, fs);

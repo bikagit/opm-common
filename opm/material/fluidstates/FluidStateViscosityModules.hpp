@@ -38,7 +38,7 @@ namespace Opm {
  * \brief Module for the modular fluid state which stores the
  *       viscosities explicitly.
  */
-template <class Scalar,
+template <class ValueType,
           unsigned numPhases,
           class Implementation>
 class FluidStateExplicitViscosityModule
@@ -50,13 +50,13 @@ public:
     /*!
      * \brief The viscosity of a fluid phase [-]
      */
-    const Scalar& viscosity(unsigned phaseIdx) const
+    const ValueType& viscosity(unsigned phaseIdx) const
     { return viscosity_[phaseIdx]; }
 
     /*!
      * \brief Set the dynamic viscosity of a phase [Pa s]
      */
-    void setViscosity(unsigned phaseIdx, Scalar value)
+    void setViscosity(unsigned phaseIdx, ValueType value)
     { viscosity_[phaseIdx] = value; }
 
     /*!
@@ -67,7 +67,7 @@ public:
     void assign(const FluidState& fs)
     {
         for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx) {
-            viscosity_[phaseIdx] = decay<Scalar>(fs.viscosity(phaseIdx));
+            viscosity_[phaseIdx] = decay<ValueType>(fs.viscosity(phaseIdx));
         }
     }
 
@@ -85,14 +85,14 @@ public:
     }
 
 protected:
-    std::array<Scalar, numPhases> viscosity_{};
+    std::array<ValueType, numPhases> viscosity_{};
 };
 
 /*!
  * \brief Module for the modular fluid state which does not  the
  *        viscosities but throws std::logic_error instead.
  */
-template <class Scalar,
+template <class ValueT,
           unsigned numPhases,
           class Implementation>
 class FluidStateNullViscosityModule
@@ -104,7 +104,7 @@ public:
     /*!
      * \brief The viscosity of a fluid phase [-]
      */
-    const Scalar& viscosity(unsigned /* phaseIdx */) const
+    const ValueT& viscosity(unsigned /* phaseIdx */) const
     { throw std::logic_error("Viscosity is not provided by this fluid state"); }
 
     /*!

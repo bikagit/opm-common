@@ -60,26 +60,55 @@ endfunction()
 
 # Add a library target
 function(opm_add_library)
-  cmake_parse_arguments(PARAM "INTERFACE" "TARGET;TYPE;VERSION;" "" ${ARGN})
+  cmake_parse_arguments(PARAM "PIC" "TARGET;TYPE;VERSION;SOVERSION" "SOURCES;HEADERS;LIBRARIES" ${ARGN})
   if(NOT PARAM_TARGET)
     message(FATAL_ERROR "Function needs a TARGET parameter")
   endif()
-  if(NOT PARAM_VERSION)
-    message(FATAL_ERROR "Function needs a VERSION parameter")
+  if(NOT PARAM_SOVERSION)
+    set(PARAM_SOVERSION ${PARAM_VERSION})
   endif()
 
   add_library(${PARAM_TARGET} ${PARAM_TYPE})
-  set_target_properties(${PARAM_TARGET}
-    PROPERTIES
-    SOVERSION
-      ${${opm}_VERSION}
-    VERSION
-      ${${opm}_VERSION}
-    LINK_FLAGS
-      "${${opm}_LINKER_FLAGS_STR}"
-    POSITION_INDEPENDENT_CODE
-      TRUE
-  )
+  if(PARAM_PIC)
+    set_target_properties(${PARAM_TARGET}
+      POSITION_INDEPENDENT_CODE
+        ON
+    )
+  endif()
+  if(PARAM_VERSION)
+    set_target_properties(${PARAM_TARGET}
+      PROPERTIES
+      SOVERSION
+        ${PARAM_SOVERSION}
+      VERSION
+        ${PARAM_VERSION}
+    )
+  endif()
+  if(PARAM_SOURCES)
+    target_sources(${PARAM_TARGET} PRIVATE ${PARAM_SOURCES})
+  endif()
+  if(PARAM_HEADERS)
+    target_sources(${PARAM_TARGET}
+      PRIVATE
+      FILE_SET
+      HEADERS
+        ${PARAM_HEADERS}
+    )
+  endif()
+
+  if(PARAM_LIBRARIES)
+    target_link_libraries(${PARAM_TARGET} PUBLIC ${PARAM_LIBRARIES})
+  endif()
+
+  get_property(target_props TARGET ${${project}_TARGET} PROPERTY COMPILE_DEFINITIONS)
+  if(target_props MATCHES HAVE_CONFIG_H)
+    target_compile_definitions(${PARAM_TARGET} PRIVATE HAVE_CONFIG_H=1)
+    target_include_directories(${PARAM_TARGET}
+      BEFORE
+      PUBLIC
+        $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
+    )
+  endif()
 
   opm_add_target_options(TARGET ${PARAM_TARGET})
   opm_interprocedural_optimization(TARGET ${PARAM_TARGET})

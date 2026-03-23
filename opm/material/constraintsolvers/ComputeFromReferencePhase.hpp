@@ -105,7 +105,7 @@ public:
      */
     template <class FluidState>
     static void solve(FluidState& fluidState,
-                      typename FluidSystem::template ParameterCache<typename FluidState::Scalar>& paramCache,
+                      typename FluidSystem::template ParameterCache<typename FluidState::ValueType>& paramCache,
                       unsigned refPhaseIdx,
                       bool setViscosity,
                       bool setEnthalpy)

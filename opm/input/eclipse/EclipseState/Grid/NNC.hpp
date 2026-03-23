@@ -103,15 +103,16 @@ class NNC
 {
 public:
     NNC() = default;
+    virtual ~NNC() = default;
     /// Construct from input deck.
     NNC(const EclipseGrid& grid, const Deck& deck);
 
     static NNC serializationTestObject();
 
-    bool addNNC(const size_t cell1, const size_t cell2, const double trans);
+    virtual bool addNNC(const size_t cell1, const size_t cell2, const double trans);
 
     /// \brief Merge additional NNCs into sorted NNCs
-    void merge(const std::vector<NNCdata>& nncs);
+    virtual void merge(const std::vector<NNCdata>& nncs);
     /// \brief Get the combined information from NNC
     const std::vector<NNCdata>& input() const { return m_input; }
     /// \brief Get the information from EDITNNC keyword
@@ -152,6 +153,46 @@ private:
     std::optional<KeywordLocation> m_nnc_location;
     std::optional<KeywordLocation> m_edit_location;
     std::optional<KeywordLocation> m_editr_location;
+
+    friend class NNCDiffGrid;
+};
+
+
+class NNCDataContainer
+{
+    public:
+    NNCDataContainer() = default;
+    virtual ~NNCDataContainer() = default;
+
+    virtual bool addNNC(const size_t cell1, const size_t cell2, const double trans);
+    bool addNNC(const NNCdata nnc_data);
+
+    const std::vector<NNCdata>& input() const { return nnc_container; }
+
+    bool operator==(const NNCDataContainer& other) const;
+
+    protected:
+    std::vector<NNCdata> nnc_container;
+};
+
+
+
+/*
+  NNCDiffGrid is derived class of NNC.  NNC Class as it does not preserve the
+  order of NNC, therefore not suitable for storing NNC data from different grids.
+*/
+class NNCDataContainerDiffGrid : public NNCDataContainer
+{
+public:
+    NNCDataContainerDiffGrid() = default;
+    ~NNCDataContainerDiffGrid() override = default;
+
+    bool addNNC(const size_t cell1, const size_t cell2,
+                const double trans) override;
+
+    void swap_adj(std::size_t grid1, std::size_t grid2);
+
+    bool operator==(const NNCDataContainerDiffGrid& other) const;
 };
 
 
@@ -159,49 +200,62 @@ class NNCCollection
 {
 public:
     NNCCollection() = default;
-    explicit NNCCollection(NNC nnc_global);
+    explicit NNCCollection(NNCDataContainer nnc_global);
 
     // ---- insertion --------------------------------------------------------
 
     /// Add a cross-grid NNC between grid1 and grid2.
-    void addNNC(std::size_t grid1, std::size_t grid2, NNC nnc);
+    void addNNC(std::size_t grid1, std::size_t grid2, NNCDataContainerDiffGrid nnc);
 
     /// Add a same-grid NNC for the given grid index.
-    void addNNC(std::size_t grid, NNC nnc);
+    void addNNC(std::size_t grid, NNCDataContainer nnc);
 
     /// Add the global (main-grid) NNC.  Equivalent to addNNC(0, nnc).
-    void addNNC(NNC nnc);
+    void addNNC(NNCDataContainer nnc);
 
     // ---- cross-grid access ------------------------------------------------
 
-    const NNC& getNNC(std::size_t grid1, std::size_t grid2) const;
-    NNC&       getNNC(std::size_t grid1, std::size_t grid2);
+    const NNCDataContainerDiffGrid& getNNC(std::size_t grid1, std::size_t grid2) const;
+    NNCDataContainerDiffGrid&       getNNC(std::size_t grid1, std::size_t grid2);
 
     bool hasCrossGridNNC(std::size_t grid1, std::size_t grid2) const;
-
+    bool empty() const { return m_sameGridNNCs.empty() && m_diffGridNNCs.empty(); }
     // ---- same-grid access -------------------------------------------------
 
-    const NNC& getNNC(std::size_t grid) const;
-    NNC&       getNNC(std::size_t grid);
+    const NNCDataContainer& getNNC(std::size_t grid) const;
+    NNCDataContainer&       getNNC(std::size_t grid);
 
     bool hasSameGridNNC(std::size_t grid) const;
 
     // ---- global (grid 0) access -------------------------------------------
 
-    const NNC& getGlobalNNC() const;
-    NNC&       getGlobalNNC();
+    const NNCDataContainer& getGlobalNNC() const;
+    NNCDataContainer&       getGlobalNNC();
 
     bool hasGlobalNNC() const { return hasSameGridNNC(0); };
 
+    /// Returns true if the given grid has any NNC involvement:
+    /// same-grid NNCs, or cross-grid NNCs with any other grid.
+    bool hasNNCForGrid(std::size_t grid_index) const
+    {
+        if (hasSameGridNNC(grid_index))
+            return true;
+        for (const auto& entry : m_diffGridNNCs) {
+            if (entry.first.first == grid_index || entry.first.second == grid_index)
+                return true;
+        }
+        return false;
+    }
+
 
     /// Returns a view of all same-grid NNCs as (grid_index, NNC) pairs.
-    const std::map<std::size_t, NNC>& same_grid_nnc() const
+    const std::map<std::size_t, NNCDataContainer>& same_grid_nnc() const
     {
         return m_sameGridNNCs;
     }
 
     /// Returns a view of all cross-grid NNCs keyed by normalised (g1,g2) pairs.
-    const std::map<std::pair<std::size_t,std::size_t>, NNC>& diff_grid_nnc() const
+    const std::map<std::pair<std::size_t,std::size_t>, NNCDataContainerDiffGrid>& diff_grid_nnc() const
     {
         return m_diffGridNNCs;
     }
@@ -215,10 +269,10 @@ public:
 private:
 
     /// Same-grid NNCs, keyed by grid index (0 == global/main grid).
-    std::map<std::size_t, NNC> m_sameGridNNCs;
+    std::map<std::size_t, NNCDataContainer> m_sameGridNNCs;
 
     /// Cross-grid NNCs, keyed by normalised (min_grid, max_grid) pair.
-    std::map<std::pair<std::size_t,std::size_t>, NNC> m_diffGridNNCs;
+    std::map<std::pair<std::size_t,std::size_t>, NNCDataContainerDiffGrid> m_diffGridNNCs;
 };
 
 } // namespace Opm

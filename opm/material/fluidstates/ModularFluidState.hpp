@@ -37,7 +37,7 @@ namespace Opm {
  * This class uses a modular approach which results in storing only a
  * set of requested thermodynamic quantities.
  */
-template <class ScalarT,
+template <class ValueT,
           unsigned numPhasesV,
           unsigned numComponentsV,
           class PressureModule,
@@ -59,7 +59,7 @@ class ModularFluidState
     , public EnthalpyModule
 {
 public:
-    typedef ScalarT Scalar;
+    using ValueType = ValueT;
     enum { numPhases = numPhasesV };
     enum { numComponents = numComponentsV };
 

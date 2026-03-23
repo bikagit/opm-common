@@ -60,7 +60,7 @@ void createSurfaceGasFluidSystem(FluidState& gasFluidState)
     gasFluidState.setMoleFraction(gasPhaseIdx, FluidSystem::C20Idx, 0.00);
 
     // gas density
-    typename FluidSystem::template ParameterCache<typename FluidState::Scalar> paramCache;
+    typename FluidSystem::template ParameterCache<typename FluidState::ValueType> paramCache;
     paramCache.updatePhase(gasFluidState, gasPhaseIdx);
     gasFluidState.setDensity(gasPhaseIdx,
                              FluidSystem::density(gasFluidState, paramCache, gasPhaseIdx));

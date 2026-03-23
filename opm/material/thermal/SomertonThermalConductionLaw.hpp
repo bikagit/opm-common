@@ -86,7 +86,7 @@ public:
      * phase \f$\alpha\f$ and \f$S_\alpha\f$ is the saturation of
      * phase \f$\alpha\f$.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation thermalConductivity(const Params& params,
                                        const FluidState& fluidState)
     {

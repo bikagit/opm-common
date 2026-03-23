@@ -84,7 +84,7 @@ public:
     template <class FluidState>
     void updateMix(const FluidState& fs)
     {
-        using FlashEval = typename FluidState::Scalar;
+        using FlashEval = typename FluidState::ValueType;
 
         FlashEval newA = 0;
         FlashEval newB = 0;

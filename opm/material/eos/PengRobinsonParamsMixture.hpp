@@ -142,7 +142,7 @@ public:
     template <class FluidState>
     void updateMix(const FluidState& fs)
     {
-        using FlashEval = typename FluidState::Scalar;
+        using FlashEval = typename FluidState::ValueType;
 
         // Calculate the Peng-Robinson parameters of the mixture
         //

@@ -144,7 +144,7 @@ public:
      */
     template <class FluidState, class Params>
     static
-    typename FluidState::Scalar
+    typename FluidState::ValueType
     computeMolarVolume(const FluidState& fs,
                        Params& params,
                        unsigned phaseIdx,
@@ -153,7 +153,7 @@ public:
         Valgrind::CheckDefined(fs.temperature(phaseIdx));
         Valgrind::CheckDefined(fs.pressure(phaseIdx));
 
-        typedef typename FluidState::Scalar Evaluation;
+        typedef typename FluidState::ValueType Evaluation;
 
         Evaluation Vm = 0;
         Valgrind::SetUndefined(Vm);
@@ -280,7 +280,7 @@ public:
     { return params.pressure()*computeFugacityCoeff(params); }
 
 protected:
-    template <class FluidState, class Params, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Params, class Evaluation = typename FluidState::ValueType>
     static void handleCriticalFluid_(Evaluation& Vm,
                                      const FluidState& /*fs*/,
                                      const Params& params,

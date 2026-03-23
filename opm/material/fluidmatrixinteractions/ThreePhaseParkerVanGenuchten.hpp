@@ -119,7 +119,7 @@ public:
      * p_{c,gn} = p_g - p_n
      * \f]
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation pcgn(const Params& params, const FluidState& fluidState)
     {
         Scalar PC_VG_REG = 0.01;
@@ -172,7 +172,7 @@ public:
      * p_{c,nw} = p_n - p_w
      * \f]
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation pcnw(const Params& params, const FluidState& fluidState)
     {
         const Evaluation& Sw =
@@ -227,21 +227,21 @@ public:
     /*!
      * \brief The saturation of the gas phase.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sg(const Params& /*params*/, const FluidState& /*fluidState*/)
     { throw std::logic_error("Not implemented: Sg()"); }
 
     /*!
      * \brief The saturation of the non-wetting (i.e., oil) phase.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sn(const Params& /*params*/, const FluidState& /*fluidState*/)
     { throw std::logic_error("Not implemented: Sn()"); }
 
     /*!
      * \brief The saturation of the wetting (i.e., water) phase.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sw(const Params& /*params*/, const FluidState& /*fluidState*/)
     { throw std::logic_error("Not implemented: Sw()"); }
 
@@ -268,7 +268,7 @@ public:
      * (see p61. in "Comparison of the Three-Phase Oil Relative Permeability Models"
      * MOJDEH  DELSHAD and GARY A. POPE, Transport in Porous Media 4 (1989), 59-83.)
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krw(const Params& params, const FluidState& fluidState)
     {
         const Evaluation& Sw =
@@ -296,7 +296,7 @@ public:
      * L. I. Oliveira, A. H. Demond, Journal of Contaminant Hydrology
      * 66 (2003), 261-285
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krn(const Params& params, const FluidState& fluidState)
     {
         const Evaluation& Sn =
@@ -341,7 +341,7 @@ public:
      * Three-Phase Oil Relative Permeability Models" M.  Delshad and
      * G. A. Pope, Transport in Porous Media 4 (1989), 59-83.)
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krg(const Params& params, const FluidState& fluidState)
     {
         const Evaluation& Sg =

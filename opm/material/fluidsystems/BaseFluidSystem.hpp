@@ -171,7 +171,7 @@ public:
      * \copydoc Doxygen::fluidSystemBaseParams
      * \copydoc Doxygen::phaseIdxParam
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCache>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCache>
     static LhsEval density(const FluidState& /*fluidState*/,
                            const ParamCache& /*paramCache*/,
                            unsigned /*phaseIdx*/)
@@ -193,7 +193,7 @@ public:
      * \copydoc Doxygen::phaseIdxParam
      * \copydoc Doxygen::compIdxParam
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCache>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCache>
     static LhsEval fugacityCoefficient(const FluidState& /*fluidState*/,
                                        ParamCache& /*paramCache*/,
                                        unsigned /*phaseIdx*/,
@@ -208,7 +208,7 @@ public:
      * \copydoc Doxygen::fluidSystemBaseParams
      * \copydoc Doxygen::phaseIdxParam
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCache>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCache>
     static LhsEval viscosity(const FluidState& /*fluidState*/,
                              ParamCache& /*paramCache*/,
                              unsigned /*phaseIdx*/)
@@ -233,7 +233,7 @@ public:
      * \copydoc Doxygen::phaseIdxParam
      * \copydoc Doxygen::compIdxParam
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCache>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCache>
     static LhsEval diffusionCoefficient(const FluidState& /*fluidState*/,
                                         ParamCache& /*paramCache*/,
                                         unsigned /*phaseIdx*/,
@@ -249,7 +249,7 @@ public:
      * \copydoc Doxygen::fluidSystemBaseParams
      * \copydoc Doxygen::phaseIdxParam
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCache>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCache>
     static LhsEval enthalpy(const FluidState& /*fluidState*/,
                             ParamCache& /*paramCache*/,
                             unsigned /*phaseIdx*/)
@@ -263,7 +263,7 @@ public:
      * \copydoc Doxygen::fluidSystemBaseParams
      * \copydoc Doxygen::phaseIdxParam
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCache>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCache>
     static LhsEval thermalConductivity(const FluidState& /*fluidState*/,
                                        ParamCache& /*paramCache*/,
                                        unsigned /*phaseIdx*/)
@@ -277,7 +277,7 @@ public:
      * \copydoc Doxygen::fluidSystemBaseParams
      * \copydoc Doxygen::phaseIdxParam
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCache>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCache>
     static LhsEval heatCapacity(const FluidState& /*fluidState*/,
                                 ParamCache& /*paramCache*/,
                                 unsigned /*phaseIdx*/)

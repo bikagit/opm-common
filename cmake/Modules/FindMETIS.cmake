@@ -82,11 +82,18 @@ if (METIS_INCLUDE_DIRS OR METIS_LIBRARY)
         ${METIS_LIBRARY}
     )
     target_include_directories(METIS::METIS INTERFACE ${METIS_INCLUDE_DIRS})
-    target_compile_definitions(METIS::METIS INTERFACE METIS_API_VERSION=${METIS_API_VERSION})
+    target_compile_definitions(METIS::METIS
+      INTERFACE
+        HAVE_METIS=1
+        METIS_API_VERSION=${METIS_API_VERSION}
+    )
     # Link against Scotch library if option is enabled
     if(IS_SCOTCH_METIS_HEADER AND PTScotch_FOUND)
       target_link_libraries(METIS::METIS INTERFACE PTScotch::Scotch)
-      target_compile_definitions(METIS::METIS INTERFACE SCOTCH_METIS_VERSION=${METIS_API_VERSION})
+      target_compile_definitions(METIS::METIS
+        INTERFACE
+          SCOTCH_METIS_VERSION=${METIS_API_VERSION}
+      )
     endif()
     if(IS_SCOTCH_METIS_HEADER AND Scotch_FOUND)
       target_link_libraries(METIS::METIS INTERFACE Scotch::Scotch)

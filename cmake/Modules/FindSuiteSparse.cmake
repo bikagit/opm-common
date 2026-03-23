@@ -330,9 +330,17 @@ if(SuiteSparse_FOUND)
           PROPERTIES
           IMPORTED_LOCATION
             ${${_MODULE}_LIBRARY}
-          INTERFACE_INCLUDE_DIRECTORIES
+        )
+        target_compile_definitions(SuiteSparse::${_MODULE}
+          INTERFACE
+            HAVE_SUITESPARSE_${_MODULE}=1
+        )
+        target_include_directories(SuiteSparse::${_MODULE}
+          INTERFACE
             ${${_MODULE}_INCLUDE_DIRS}
-          INTERFACE_LINK_LIBRARIES
+        )
+        target_link_libraries(SuiteSparse::${_MODULE}
+          INTERFACE
             ${config_LIBRARY}
         )
         target_link_libraries(SuiteSparse::SuiteSparse

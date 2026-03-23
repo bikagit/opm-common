@@ -48,12 +48,6 @@ function (opm_cmake_config name)
   set(PREREQ_LOCATION "${PROJECT_SOURCE_DIR}")
   configure_cmake_file (${name} "config" "")
   configure_cmake_file (${name} "config" "-version")
-  configure_vars (
-    FILE CMAKE
-      ${PROJECT_BINARY_DIR}/${${name}_NAME}-config.cmake
-    APPEND
-      ${${name}_CONFIG_VARS}
-  )
 
   # The next replace will result in bogus entries if install directory is
   # a subdirectory of source tree,
@@ -93,12 +87,6 @@ function (opm_cmake_config name)
   set(PREREQ_LOCATION "${CMAKE_INSTALL_PREFIX}/share/opm/cmake/Modules")
   set(DUNE_PREFIX ${CMAKE_INSTALL_PREFIX})
   configure_cmake_file (${name} "install" "")
-  configure_vars (
-    FILE CMAKE
-      "${PROJECT_BINARY_DIR}/${${name}_NAME}-install.cmake"
-    APPEND
-      "${${name}_CONFIG_VARS}"
-  )
 
   # this file gets copied to the final installation directory
   get_target_property(lib_type ${${name}_TARGET} TYPE)

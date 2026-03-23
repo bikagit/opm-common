@@ -32,41 +32,58 @@
 
 #include <fmt/format.h>
 
+#include <functional>
+#include <memory>
+#include <string>
+#include <unordered_map>
 #include <unordered_set>
-
-namespace Opm {
+#include <utility>
+#include <vector>
 
 namespace {
 
-using LoadConnectionMethod = void (WellConnections::*)(
-    const DeckRecord&,
-    const ScheduleGrid&,
-    const std::string&,
-    const WDFAC&,
-    const KeywordLocation&
-);
+using namespace Opm;
 
-void handleCOMPDATX(HandlerContext& handlerContext, LoadConnectionMethod loadMethod)
+template <typename CompdatKwHandler>
+void handleCOMPDATX(HandlerContext&    handlerContext,
+                    CompdatKwHandler&& compdatKwHandler)
 {
-    std::unordered_set<std::string> wells;
-    std::unordered_map<std::string, bool> well_connected;
+    auto wells = std::unordered_set<std::string> {};
+    auto well_connected = std::unordered_map<std::string, bool> {};
+
     for (const auto& record : handlerContext.keyword) {
         const auto wellNamePattern = record.getItem("WELL").getTrimmedString(0);
         const auto wellnames = handlerContext.wellNames(wellNamePattern);
 
         for (const auto& name : wellnames) {
-            auto well2 = handlerContext.state().wells.get(name);
+            auto well2 = handlerContext.state().wells(name);
 
             auto connections = std::make_shared<WellConnections>(well2.getConnections());
             const auto origWellConnSetIsEmpty = connections->empty();
-            std::invoke(loadMethod, connections, record, handlerContext.grid,
-                             name, well2.getWDFAC(), handlerContext.keyword.location());
+
+            std::invoke(compdatKwHandler, connections,
+                        record, name, well2.getWDFAC(),
+                        handlerContext.grid,
+                        handlerContext.keyword.location(),
+                        handlerContext.parseContext,
+                        handlerContext.errors);
 
             const auto isConnected = !origWellConnSetIsEmpty || !connections->empty();
-            if (well_connected.count(name))
-                well_connected[name] = (isConnected || well_connected[name]);
-            else
-                well_connected[name] = isConnected;
+
+            const auto& [connectedPos, inserted] =
+                well_connected.emplace(name, isConnected);
+
+            if ((! inserted) && isConnected) {
+                // Note condition here.  If we inserted a new well, then
+                // ->second is "isConnected".  Otherwise, we leave ->second
+                // unchanged if "isConnected" is false and unconditionally
+                // set it to true if "isConnected" is true.
+                //
+                // This block achieves the same effect as
+                //
+                //   ->second = ->second || isConnected
+                connectedPos->second = true;
+            }
 
             if (well2.updateConnections(std::move(connections), handlerContext.grid)) {
                 auto wdfac = std::make_shared<WDFAC>(well2.getWDFAC());
@@ -82,15 +99,17 @@ void handleCOMPDATX(HandlerContext& handlerContext, LoadConnectionMethod loadMet
                 .addEvent(name, ScheduleEvents::COMPLETION_CHANGE);
         }
     }
+
     // Output warning messages per well/keyword (not per COMPDAT record..)
     for (const auto& [wname, connected] : well_connected) {
         if (!connected) {
             const auto& location = handlerContext.keyword.location();
 
-            const auto msg = fmt::format(R"(Potential problem with COMPDAT/{}
+            const auto msg = fmt::format(R"(Potential problem with {}/{}
 In {} line {}
 Well {} is not connected to grid - will remain SHUT)",
-                                         wname, location.filename,
+                                         location.keyword, wname,
+                                         location.filename,
                                          location.lineno, wname);
 
             OpmLog::warning(msg);
@@ -125,8 +144,6 @@ void handleCOMPDATL(HandlerContext& handlerContext)
     handleCOMPDATX(handlerContext, &WellConnections::loadCOMPDATL);
 }
 
-
-
 void handleCOMPLUMP(HandlerContext& handlerContext)
 {
     for (const auto& record : handlerContext.keyword) {
@@ -148,7 +165,6 @@ void handleCOMPLUMP(HandlerContext& handlerContext)
 // handleWELSPECS() function.
 void handleCOMPORD(HandlerContext&)
 {}
-
 
 void handleCSKIN(HandlerContext& handlerContext)
 {
@@ -174,6 +190,8 @@ void handleCSKIN(HandlerContext& handlerContext)
 }
 
 } // Anonymous namespace
+
+namespace Opm {
 
 std::vector<std::pair<std::string,KeywordHandlers::handler_function>>
 getWellCompletionHandlers()

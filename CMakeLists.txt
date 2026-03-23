@@ -61,9 +61,6 @@ macro(opm-common_prereqs_hook)
 
   if(OPM_ENABLE_DUNE)
     find_package(dune-common REQUIRED)
-    if(dune-common_VERSION VERSION_LESS 2.11)
-      target_include_directories(dunecommon INTERFACE ${dune-common_INCLUDE_DIRS})
-    endif()
     target_link_libraries(opmcommon PUBLIC dunecommon)
   endif()
 endmacro()
@@ -73,10 +70,6 @@ macro(opm-common_config_hook)
   check_include_file(fnmatch.h FNMATCH_H_FOUND)
   if (FNMATCH_H_FOUND)
     target_compile_definitions(opmcommon PRIVATE HAVE_FNMATCH_H=1)
-  endif()
-
-  if(dune-common_FOUND)
-    target_compile_definitions(opmcommon PUBLIC HAVE_DUNE_COMMON=1)
   endif()
 
   target_compile_definitions(opmcommon INTERFACE HAVE_OPM_COMMON=1)
@@ -278,9 +271,16 @@ macro(opm-common_targets_hook)
   )
 
   if(ENABLE_MOCKSIM)
-    add_library(mocksim msim/src/msim.cpp)
-    opm_add_target_options(TARGET mocksim)
-    target_link_libraries(mocksim PUBLIC opmcommon)
+    opm_add_library(
+      TARGET
+        mocksim
+      SOURCES
+        msim/src/msim.cpp
+      LIBRARIES
+        opmcommon
+      TYPE
+        STATIC
+    )
     target_include_directories(mocksim PUBLIC msim/include)
     add_executable(msim examples/msim.cpp)
     opm_add_target_options(TARGET msim)
@@ -460,7 +460,6 @@ include(GNUInstallDirs)
 set(OPM_PROJECT_EXTRA_CODE_INSTALLED
   "set(OPM_MACROS_ROOT ${CMAKE_INSTALL_FULL_DATADIR}/opm)
   list(APPEND CMAKE_MODULE_PATH \${OPM_MACROS_ROOT}/cmake/Modules)
-  include(OpmPackage)
   include(OpmPolicies)
   OpmSetPolicies()"
 )
@@ -468,7 +467,6 @@ set(OPM_PROJECT_EXTRA_CODE_INSTALLED
 set(OPM_PROJECT_EXTRA_CODE_INTREE
   "set(OPM_MACROS_ROOT ${OPM_MACROS_ROOT})
   list(APPEND CMAKE_MODULE_PATH \${OPM_MACROS_ROOT}/cmake/Modules)
-  include(OpmPackage)
   include(OpmPolicies)
   OpmSetPolicies()"
 )

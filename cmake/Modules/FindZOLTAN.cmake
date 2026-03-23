@@ -87,9 +87,9 @@ if(ZOLTAN_FOUND)
       PROPERTIES
       IMPORTED_LOCATION
         ${ZOLTAN_LIBRARY}
-      INTERFACE_INCLUDE_DIRECTORIES
-        ${ZOLTAN_INCLUDE_DIR}
     )
+    target_include_directories(Zoltan::Zoltan INTERFACE ${ZOLTAN_INCLUDE_DIR})
+    target_compile_definitions(Zoltan::Zoltan INTERFACE HAVE_ZOLTAN=1)
     if(TARGET PTScotch::Scotch)
       target_link_libraries(Zoltan::Zoltan INTERFACE PTScotch::Scotch)
     endif()

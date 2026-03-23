@@ -12,10 +12,6 @@
 # SUPERLU_LIBRARIES           Name to the SuperLU library.
 #
 
-if(NOT USE_SUPERLU)
-  return()
-endif()
-
 include(CheckIncludeFiles)
 include(CMakePushCheckState)
 include(CheckCSourceCompiles)
@@ -130,9 +126,13 @@ if(SUPERLU_FOUND)
       PROPERTIES
       IMPORTED_LOCATION
         ${SUPERLU_LIBRARY}
-      INTERFACE_INCLUDE_DIRECTORIES
-        ${SUPERLU_INCLUDE_DIR}
     )
+    target_compile_definitions(SuperLU::SuperLU
+      INTERFACE
+        HAVE_SUPERLU=1
+        SUPERLU_INT_TYPE=int
+    )
+    target_include_directories(SuperLU::SuperLU INTERFACE ${SUPERLU_INCLUDE_DIR})
     if(TARGET BLAS::BLAS)
       target_link_libraries(SuperLU::SuperLU INTERFACE BLAS::BLAS)
     else()

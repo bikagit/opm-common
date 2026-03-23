@@ -34,8 +34,10 @@ namespace Opm {
     class ActiveGridCells;
     class DeckRecord;
     class EclipseGrid;
+    class ErrorGuard;
     class FieldPropsManager;
     class KeywordLocation;
+    class ParseContext;
     class ScheduleGrid;
     class WDFAC;
     struct WellTrajInfo;
@@ -87,26 +89,30 @@ namespace Opm {
                            const bool defaultSatTabId = true);
 
         void loadCOMPDAT(const DeckRecord&      record,
-                         const ScheduleGrid&    grid,
                          const std::string&     wname,
                          const WDFAC&           wdfac,
-                         const KeywordLocation& location);
+                         const ScheduleGrid&    grid,
+                         const KeywordLocation& location,
+                         const ParseContext&    parseContext,
+                         ErrorGuard&            errors);
 
         void loadCOMPDATL(const DeckRecord&      record,
-                          const ScheduleGrid&    grid,
                           const std::string&     wname,
                           const WDFAC&           wdfac,
-                          const KeywordLocation& location);
+                          const ScheduleGrid&    grid,
+                          const KeywordLocation& location,
+                          const ParseContext&    parseContext,
+                          ErrorGuard&            errors);
 
         void loadCOMPTRAJ(const DeckRecord&      record,
-                          const ScheduleGrid&    grid,
                           const std::string&     wname,
+                          const ScheduleGrid&    grid,
                           const KeywordLocation& location,
-                          WellTrajInfo&         wellTraj);
+                          WellTrajInfo&          wellTraj);
 
         void loadWELTRAJ(const DeckRecord&      record,
-                         const ScheduleGrid&    grid,
                          const std::string&     wname,
+                         const ScheduleGrid&    grid,
                          const KeywordLocation& location);
 
         void applyDFactorCorrelation(const ScheduleGrid& grid,
@@ -212,11 +218,13 @@ namespace Opm {
         void orderDEPTH();
 
         void loadCOMPDATX(const DeckRecord&                 record,
-                          const ScheduleGrid&               grid,
                           const std::string&                wname,
                           const WDFAC&                      wdfac,
+                          const ScheduleGrid&               grid,
                           const KeywordLocation&            location,
-                          const std::optional<std::string>& lgr_label);
+                          const std::optional<std::string>& lgr_label,
+                          const ParseContext&               parseContext,
+                          ErrorGuard&                       errors);
     };
 
     std::optional<int>

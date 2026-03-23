@@ -38,7 +38,7 @@ namespace Opm {
  * \brief Module for the modular fluid state which stores the
  *       enthalpies explicitly.
  */
-template <class Scalar,
+template <class ValueType,
           unsigned numPhases,
           class Implementation>
 class FluidStateExplicitEnthalpyModule
@@ -50,19 +50,19 @@ public:
     /*!
      * \brief The specific enthalpy of a fluid phase [J/kg]
      */
-    const Scalar& enthalpy(unsigned phaseIdx) const
+    const ValueType& enthalpy(unsigned phaseIdx) const
     { return enthalpy_[phaseIdx]; }
 
     /*!
      * \brief The specific internal energy of a fluid phase [J/kg]
      */
-    Scalar internalEnergy(unsigned phaseIdx) const
+    ValueType internalEnergy(unsigned phaseIdx) const
     { return enthalpy_[phaseIdx] - asImp_().pressure(phaseIdx)/asImp_().density(phaseIdx); }
 
     /*!
      * \brief Set the specific enthalpy of a phase [J/kg]
      */
-    void setEnthalpy(unsigned phaseIdx, const Scalar& value)
+    void setEnthalpy(unsigned phaseIdx, const ValueType& value)
     { enthalpy_[phaseIdx] = value; }
 
     /*!
@@ -73,7 +73,7 @@ public:
     void assign(const FluidState& fs)
     {
         for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx) {
-            enthalpy_[phaseIdx] = decay<Scalar>(fs.enthalpy(phaseIdx));
+            enthalpy_[phaseIdx] = decay<ValueType>(fs.enthalpy(phaseIdx));
         }
     }
 
@@ -94,7 +94,7 @@ protected:
     const Implementation& asImp_() const
     { return *static_cast<const Implementation*>(this); }
 
-    std::array<Scalar, numPhases> enthalpy_{};
+    std::array<ValueType, numPhases> enthalpy_{};
 };
 
 /*!
@@ -102,7 +102,7 @@ protected:
  *        enthalpies but returns 0 instead.
  *
  * Also, the returned values are marked as undefined in Valgrind... */
-template <class Scalar,
+template <class ValueT,
           unsigned numPhases,
           class Implementation>
 class FluidStateNullEnthalpyModule
@@ -114,9 +114,9 @@ public:
     /*!
      * \brief The specific internal energy of a fluid phase [J/kg]
      */
-    const Scalar& internalEnergy(unsigned /* phaseIdx */) const
+    const ValueT& internalEnergy(unsigned /* phaseIdx */) const
     {
-        static Scalar tmp = 0;
+        static ValueT tmp = 0;
         Valgrind::SetUndefined(tmp);
         return tmp;
     }
@@ -124,9 +124,9 @@ public:
     /*!
      * \brief The specific enthalpy of a fluid phase [J/kg]
      */
-    const Scalar& enthalpy(unsigned /* phaseIdx */) const
+    const ValueT& enthalpy(unsigned /* phaseIdx */) const
     {
-        static Scalar tmp = 0;
+        static ValueT tmp = 0;
         Valgrind::SetUndefined(tmp);
         return tmp;
     }

@@ -43,7 +43,7 @@ template <class FluidState>
 class PressureOverlayFluidState
 {
 public:
-    typedef typename FluidState::Scalar Scalar;
+    using ValueType = typename FluidState::ValueType;
 
     enum { numPhases = FluidState::numPhases };
     enum { numComponents = FluidState::numComponents };
@@ -206,7 +206,7 @@ public:
     /*!
      * \brief Set the pressure [Pa] of a fluid phase
      */
-    void setPressure(unsigned phaseIdx, const Scalar& value)
+    void setPressure(unsigned phaseIdx, const ValueType& value)
     { pressure_[phaseIdx] = value; }
 
     /*!
@@ -224,7 +224,7 @@ public:
 
 protected:
     const FluidState* fs_;
-    std::array<Scalar, numPhases> pressure_;
+    std::array<ValueType, numPhases> pressure_;
 };
 
 } // namespace Opm

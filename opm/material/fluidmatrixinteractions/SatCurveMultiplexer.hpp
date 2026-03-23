@@ -166,7 +166,7 @@ public:
     /*!
      * \brief The capillary pressure-saturation curve
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation pcnw(const Params& params, const FluidState& fluidState)
     {
         switch (params.approach()) {
@@ -230,7 +230,7 @@ public:
     /*!
      * \brief The saturation-capillary pressure curve
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sw(const Params& params, const FluidState& fluidstate)
     {
         switch (params.approach()) {
@@ -259,7 +259,7 @@ public:
      * \brief Calculate the non-wetting phase saturations depending on
      *        the phase pressures.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sn(const Params& params, const FluidState& fluidstate)
     {
         switch (params.approach()) {
@@ -299,7 +299,7 @@ public:
      * \brief The relative permeability for the wetting phase of
      *        the medium
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krw(const Params& params, const FluidState& fluidstate)
     {
         switch (params.approach()) {
@@ -375,7 +375,7 @@ public:
      * \brief The relative permeability for the non-wetting phase of
      *        the medium
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krn(const Params& params, const FluidState& fluidstate)
     {
         switch (params.approach()) {

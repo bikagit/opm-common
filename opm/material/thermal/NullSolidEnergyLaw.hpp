@@ -47,7 +47,7 @@ public:
      *
      * This solid energy law simply returns 0.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation solidInternalEnergy(const Params&, const FluidState&)
     { return 0.0; }
 };

@@ -19,7 +19,8 @@
 include(OpmCompile)
 include(OpmPolicies)
 include(OpmTargets)
-include(MPIChecks)
+include(UseMPI) # Must be included before UseHDF5 as UseHDF5 checks for MPI
+include(UseHDF5)
 
 # needed for Debian installation scheme
 include (GNUInstallDirs)
@@ -123,12 +124,16 @@ list (APPEND ${project}_CONFIG_VARS ${${project}_CONFIG_VAR})
 # added in an ad-hoc manner to avoid putting dependencies to it in the module
 # requirement file. (it should be added if there is .h code that needs it)
 message (STATUS "Writing config file \"${PROJECT_BINARY_DIR}/config.h\"...")
-set (CONFIG_H "${PROJECT_BINARY_DIR}/config.h.tmp")
-configure_vars (
-  FILE  CXX  ${CONFIG_H}
-  WRITE ${${project}_CONFIG_VARS}
-        ${${project}_CONFIG_IMPL_VARS}
-        ${TESTING_CONFIG_VARS}
+set(CONFIG_H "${PROJECT_BINARY_DIR}/config.h.tmp")
+configure_vars(
+  TARGET
+    ${${project}_TARGET}
+  FILE
+    ${CONFIG_H}
+  VARIABLES
+    ${${project}_CONFIG_VARS}
+    ${${project}_CONFIG_IMPL_VARS}
+    ${TESTING_CONFIG_VARS}
 )
 
 # overwrite the config.h that is used by the code only if we have some

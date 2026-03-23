@@ -47,40 +47,40 @@ namespace Opm {
  *        multi-phase, multi-component fluid system assuming
  *        thermodynamic equilibrium.
  */
-template <class Scalar, class FluidSystem, bool storeEnthalpy=true>
+template <class ValueType, class FluidSystem, bool storeEnthalpy=true>
 class ImmiscibleFluidState;
 
 // specialization for the enthalpy enabled case
-template <class Scalar, class FluidSystem>
-class ImmiscibleFluidState<Scalar, FluidSystem, true>
-    : public ModularFluidState<Scalar,
+template <class ValueType, class FluidSystem>
+class ImmiscibleFluidState<ValueType, FluidSystem, true>
+    : public ModularFluidState<ValueType,
                                FluidSystem::numPhases,
                                FluidSystem::numComponents,
-                               FluidStateExplicitPressureModule<Scalar, FluidSystem::numPhases, ImmiscibleFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateEquilibriumTemperatureModule<Scalar, FluidSystem::numPhases, ImmiscibleFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateImmiscibleCompositionModule<Scalar, FluidSystem, ImmiscibleFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitFugacityModule<Scalar, FluidSystem::numPhases, FluidSystem::numComponents, ImmiscibleFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitSaturationModule<Scalar, FluidSystem::numPhases, ImmiscibleFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitDensityModule<Scalar, FluidSystem::numPhases, ImmiscibleFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitViscosityModule<Scalar, FluidSystem::numPhases, ImmiscibleFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitEnthalpyModule<Scalar, FluidSystem::numPhases, ImmiscibleFluidState<Scalar, FluidSystem, true> > >
+                               FluidStateExplicitPressureModule<ValueType, FluidSystem::numPhases, ImmiscibleFluidState<ValueType, FluidSystem, true> >,
+                               FluidStateEquilibriumTemperatureModule<ValueType, FluidSystem::numPhases, ImmiscibleFluidState<ValueType, FluidSystem, true> >,
+                               FluidStateImmiscibleCompositionModule<ValueType, FluidSystem, ImmiscibleFluidState<ValueType, FluidSystem, true> >,
+                               FluidStateExplicitFugacityModule<ValueType, FluidSystem::numPhases, FluidSystem::numComponents, ImmiscibleFluidState<ValueType, FluidSystem, true> >,
+                               FluidStateExplicitSaturationModule<ValueType, FluidSystem::numPhases, ImmiscibleFluidState<ValueType, FluidSystem, true> >,
+                               FluidStateExplicitDensityModule<ValueType, FluidSystem::numPhases, ImmiscibleFluidState<ValueType, FluidSystem, true> >,
+                               FluidStateExplicitViscosityModule<ValueType, FluidSystem::numPhases, ImmiscibleFluidState<ValueType, FluidSystem, true> >,
+                               FluidStateExplicitEnthalpyModule<ValueType, FluidSystem::numPhases, ImmiscibleFluidState<ValueType, FluidSystem, true> > >
 {
 };
 
 // specialization for the enthalpy disabled case
-template <class Scalar, class FluidSystem>
-class ImmiscibleFluidState<Scalar, FluidSystem, false>
-    : public ModularFluidState<Scalar,
+template <class ValueType, class FluidSystem>
+class ImmiscibleFluidState<ValueType, FluidSystem, false>
+    : public ModularFluidState<ValueType,
                                FluidSystem::numPhases,
                                FluidSystem::numComponents,
-                               FluidStateExplicitPressureModule<Scalar, FluidSystem::numPhases, ImmiscibleFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateEquilibriumTemperatureModule<Scalar, FluidSystem::numPhases, ImmiscibleFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateImmiscibleCompositionModule<Scalar, FluidSystem, ImmiscibleFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitFugacityModule<Scalar, FluidSystem::numPhases, FluidSystem::numComponents, ImmiscibleFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitSaturationModule<Scalar, FluidSystem::numPhases, ImmiscibleFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitDensityModule<Scalar, FluidSystem::numPhases, ImmiscibleFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitViscosityModule<Scalar, FluidSystem::numPhases, ImmiscibleFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateNullEnthalpyModule<Scalar, FluidSystem::numPhases, ImmiscibleFluidState<Scalar, FluidSystem, false> > >
+                               FluidStateExplicitPressureModule<ValueType, FluidSystem::numPhases, ImmiscibleFluidState<ValueType, FluidSystem, false> >,
+                               FluidStateEquilibriumTemperatureModule<ValueType, FluidSystem::numPhases, ImmiscibleFluidState<ValueType, FluidSystem, false> >,
+                               FluidStateImmiscibleCompositionModule<ValueType, FluidSystem, ImmiscibleFluidState<ValueType, FluidSystem, false> >,
+                               FluidStateExplicitFugacityModule<ValueType, FluidSystem::numPhases, FluidSystem::numComponents, ImmiscibleFluidState<ValueType, FluidSystem, false> >,
+                               FluidStateExplicitSaturationModule<ValueType, FluidSystem::numPhases, ImmiscibleFluidState<ValueType, FluidSystem, false> >,
+                               FluidStateExplicitDensityModule<ValueType, FluidSystem::numPhases, ImmiscibleFluidState<ValueType, FluidSystem, false> >,
+                               FluidStateExplicitViscosityModule<ValueType, FluidSystem::numPhases, ImmiscibleFluidState<ValueType, FluidSystem, false> >,
+                               FluidStateNullEnthalpyModule<ValueType, FluidSystem::numPhases, ImmiscibleFluidState<ValueType, FluidSystem, false> > >
 {
 };
 

@@ -9,34 +9,19 @@
 
 # Copyright (C) 2012 Uni Research AS
 # This code is licensed under The GNU General Public License v3.0
+if(dune-localfunctions_FOUND)
+  return()
+endif()
 
-include (OpmPackage)
-find_opm_package (
-  # module name
-  "dune-localfunctions"
+if(dune-localfunctions_FIND_REQUIRED)
+  find_package(dune-localfunctions CONFIG REQUIRED)
+else()
+  find_package(dune-localfunctions CONFIG)
+endif()
 
-  # required dependencies
-  "dune-common REQUIRED"
-  # header to search for
-  "dune/localfunctions/common/localbasis.hh"
-
-  # library to search for
-  ""
-
-  # defines to be added to compilations
-  ""
-
-  # test program
-"#include   <dune/localfunctions/common/localbasis.hh>
-
-int main (void) {
-  return 0;
-}
-"
-  # config variables
-  "")
-#debug_find_vars ("dune-localfunctions")
-
-# make version number available in config.h
-include (UseDuneVer)
-find_dune_version ("dune" "localfunctions")
+if(dune-localfunctions_FOUND)
+  target_compile_definitions(dunelocalfunctions INTERFACE HAVE_DUNE_LOCALFUNCTIONS=1)
+  # make version number available in config.h
+  include (UseDuneVer)
+  find_dune_version ("dune" "localfunctions")
+endif()

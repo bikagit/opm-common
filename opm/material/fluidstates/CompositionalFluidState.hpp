@@ -49,23 +49,23 @@ namespace Opm {
  *        multi-phase, multi-component fluid system assuming
  *        thermodynamic equilibrium.
  */
-template <class Scalar, class FluidSystem, bool storeEnthalpy=true>
+template <class ValueT, class FluidSystem, bool storeEnthalpy=true>
 class CompositionalFluidState;
 
 // specialization for the enthalpy enabled case
-template <class Scalar, class FluidSystem>
-class CompositionalFluidState<Scalar, FluidSystem, true>
-    : public ModularFluidState<Scalar,
+template <class ValueT, class FluidSystem>
+class CompositionalFluidState<ValueT, FluidSystem, true>
+    : public ModularFluidState<ValueT,
                                FluidSystem::numPhases,
                                FluidSystem::numComponents,
-                               FluidStateExplicitPressureModule<Scalar, FluidSystem::numPhases, CompositionalFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateEquilibriumTemperatureModule<Scalar, FluidSystem::numPhases, CompositionalFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitCompositionModule<Scalar, FluidSystem, CompositionalFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitFugacityModule<Scalar, FluidSystem::numPhases, FluidSystem::numComponents, CompositionalFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitSaturationModule<Scalar, FluidSystem::numPhases, CompositionalFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitDensityModule<Scalar, FluidSystem::numPhases, CompositionalFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitViscosityModule<Scalar, FluidSystem::numPhases, CompositionalFluidState<Scalar, FluidSystem, true> >,
-                               FluidStateExplicitEnthalpyModule<Scalar, FluidSystem::numPhases, CompositionalFluidState<Scalar, FluidSystem, true> > >
+                               FluidStateExplicitPressureModule<ValueT, FluidSystem::numPhases, CompositionalFluidState<ValueT, FluidSystem, true> >,
+                               FluidStateEquilibriumTemperatureModule<ValueT, FluidSystem::numPhases, CompositionalFluidState<ValueT, FluidSystem, true> >,
+                               FluidStateExplicitCompositionModule<ValueT, FluidSystem, CompositionalFluidState<ValueT, FluidSystem, true> >,
+                               FluidStateExplicitFugacityModule<ValueT, FluidSystem::numPhases, FluidSystem::numComponents, CompositionalFluidState<ValueT, FluidSystem, true> >,
+                               FluidStateExplicitSaturationModule<ValueT, FluidSystem::numPhases, CompositionalFluidState<ValueT, FluidSystem, true> >,
+                               FluidStateExplicitDensityModule<ValueT, FluidSystem::numPhases, CompositionalFluidState<ValueT, FluidSystem, true> >,
+                               FluidStateExplicitViscosityModule<ValueT, FluidSystem::numPhases, CompositionalFluidState<ValueT, FluidSystem, true> >,
+                               FluidStateExplicitEnthalpyModule<ValueT, FluidSystem::numPhases, CompositionalFluidState<ValueT, FluidSystem, true> > >
 {
 public:
     /*!
@@ -81,19 +81,19 @@ public:
 };
 
 // specialization for the enthalpy disabled case
-template <class Scalar, class FluidSystem>
-class CompositionalFluidState<Scalar, FluidSystem, false>
-    : public ModularFluidState<Scalar,
+template <class ValueT, class FluidSystem>
+class CompositionalFluidState<ValueT, FluidSystem, false>
+    : public ModularFluidState<ValueT,
                                FluidSystem::numPhases,
                                FluidSystem::numComponents,
-                               FluidStateExplicitPressureModule<Scalar, FluidSystem::numPhases, CompositionalFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateEquilibriumTemperatureModule<Scalar, FluidSystem::numPhases, CompositionalFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitCompositionModule<Scalar, FluidSystem, CompositionalFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitFugacityModule<Scalar, FluidSystem::numPhases, FluidSystem::numComponents, CompositionalFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitSaturationModule<Scalar, FluidSystem::numPhases, CompositionalFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitDensityModule<Scalar, FluidSystem::numPhases, CompositionalFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateExplicitViscosityModule<Scalar, FluidSystem::numPhases, CompositionalFluidState<Scalar, FluidSystem, false> >,
-                               FluidStateNullEnthalpyModule<Scalar, FluidSystem::numPhases, CompositionalFluidState<Scalar, FluidSystem, false> > >
+                               FluidStateExplicitPressureModule<ValueT, FluidSystem::numPhases, CompositionalFluidState<ValueT, FluidSystem, false> >,
+                               FluidStateEquilibriumTemperatureModule<ValueT, FluidSystem::numPhases, CompositionalFluidState<ValueT, FluidSystem, false> >,
+                               FluidStateExplicitCompositionModule<ValueT, FluidSystem, CompositionalFluidState<ValueT, FluidSystem, false> >,
+                               FluidStateExplicitFugacityModule<ValueT, FluidSystem::numPhases, FluidSystem::numComponents, CompositionalFluidState<ValueT, FluidSystem, false> >,
+                               FluidStateExplicitSaturationModule<ValueT, FluidSystem::numPhases, CompositionalFluidState<ValueT, FluidSystem, false> >,
+                               FluidStateExplicitDensityModule<ValueT, FluidSystem::numPhases, CompositionalFluidState<ValueT, FluidSystem, false> >,
+                               FluidStateExplicitViscosityModule<ValueT, FluidSystem::numPhases, CompositionalFluidState<ValueT, FluidSystem, false> >,
+                               FluidStateNullEnthalpyModule<ValueT, FluidSystem::numPhases, CompositionalFluidState<ValueT, FluidSystem, false> > >
 {
 public:
     /*!

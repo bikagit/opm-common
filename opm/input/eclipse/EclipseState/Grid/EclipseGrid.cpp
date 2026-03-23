@@ -58,8 +58,6 @@
 #include <opm/input/eclipse/Parser/ParserKeywords/T.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/Z.hpp>
 
-#define _USE_MATH_DEFINES
-
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -68,6 +66,7 @@
 #include <cstring>
 #include <functional>
 #include <initializer_list>
+#include <numbers>
 #include <numeric>
 #include <optional>
 #include <stdexcept>
@@ -1189,7 +1188,7 @@ EclipseGrid::EclipseGrid(const Deck& deck, const int * actnum)
                     /*
                       The theta value is supposed to go counterclockwise, starting at 'twelve o clock'.
                     */
-                    double t = M_PI * (90 - tj[j]) / 180;
+                    double t = std::numbers::pi * (90 - tj[j]) / 180;
                     double c = cos( t );
                     double s = sin( t );
                     for (std::size_t i = 0; i <= this->getNX(); i++) {
@@ -1873,10 +1872,87 @@ std::vector<double> EclipseGrid::createDVector(const std::array<int,3>& dims, st
         Opm::EclIO::EclOutput egridfile(filename, formatted);
         save_core(egridfile, units);
         save_children(egridfile, units);
-        save_nnc(egridfile, nnc);
+        save_nnc_same_grid(egridfile, nnc);
     }
 
-    void EclipseGrid::save_nnc(Opm::EclIO::EclOutput& egridfile, const std::vector<Opm::NNCdata>& nnc) const {
+
+    void EclipseGrid::save(const std::string& filename, bool formatted, const NNCCollection& nnc_col, const Opm::UnitSystem& units) const {
+        Opm::EclIO::EclOutput egridfile(filename, formatted);
+        save_core(egridfile, units);
+        save_children(egridfile, units);
+        save_nnc(egridfile, nnc_col);
+    }
+
+    void EclipseGrid::save_nnc(Opm::EclIO::EclOutput& egridfile, const NNCCollection& nnc_col) const {
+
+        // Global Grid NNC
+        save_nnc_same_grid(egridfile, nnc_col.getGlobalNNC().input(), 0);
+
+        // LGR NNC
+         for (std::size_t index : m_print_order_lgr_cells) {
+            //SAME GRID PLOTS HEADER THAT CONTAINS THE GRID NUMBER
+            std::size_t num_nnc;
+            if (nnc_col.hasSameGridNNC(index + 1))
+            {
+                const auto& nnc = nnc_col.getNNC(index + 1).input();
+                num_nnc = nnc.size();
+                save_nnc_same_grid(egridfile, nnc, index + 1);
+            }
+            else {
+                save_nnc_same_grid(egridfile, {}, index + 1);
+                num_nnc = 0;
+            }
+
+            if (nnc_col.hasCrossGridNNC(0,index + 1)){
+                const auto& nnc_gl = nnc_col.getNNC(0,index + 1);
+                save_nnc_local_global(egridfile, nnc_gl.input(), index + 1, num_nnc);
+            }
+         }
+
+        // Cross grid NNC - skips diff connection with global grids, i.e. (grid = 0)
+        for (const auto& [key, value] : nnc_col.diff_grid_nnc()) {
+            std::size_t lgrid1 = key.first;
+            if (lgrid1 > 0)
+            {
+                std::size_t lgrid2 = key.second;
+                save_nna(egridfile, value.input(), lgrid1, lgrid2);
+            }
+        }
+    }
+
+    void EclipseGrid::save_nnc_local_global(Opm::EclIO::EclOutput& egridfile, const std::vector<Opm::NNCdata>& nnc, std::size_t grid_num, std::size_t num_nnc) const {
+        std::vector<int> nnchead(10, 0);
+        std::vector<int> nncl;
+        std::vector<int> nncg;
+        for (const NNCdata& n : nnc ) {
+            nncg.push_back(n.cell1 + 1);
+            nncl.push_back(n.cell2 + 1);
+        }
+        nnchead[0] = num_nnc;
+        nnchead[1] = grid_num;
+        egridfile.write("NNCHEAD", nnchead);
+        egridfile.write("NNCL", nncl);
+        egridfile.write("NNCG", nncg);
+    }
+
+    void EclipseGrid::save_nna(Opm::EclIO::EclOutput& egridfile, const std::vector<Opm::NNCdata>& nnc, std::size_t grid1, std::size_t grid2) const
+    {
+        std::vector<int> nncheada(10, 0);
+        std::vector<int> nna1;
+        std::vector<int> nna2;
+        for (const NNCdata& n : nnc ) {
+            nna1.push_back(n.cell1 + 1);
+            nna2.push_back(n.cell2 + 1);
+        }
+        nncheada[0] = grid1;
+        nncheada[1] = grid2;
+        egridfile.write("NNCHEADA", nncheada);
+        egridfile.write("NNA1", nna1);
+        egridfile.write("NNA2", nna2);
+    }
+
+
+    void EclipseGrid::save_nnc_same_grid(Opm::EclIO::EclOutput& egridfile, const std::vector<Opm::NNCdata>& nnc, std::size_t grid_num) const {
         std::vector<int> nnchead(10, 0);
         std::vector<int> nnc1;
         std::vector<int> nnc2;
@@ -1887,11 +1963,11 @@ std::vector<double> EclipseGrid::createDVector(const std::array<int,3>& dims, st
         }
 
         nnchead[0] = nnc1.size();
+        nnchead[1] = grid_num;
         if (nnc1.size() > 0){
             egridfile.write("NNCHEAD", nnchead);
             egridfile.write("NNC1", nnc1);
             egridfile.write("NNC2", nnc2);
-
         }
 
     }

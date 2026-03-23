@@ -66,5 +66,3 @@ if(NOT @opm-project_NAME@_FOUND)
   # remove the temporarily added path again to not pollute downstream modules
   list(POP_FRONT CMAKE_MODULE_PATH)
 endif()
-
-# this is the contents of config.h as far as our probes can tell:

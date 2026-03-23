@@ -70,7 +70,7 @@ public:
       * R. Reid, et al.: The Properties of Gases and Liquids,
       * 4th edition, McGraw-Hill, 1987, pp. 42-44, 143-145
       */
-    template <class FluidState, class Params, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class Params, class LhsEval = typename FluidState::ValueType>
     static LhsEval computeFugacityCoefficient(const FluidState& fs,
                                               const Params& params,
                                               unsigned phaseIdx,

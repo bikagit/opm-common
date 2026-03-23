@@ -170,7 +170,7 @@ public:
      *
      * \sa BrooksCorey::pcnw
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation pcnw(const Params& params, const FluidState& fs)
     {
         const auto& Sw = decay<Evaluation>(fs.saturation(Traits::wettingPhaseIdx));
@@ -204,7 +204,7 @@ public:
      *
      * This is the inverse of the pcnw() method.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sw(const Params& params, const FluidState& fs)
     {
         const Evaluation& pC =
@@ -253,7 +253,7 @@ public:
      * \brief Calculate the non-wetting phase saturations depending on
      *        the phase pressures.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sn(const Params& params, const FluidState& fs)
     { return 1 - Sw<FluidState, Evaluation>(params, fs); }
 
@@ -275,7 +275,7 @@ public:
      *
      * \sa BrooksCorey::krw
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krw(const Params& params, const FluidState& fs)
     {
         const auto& sw = decay<Evaluation>(fs.saturation(Traits::wettingPhaseIdx));
@@ -318,7 +318,7 @@ public:
      *
      * \sa BrooksCorey::krn
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krn(const Params& params, const FluidState& fs)
     {
         const Evaluation& sw =

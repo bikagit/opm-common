@@ -37,7 +37,7 @@ class CubicEOS
     static constexpr Scalar R = Constants<Scalar>::R;
 
 public:
-    template <class FluidState, class Params, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class Params, class LhsEval = typename FluidState::ValueType>
     static LhsEval computeFugacityCoefficient(const FluidState& fs,
                                               const Params& params,
                                               unsigned phaseIdx,
@@ -102,7 +102,7 @@ public:
     }
 
     template <class FluidState, class Params>
-    static typename FluidState::Scalar computeMolarVolume(const FluidState& fs,
+    static typename FluidState::ValueType computeMolarVolume(const FluidState& fs,
                                                           Params& params,
                                                           unsigned phaseIdx,
                                                           bool isGasPhase)
@@ -110,7 +110,7 @@ public:
         Valgrind::CheckDefined(fs.temperature(phaseIdx));
         Valgrind::CheckDefined(fs.pressure(phaseIdx));
 
-        using Evaluation = typename FluidState::Scalar;
+        using Evaluation = typename FluidState::ValueType;
 
         // extract variables
         const Evaluation& T = fs.temperature(phaseIdx);

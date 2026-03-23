@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <iomanip>
 #include <ios>
 #include <iterator>
@@ -36,6 +37,7 @@
 #include <opm/common/utility/OpmInputError.hpp>
 
 #include <opm/input/eclipse/Parser/ParserKeywords/A.hpp>
+#include <opm/input/eclipse/Parser/ParserKeywords/C.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/D.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/E.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/G.hpp>
@@ -48,6 +50,7 @@
 #include <opm/input/eclipse/Parser/ParserKeywords/T.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/V.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/W.hpp>
+#include <opm/input/eclipse/Parser/ParserKeywords/Z.hpp>
 
 #include <opm/input/eclipse/Deck/Deck.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/TableManager.hpp>
@@ -109,6 +112,7 @@
 #include <opm/input/eclipse/EclipseState/Tables/TableContainer.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/WatvisctTable.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/AqutabTable.hpp>
+#include <opm/input/eclipse/EclipseState/Tables/ZmfvdTable.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/JFunc.hpp>
 
 #include <opm/input/eclipse/EclipseState/Tables/Tabdims.hpp>
@@ -612,6 +616,7 @@ std::optional<JFunc> make_jfunc(const Deck& deck) {
         initPlyrockTables(deck);
         initPlymaxTables(deck);
         initRTempTables(deck);
+        initZmfvdTables(deck);
         initRocktabTables(deck);
         initPlyshlogTables(deck);
         initPlymwinjTables(deck);
@@ -639,6 +644,50 @@ std::optional<JFunc> make_jfunc(const Deck& deck) {
     }
 
 
+    void TableManager::initZmfvdTables(const Deck& deck) {
+        if (!deck.hasKeyword<ParserKeywords::ZMFVD>())
+            return;
+
+        const std::string keywordName {"ZMFVD"};
+
+        if (deck.count(keywordName) > 1) {
+            complainAboutAmbiguousKeyword(deck, keywordName);
+            return;
+        }
+
+        const auto& tableKeywords = deck[keywordName];
+        if (!deck.hasKeyword<ParserKeywords::COMPS>()) {
+            const std::string reason {
+                "ZMFVD keyword requires COMPS to specify the number of components"};
+            throw OpmInputError(reason, tableKeywords[0].location());
+        }
+
+        const auto& compsKeyword = deck.get<ParserKeywords::COMPS>().back();
+        const int numComponents = compsKeyword.getRecord(0)
+                       .getItem<ParserKeywords::COMPS::NUM_COMPS>().get<int>(0);
+
+        if (numComponents < 1) {
+            const std::string reason {
+                "The number of components specified in COMPS must be positive"};
+            throw OpmInputError(reason, compsKeyword.location());
+        }
+
+        const std::size_t numTables = m_eqldims.getNumEquilRegions();
+        auto& container = forceGetTables(keywordName, numTables);
+        const auto& keyword = tableKeywords.back();
+
+        for (std::size_t tableIdx = 0; tableIdx < keyword.size(); ++tableIdx) {
+            const auto& tableRecord = keyword.getRecord(tableIdx);
+            const auto& dataItem = tableRecord.getItem("DATA");
+            if (dataItem.data_size() > 0) {
+                auto table = std::make_shared<ZmfvdTable>(
+                    dataItem, static_cast<int>(tableIdx), numComponents, keyword.location());
+                container.addTable(tableIdx, table);
+            }
+        }
+    }
+
+
     void TableManager::initPlyshlogTables(const Deck& deck) {
         const std::string keywordName = "PLYSHLOG";
 
@@ -650,8 +699,8 @@ std::optional<JFunc> make_jfunc(const Deck& deck) {
             complainAboutAmbiguousKeyword(deck, keywordName);
             return;
         }
-        size_t numTables = m_tabdims.getNumPVTTables();
-        auto& container = forceGetTables(keywordName , numTables);
+        const std::size_t numTables = m_tabdims.getNumPVTTables();
+        auto& container = forceGetTables(keywordName, numTables);
         const auto& tableKeyword = deck[keywordName].back();
 
         if (tableKeyword.size() > 2) {
@@ -662,7 +711,7 @@ std::optional<JFunc> make_jfunc(const Deck& deck) {
             throw OpmInputError(reason, tableKeyword.location());
         }
 
-        for (size_t tableIdx = 0; tableIdx < tableKeyword.size(); tableIdx += 2) {
+        for (std::size_t tableIdx = 0; tableIdx < tableKeyword.size(); tableIdx += 2) {
             const auto& indexRecord = tableKeyword.getRecord( tableIdx );
             const auto& dataRecord = tableKeyword.getRecord( tableIdx + 1);
             const auto& dataItem = dataRecord.getItem( 0 );
@@ -1030,6 +1079,10 @@ std::optional<JFunc> make_jfunc(const Deck& deck) {
 
     const TableContainer& TableManager::getRtempvdTables() const {
         return getTables("RTEMPVD");
+    }
+
+    const TableContainer& TableManager::getZmfvdTables() const {
+        return getTables("ZMFVD");
     }
 
     const TableContainer& TableManager::getRocktabTables() const {

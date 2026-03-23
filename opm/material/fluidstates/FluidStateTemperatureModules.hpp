@@ -41,7 +41,7 @@ namespace Opm {
  * \brief Module for the modular fluid state which stores the
  *       temperatures explicitly.
  */
-template <class Scalar,
+template <class ValueType,
           unsigned numPhases,
           class Implementation>
 class FluidStateExplicitTemperatureModule
@@ -53,13 +53,13 @@ public:
     /*!
      * \brief The temperature of a fluid phase [-]
      */
-    const Scalar& temperature(unsigned phaseIdx) const
+    const ValueType& temperature(unsigned phaseIdx) const
     { return temperature_[phaseIdx]; }
 
     /*!
      * \brief Set the temperature of a phase [-]
      */
-    void setTemperature(unsigned phaseIdx, const Scalar& value)
+    void setTemperature(unsigned phaseIdx, const ValueType& value)
     { temperature_[phaseIdx] = value; }
 
     /*!
@@ -88,14 +88,14 @@ public:
     }
 
 protected:
-    std::array<Scalar, numPhases> temperature_{};
+    std::array<ValueType, numPhases> temperature_{};
 };
 
 /*!
  * \brief Module for the modular fluid state which stores the
  *        temperatures explicitly and assumes thermal equilibrium.
  */
-template <class Scalar,
+template <class ValueT,
           unsigned numPhases,
           class Implementation>
 class FluidStateEquilibriumTemperatureModule
@@ -107,13 +107,13 @@ public:
     /*!
      * \brief The temperature of a fluid phase [-]
      */
-    const Scalar& temperature(unsigned /*phaseIdx*/) const
+    const ValueT& temperature(unsigned /*phaseIdx*/) const
     { return temperature_; }
 
     /*!
      * \brief Set the temperature of a phase [-]
      */
-    void setTemperature(const Scalar& value)
+    void setTemperature(const ValueT& value)
     { temperature_ = value; }
 
     /*!
@@ -123,7 +123,7 @@ public:
     template <class FluidState>
     void assign(const FluidState& fs)
     {
-        temperature_ = decay<Scalar>(fs.temperature(/*phaseIdx=*/0));
+        temperature_ = decay<ValueT>(fs.temperature(/*phaseIdx=*/0));
 
 #ifndef NDEBUG
         for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx) {
@@ -147,14 +147,14 @@ public:
     }
 
 protected:
-    Scalar temperature_;
+    ValueT temperature_;
 };
 
 /*!
  * \brief Module for the modular fluid state which does not  the
  *        temperatures but throws std::logic_error instead.
  */
-template <class Scalar>
+template <class ValueT>
 class FluidStateNullTemperatureModule
 {
 public:
@@ -164,7 +164,7 @@ public:
     /*!
      * \brief The temperature of a fluid phase [-]
      */
-    const Scalar& temperature(unsigned /* phaseIdx */) const
+    const ValueT& temperature(unsigned /* phaseIdx */) const
     { throw std::runtime_error("Temperature is not provided by this fluid state"); }
 
     /*!

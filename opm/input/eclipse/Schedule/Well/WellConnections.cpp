@@ -39,6 +39,9 @@
 
 #include <opm/input/eclipse/Deck/DeckRecord.hpp>
 
+#include <opm/input/eclipse/Parser/ErrorGuard.hpp>
+#include <opm/input/eclipse/Parser/ParseContext.hpp>
+
 #include <opm/input/eclipse/Parser/ParserKeywords/C.hpp>
 #include <opm/input/eclipse/Parser/ParserKeywords/W.hpp>
 
@@ -57,6 +60,7 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <numbers>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -180,7 +184,7 @@ namespace {
     std::array<double, 3>
     permThickness(const external::cvf::Vec3d& effective_connection,
                   const std::array<double,3>& cell_perm,
-                  const double ntg)
+                  const double                ntg)
     {
         auto perm_thickness = std::array {
             effective_connection[0],
@@ -194,10 +198,14 @@ namespace {
             Opm::Connection::Direction::Z,
         };
 
-        for (size_t i = 0; i < 3; ++i) {
-            const auto K = permComponents(direction[i], cell_perm);
-            perm_thickness[i] *= std::sqrt(K[0] * K[1]);
-        }
+        std::ranges::transform(direction, perm_thickness, perm_thickness.begin(),
+                               [&cell_perm](const Opm::Connection::Direction d,
+                                            const double                     h)
+                               {
+                                   const auto K = permComponents(d, cell_perm);
+
+                                   return std::sqrt(K[0] * K[1]) * h;
+                               });
 
         return perm_thickness;
     }
@@ -206,10 +214,10 @@ namespace {
     std::array<double, 3>
     connectionFactor(const std::array<double,3>& cell_perm,
                      const std::array<double,3>& cell_size,
-                     const double ntg,
+                     const double                ntg,
                      const std::array<double,3>& Kh,
-                     const double rw,
-                     const double skin_factor)
+                     const double                rw,
+                     const double                skin_factor)
     {
         auto connection_factor = std::array<double, 3>{};
 
@@ -219,16 +227,19 @@ namespace {
             Opm::Connection::Direction::Z,
         };
 
-        const double angle = 6.2831853071795864769252867665590057683943387987502116419498;
+        std::ranges::transform(direction, Kh, connection_factor.begin(),
+                               [&cell_perm, &cell_size, ntg, rw, skin_factor]
+                               (const Opm::Connection::Direction d,
+                                const double                     kh)
+                               {
+                                   constexpr auto angle = 2 * std::numbers::pi;
 
-        for (size_t i = 0; i < 3; ++i) {
-            const auto K = permComponents(direction[i], cell_perm);
-            const auto D = effectiveExtent(direction[i], ntg, cell_size);
-            const auto r0 = effectiveRadius(K, D);
+                                   const auto K = permComponents(d, cell_perm);
+                                   const auto D = effectiveExtent(d, ntg, cell_size);
+                                   const auto r0 = effectiveRadius(K, D);
 
-            connection_factor[i] = angle * Kh[i]
-                / peacemanDenominator(r0, rw, skin_factor);
-        }
+                                   return angle * kh / peacemanDenominator(r0, rw, skin_factor);
+                               });
 
         return connection_factor;
     }
@@ -361,11 +372,13 @@ namespace Opm {
     }
 
     void WellConnections::loadCOMPDATX(const DeckRecord&                 record,
-                                       const ScheduleGrid&               grid,
                                        const std::string&                wname,
                                        const WDFAC&                      wdfac,
+                                       const ScheduleGrid&               grid,
                                        const KeywordLocation&            location,
-                                       const std::optional<std::string>& lgr_label)
+                                       const std::optional<std::string>& lgr_label,
+                                       [[maybe_unused]] const ParseContext& parseContext,
+                                       [[maybe_unused]] ErrorGuard&         errors)
     {
         const auto& itemI = record.getItem("I");
         const auto defaulted_I = itemI.defaultApplied(0) || (itemI.get<int>(0) == 0);
@@ -410,7 +423,7 @@ namespace Opm {
 
         // Angle of completion exposed to flow.  We assume centre
         // placement so there's complete exposure (= 2\pi).
-        const auto angle = 6.2831853071795864769252867665590057683943387987502116419498;
+        constexpr auto angle = 2 * std::numbers::pi;
 
         for (int k = K1; k <= K2; ++k) {
             const auto& cell = grid.get_cell(I, J, k, lgr_label);
@@ -554,22 +567,27 @@ The cell ({},{},{}) in well {} is not active and the connection will be ignored)
     }
 
     void WellConnections::loadCOMPDAT(const DeckRecord&      record,
-                                      const ScheduleGrid&    grid,
                                       const std::string&     wname,
                                       const WDFAC&           wdfac,
-                                      const KeywordLocation& location)
+                                      const ScheduleGrid&    grid,
+                                      const KeywordLocation& location,
+                                      const ParseContext&    parseContext,
+                                      ErrorGuard&            errors)
     {
         // No LGR tag when processing the main grid COMPDAT keyword.
         const auto lgr_tag = std::optional<std::string>{}; // == nullopt.
 
-        this->loadCOMPDATX(record, grid, wname, wdfac, location, lgr_tag);
+        this->loadCOMPDATX(record, wname, wdfac, grid, location,
+                           lgr_tag, parseContext, errors);
     }
 
     void WellConnections::loadCOMPDATL(const DeckRecord&      record,
-                                       const ScheduleGrid&    grid,
                                        const std::string&     wname,
                                        const WDFAC&           wdfac,
-                                       const KeywordLocation& location)
+                                       const ScheduleGrid&    grid,
+                                       const KeywordLocation& location,
+                                       const ParseContext&    parseContext,
+                                       ErrorGuard&            errors)
     {
         // We're processing a local grid's connection data (COMPDATL or
         // COMPDATM keyword).  Convey this information to the keyword
@@ -577,13 +595,14 @@ The cell ({},{},{}) in well {} is not active and the connection will be ignored)
         const auto lgr_tag = std::make_optional
             (record.getItem<ParserKeywords::COMPDATX::LGR>().getTrimmedString(0));
 
-        this->loadCOMPDATX(record, grid, wname, wdfac, location, lgr_tag);
+        this->loadCOMPDATX(record, wname, wdfac, grid, location,
+                           lgr_tag, parseContext, errors);
     }
 
     void
     WellConnections::loadCOMPTRAJ(const DeckRecord&      record,
-                                  const ScheduleGrid&    grid,
                                   const std::string&     wname,
+                                  const ScheduleGrid&    grid,
                                   const KeywordLocation& location,
                                   WellTrajInfo&          wellTraj)
     {
@@ -625,8 +644,9 @@ The cell ({},{},{}) in well {} is not active and the connection will be ignored)
         std::vector<double> measured_depths;
 
         // Calulate the x,y,z coordinates of the begin and end of a perforation
+        const auto m_top = perf_top.getSIDouble(0);
+        const auto m_bot = perf_bot.getSIDouble(0);
         external::cvf::Vec3d p_top, p_bot;
-        double m_top = perf_top.getSIDouble(0), m_bot = perf_bot.getSIDouble(0);
         for (size_t i = 0; i < 3 ; ++i) {
             p_top[i] = linearInterpolation(this->md, this->coord[i], m_top);
             p_bot[i] = linearInterpolation(this->md, this->coord[i], m_bot);
@@ -800,15 +820,18 @@ CF and Kh items for well {} must both be specified or both defaulted/negative)",
     }
 
     void WellConnections::loadWELTRAJ(const DeckRecord& record,
-                                      [[maybe_unused]] const ScheduleGrid&    grid,
                                       [[maybe_unused]] const std::string&     wname,
+                                      [[maybe_unused]] const ScheduleGrid&    grid,
                                       [[maybe_unused]] const KeywordLocation& location)
     {
         double x = record.getItem("X").getSIDouble(0);
         double y = record.getItem("Y").getSIDouble(0);
-        const auto& mapaxes = grid.get_grid()->getMapAxes();
-        if (mapaxes.has_value())
-            mapaxes.value().inv_transform(x, y);
+
+        if (const auto& mapaxes = grid.get_grid()->getMapAxes();
+            mapaxes.has_value())
+        {
+            mapaxes->inv_transform(x, y);
+        }
 
         this->coord[0].push_back(x);
         this->coord[1].push_back(y);

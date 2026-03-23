@@ -50,7 +50,7 @@ public:
      *
      * If this method is called an exception is thrown at run time.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation thermalConductivity(const Params&,
                                           const FluidState&)
     { return 0.0; }

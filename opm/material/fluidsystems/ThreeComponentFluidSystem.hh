@@ -183,7 +183,7 @@ namespace Opm {
         /*!
          * \copydoc BaseFluidSystem::density
          */
-        template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+        template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
         static LhsEval density(const FluidState& fluidState,
                                const ParameterCache<ParamCacheEval>& paramCache,
                                unsigned phaseIdx)
@@ -193,7 +193,7 @@ namespace Opm {
         }
 
         //! \copydoc BaseFluidSystem::viscosity
-        template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+        template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
         static LhsEval viscosity(const FluidState& fluidState,
                                  const ParameterCache<ParamCacheEval>& paramCache,
                                  unsigned phaseIdx)
@@ -203,7 +203,7 @@ namespace Opm {
         }
 
         //! \copydoc BaseFluidSystem::fugacityCoefficient
-        template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+        template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
         static LhsEval fugacityCoefficient(const FluidState& fluidState,
                                            const ParameterCache<ParamCacheEval>& paramCache,
                                            unsigned phaseIdx,

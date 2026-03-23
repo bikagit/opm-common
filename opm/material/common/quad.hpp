@@ -31,10 +31,11 @@
 
 #include <cmath>
 #include <complex>
-#include <string>
-#include <stdexcept>
-#include <limits>
 #include <iostream>
+#include <limits>
+#include <numbers>
+#include <stdexcept>
+#include <string>
 #include <type_traits>
 
 extern "C" {
@@ -347,6 +348,11 @@ inline bool isinf(quad val)
 #endif // QUADMATH_HAS_MATH_OPERATORS
 
 } // namespace std
+
+namespace std::numbers {
+    template <>
+    inline constexpr quad pi_v<quad> = M_PIq;
+} // namespace std::numbers
 
 #if HAVE_DUNE_COMMON
 

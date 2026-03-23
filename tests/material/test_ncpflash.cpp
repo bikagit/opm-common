@@ -99,7 +99,7 @@ void checkNcpFlash(const FluidState& fsRef,
     enum { numPhases = FluidSystem::numPhases };
     enum { numComponents = FluidSystem::numComponents };
     using ComponentVector = Dune::FieldVector<Scalar, numComponents>;
-    using ParameterCache = typename FluidSystem::template ParameterCache<typename FluidState::Scalar>;
+    using ParameterCache = typename FluidSystem::template ParameterCache<typename FluidState::ValueType>;
 
     // calculate the total amount of stuff in the reference fluid
     // phase
@@ -152,7 +152,7 @@ void completeReferenceFluidState(FluidState& fs,
 
     // make the fluid state consistent with local thermodynamic
     // equilibrium
-    typename FluidSystem::template ParameterCache<typename FluidState::Scalar> paramCache;
+    typename FluidSystem::template ParameterCache<typename FluidState::ValueType> paramCache;
     ComputeFromReferencePhase::solve(fs,
                                      paramCache,
                                      refPhaseIdx,

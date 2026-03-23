@@ -16,6 +16,7 @@
   You should have received a copy of the GNU General Public License
   along with OPM.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "opm/input/eclipse/EclipseState/Grid/NNC.hpp"
 #include <boost/test/tools/old/interface.hpp>
 #include <opm/io/eclipse/EGrid.hpp>
 #include <opm/io/eclipse/EInit.hpp>
@@ -73,6 +74,85 @@
 using namespace Opm;
 
 namespace {
+
+
+    NNCCollection nnc_collection_opm_IntegrationNNCLGR()
+    {
+        // Builds the NNCCollection for the NNCLGRTEST case (deck: NNCLGRTEST.DATA).
+        //
+        // Grid layout (all indices 0-based unless noted):
+        //   Global : 5x1x1  — cells 0..4; cells 1 and 2 are LGR host cells
+        //   LGR1   : 2x2x1 (4 cells, 0..3) — refines global cell 1 (1-based: 2,1,1)
+        //   LGR2   : 2x2x1 (4 cells, 0..3) — refines global cell 2 (1-based: 3,1,1)
+        //
+        // NNCCollection grid index convention:
+        //   0 = global,  1 = LGR1,  2 = LGR2
+        //
+        // Expected INIT file NNC section (values in deck native units):
+        //
+        //   TRANNNC  (global same-grid)        : [ 4.56 ]
+        //
+        //   LGR1 block:
+        //     TRANNNC  (internal, none)         : [ ]
+        //     TRANGL   (global <-> LGR1)        : [ 8.527,  8.527 ]
+        //     LGRJOIN  LGR1 <-> LGR2
+        //     TRANLL   (LGR1 <-> LGR2)         : [ 0.197, 12.79, 12.79 ]
+        //
+        //   LGR2 block:
+        //     TRANNNC  (internal, none)         : [ ]
+        //     TRANGL   (global <-> LGR2)        : [ 8.527,  8.527 ]
+
+
+        // NNCLGRTEST.DATA has no explicit unit keyword; OPM defaults to METRIC.
+        // OPM stores all NNC transmissibilities internally in SI [m³/(Pa·s)].
+        // The expected INIT output values above are in METRIC units (cP·m³/(day·bar)).
+        // Convert: SI = output_value * Metric::Transmissibility
+        //   where Metric::Transmissibility = cP·m³/(day·bar) ≈ 1.1574e-13 [SI per metric unit]
+        using namespace Opm::unit;
+        using namespace Opm::prefix;
+        const double toSI = centi * Poise * cubic(meter) / (day * barsa);
+
+        NNCCollection ncol;
+
+        // Global same-grid NNC: cell 0 (1,1,1) <-> cell 4 (5,1,1).
+        // Neither is a host cell, so this connection survives filtering.
+        {
+            NNCDataContainer global_nnc;
+            global_nnc.addNNC(0, 4, 0.45600000E+01 * toSI);
+            ncol.addNNC(global_nnc);
+        }
+
+        // Cross-grid: global (grid 0) <-> LGR1 (grid 1) — TRANGL
+        // Global cell 0 connects to the left face of LGR1 (cells 0 and 2 in a 2x2x1).
+        {
+            NNCDataContainerDiffGrid gl1_nnc;
+            gl1_nnc.addNNC(0, 0, 0.85270205E+01 * toSI);   // global cell 0  <-> LGR1 cell 0 (1,1,1)
+            gl1_nnc.addNNC(0, 2, 0.85270205E+01 * toSI);   // global cell 0  <-> LGR1 cell 2 (1,2,1)
+            ncol.addNNC(0, 1, gl1_nnc);
+        }
+
+        // Cross-grid: global (grid 0) <-> LGR2 (grid 2) — TRANGL
+        // Global cell 3 connects to the right face of LGR2 (cells 1 and 3 in a 2x2x1).
+        {
+            NNCDataContainerDiffGrid gl2_nnc;
+            gl2_nnc.addNNC(3, 1, 0.85270205E+01 * toSI);   // global cell 3  <-> LGR2 cell 1 (2,1,1)
+            gl2_nnc.addNNC(3, 3, 0.85270205E+01 * toSI);   // global cell 3  <-> LGR2 cell 3 (2,2,1)
+            ncol.addNNC(0, 2, gl2_nnc);
+        }
+
+        // Cross-grid: LGR1 (grid 1) <-> LGR2 (grid 2) — TRANLL
+        // Right column of LGR1 (cells 1, 3) connects to left column of LGR2 (cells 0, 2).
+        // Insertion order must match the reference output: [0.197, 12.79, 12.79].
+        {
+            NNCDataContainerDiffGrid l12_nnc;
+            l12_nnc.addNNC(1, 0, 0.19720000E+00 * toSI);   // LGR1 cell 1 (2,1,1) <-> LGR2 cell 0 (1,1,1)
+            l12_nnc.addNNC(1, 2, 0.12790530E+02 * toSI);   // LGR1 cell 1 (2,1,1) <-> LGR2 cell 2 (1,2,1)
+            l12_nnc.addNNC(3, 2, 0.12790530E+02 * toSI);   // LGR1 cell 3 (2,2,1) <-> LGR2 cell 2 (1,2,1)
+            ncol.addNNC(1, 2, l12_nnc);
+        }
+
+        return ncol;
+    }
 
     template<typename Vec>
     void checkVectorsClose(const Vec& obtained, const Vec& expected, double tol, const std::string& context)
@@ -903,7 +983,7 @@ BOOST_AUTO_TEST_CASE(EclipseIOLGR_IntegrationLGR)
     eGridPropsList.emplace_back(createEGridProps(3, 3, 1));
     eGridPropsList.emplace_back(createEGridProps(3, 3, 1));
 
-    eclWriter.writeInitial(eGridPropsList, {});
+    eclWriter.writeInitial(eGridPropsList, {}, std::vector<NNCdata>{});
 
     std::vector<float> expected_tranx_lgr2 =  {0.37468846E+01,   0.56203265E+01,   0.74937692E+01,   0.93672113E+01,
                                                0.11240653E+02,   0.13114096E+02,   0.14987538E+02,   0.16860981E+02,
@@ -917,4 +997,128 @@ BOOST_AUTO_TEST_CASE(EclipseIOLGR_IntegrationLGR)
         checkVectorsClose(tranx_file, expected_tranx_lgr2, 1e-4, "tranx_file");
     }
 
+}
+
+
+BOOST_AUTO_TEST_CASE(EclipseIOLGR_IntegrationNNCLGR)
+{
+    WorkArea test_area("test_EclioseIO_LGR_PROP_full");
+    test_area.copyIn("NNCLGRTEST.DATA");
+
+    const auto deck = msw_sim("NNCLGRTEST.DATA");
+    const auto simCase = SimulationCase{deck};
+    auto es = simCase.es;
+    const auto& eclGrid = es.getInputGrid();
+
+    const Schedule& schedule = simCase.sched;
+    const SummaryConfig summary_config( deck, schedule, es.fieldProps(), es.aquifer());
+    const SummaryState st = sim_stateLGR_example04();
+    es.getIOConfig().setBaseName( "TESTE_LGR_INTEGRATION_PROP" );
+    EclipseIO eclWriter( es, eclGrid , schedule, summary_config);
+
+    using measure = UnitSystem::measure;
+    using TargetType = data::TargetType;
+
+    auto createEGridProps = [](int nx, int ny, int nz) {
+        std::vector<double> tranx(nx * ny * nz);
+        std::vector<double> trany(nx * ny * nz);
+        std::vector<double> tranz(nx * ny * nz);
+        // Fill tranx, trany, tranz with some test data if needed
+        double step = 0.5e-12;
+        std::generate(tranx.begin(), tranx.end(), [n = 1e-12, step]() mutable { double val = n; n += step; return val; });
+        std::generate(trany.begin(), trany.end(), [n = 1e-12, step]() mutable { double val = n; n += step; return val; });
+        std::generate(tranz.begin(), tranz.end(), [n = 1e-12, step]() mutable { double val = n; n += step; return val; });
+
+        return data::Solution {
+            { "TRANX", data::CellData { measure::transmissibility, tranx, TargetType::INIT } },
+            { "TRANY", data::CellData { measure::transmissibility, trany, TargetType::INIT } },
+            { "TRANZ", data::CellData { measure::transmissibility, tranz, TargetType::INIT } },
+        };
+    };
+
+    std::vector<data::Solution> eGridPropsList;
+    eGridPropsList.reserve(4);
+    eGridPropsList.emplace_back(createEGridProps(5, 1, 1));
+    eGridPropsList.emplace_back(createEGridProps(2, 2, 1));
+    eGridPropsList.emplace_back(createEGridProps(2, 2, 1));
+
+
+    auto nnc_col = nnc_collection_opm_IntegrationNNCLGR();
+    eclWriter.writeInitial(eGridPropsList, {}, nnc_col);
+
+    const auto initFileName = ::Opm::EclIO::OutputStream::
+        outputFileName({test_area.currentWorkingDirectory(), "TESTE_LGR_INTEGRATION_PROP"}, "INIT");
+
+    Opm::EclIO::EInit einit(initFileName);
+
+    // -----------------------------------------------------------------------
+    // Global TRANNNC
+    // deck NNC: cell(1,1,1)<->cell(5,1,1) trans=4.56 [metric]
+    // -----------------------------------------------------------------------
+    {
+        const auto& trannnc = einit.getInitData<float>("TRANNNC");
+        BOOST_REQUIRE_EQUAL(trannnc.size(), 1u);
+        BOOST_CHECK_CLOSE(trannnc[0], 4.56f, 1e-2);
+    }
+
+    // -----------------------------------------------------------------------
+    // LGR1 NNC block
+    // -----------------------------------------------------------------------
+    BOOST_REQUIRE(einit.hasLGR("LGR1"));
+    {
+        // TRANNNC: no same-grid NNCs within LGR1
+        const auto& trannnc = einit.getInitData<float>("TRANNNC", "LGR1");
+        BOOST_CHECK(trannnc.empty());
+
+        // TRANGL: global cell 0 <-> LGR1 cells 0 and 2
+        const auto& trangl = einit.getInitData<float>("TRANGL", "LGR1");
+        checkVectorsClose(trangl,
+                          std::vector<float>{ 0.85270205E+01f, 0.85270205E+01f },
+                          1e-2, "TRANGL LGR1");
+
+        // LGRJOIN: identifies the two LGRs connected by TRANLL.
+        // Value verification is skipped (EInit lacks an explicit std::string
+        // instantiation for CHAR arrays); presence and size are checked via list_arrays.
+        const auto lgr1_arrays = einit.list_arrays("LGR1");
+        const auto hasArrayLGR1 = [&lgr1_arrays](const std::string& name) {
+            return std::ranges::any_of(lgr1_arrays,
+                [&name](const auto& e) { return std::get<0>(e) == name; });
+        };
+        BOOST_CHECK(hasArrayLGR1("LGRJOIN"));
+        BOOST_CHECK_EQUAL(std::get<2>(*std::ranges::find_if(lgr1_arrays,
+            [](const auto& e) { return std::get<0>(e) == "LGRJOIN"; })), 2);
+
+        // TRANLL: LGR1 right column <-> LGR2 left column
+        const auto& tranll = einit.getInitData<float>("TRANLL", "LGR1");
+        checkVectorsClose(tranll,
+                          std::vector<float>{ 0.19720000E+00f, 0.12790530E+02f, 0.12790530E+02f },
+                          1e-2, "TRANLL LGR1");
+    }
+
+    // -----------------------------------------------------------------------
+    // LGR2 NNC block
+    // LGRJOIN/TRANLL are NOT present: the LGR1-LGR2 connection is owned by
+    // LGR1 (lower index), so LGR2's block only has TRANNNC and TRANGL.
+    // -----------------------------------------------------------------------
+    BOOST_REQUIRE(einit.hasLGR("LGR2"));
+    {
+        // TRANNNC: no same-grid NNCs within LGR2
+        const auto& trannnc = einit.getInitData<float>("TRANNNC", "LGR2");
+        BOOST_CHECK(trannnc.empty());
+
+        // TRANGL: global cell 3 <-> LGR2 cells 1 and 3
+        const auto& trangl = einit.getInitData<float>("TRANGL", "LGR2");
+        checkVectorsClose(trangl,
+                          std::vector<float>{ 0.85270205E+01f, 0.85270205E+01f },
+                          1e-2, "TRANGL LGR2");
+
+        // LGRJOIN/TRANLL must be absent from LGR2's block
+        const auto lgr2_arrays = einit.list_arrays("LGR2");
+        const auto hasArray = [&lgr2_arrays](const std::string& name) {
+            return std::ranges::any_of(lgr2_arrays,
+                [&name](const auto& e) { return std::get<0>(e) == name; });
+        };
+        BOOST_CHECK(!hasArray("LGRJOIN"));
+        BOOST_CHECK(!hasArray("TRANLL"));
+    }
 }

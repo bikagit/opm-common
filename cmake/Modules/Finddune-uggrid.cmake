@@ -1,33 +1,16 @@
-include (OpmPackage)
+if(dune-uggrid_FOUND)
+  return()
+endif()
 
-find_opm_package (
-  # module name
-  "dune-uggrid"
+if(dune-uggrid_FIND_REQUIRED)
+  find_package(dune-uggrid CONFIG REQUIRED)
+else()
+  find_package(dune-uggrid CONFIG)
+endif()
 
-  # dependencies
-  # TODO: we should probe for all the HAVE_* values listed below;
-  # however, we don't actually use them in our implementation, so
-  "dune-common REQUIRED
-  "
-  # header to search for
-  ""
-
-  # library to search for
-  "duneuggrid"
-
-  # defines to be added to compilations
-  ""
-
-  # test program
-  ""
-  # config variable
-  "")
-
-#debug_find_vars ("dune-uggrid")
-
-# make version number available in config.h
-include (UseDuneVer)
-find_dune_version ("dune" "uggrid")
-
-# deactivate search for UG
-set(UG_FOUND ${dune-uggrid_FOUND})
+if(dune-uggrid_FOUND)
+  target_compile_definitions(duneuggrid INTERFACE HAVE_DUNE_UGGRID=1)
+  # make version number available in config.h
+  include (UseDuneVer)
+  find_dune_version ("dune" "uggrid")
+endif()

@@ -40,7 +40,7 @@ namespace Opm {
  * \brief Module for the modular fluid state which stores the
  *        phase compositions explicitly in terms of mole fractions.
  */
-template <class Scalar,
+template <class ValueType,
           class FluidSystem,
           class Implementation>
 class FluidStateExplicitCompositionModule
@@ -66,19 +66,19 @@ public:
     /*!
      * \brief The mole fraction of a component in a phase []
      */
-    const Scalar& moleFraction(unsigned phaseIdx, unsigned compIdx) const
+    const ValueType& moleFraction(unsigned phaseIdx, unsigned compIdx) const
     { return moleFraction_[phaseIdx][compIdx]; }
 
     /*!
      * \brief The total mole fraction of a component []
      */
-    const Scalar& moleFraction(unsigned compIdx) const
+    const ValueType& moleFraction(unsigned compIdx) const
     { return totalModelFractions_[compIdx]; }
 
     /*!
      * \brief The mass fraction of a component in a phase []
      */
-    Scalar massFraction(unsigned phaseIdx, unsigned compIdx) const
+    ValueType massFraction(unsigned phaseIdx, unsigned compIdx) const
     {
         return
             abs(sumMoleFractions_[phaseIdx])
@@ -95,7 +95,7 @@ public:
      * component's molar masses weighted by the current mole fraction:
      * \f[ \bar M_\alpha = \sum_\kappa M^\kappa x_\alpha^\kappa \f]
      */
-    const Scalar& averageMolarMass(unsigned phaseIdx) const
+    const ValueType& averageMolarMass(unsigned phaseIdx) const
     { return averageMolarMass_[phaseIdx]; }
 
     /*!
@@ -107,7 +107,7 @@ public:
      *
      * http://en.wikipedia.org/wiki/Concentration
      */
-    Scalar molarity(unsigned phaseIdx, unsigned compIdx) const
+    ValueType molarity(unsigned phaseIdx, unsigned compIdx) const
     { return asImp_().molarDensity(phaseIdx)*moleFraction(phaseIdx, compIdx); }
 
     /*!
@@ -115,7 +115,7 @@ public:
      *        and update the average molar mass [kg/mol] according
      *        to the current composition of the phase
      */
-    void setMoleFraction(unsigned phaseIdx, unsigned compIdx, const Scalar& value)
+    void setMoleFraction(unsigned phaseIdx, unsigned compIdx, const ValueType& value)
     {
         Valgrind::CheckDefined(value);
         Valgrind::SetUndefined(sumMoleFractions_[phaseIdx]);
@@ -136,18 +136,18 @@ public:
     /*!
      * \brief Set the total mole fraction of a component
      */
-    void setMoleFraction(unsigned compIdx, const Scalar& value)
+    void setMoleFraction(unsigned compIdx, const ValueType& value)
     {
         Valgrind::CheckDefined(value);
         totalModelFractions_[compIdx] = value;
     }
 
-    void setCompressFactor(unsigned phaseIdx, const Scalar& value) {
+    void setCompressFactor(unsigned phaseIdx, const ValueType& value) {
         Valgrind::CheckDefined(value);
         Z_[phaseIdx] = value;
     }
 
-    Scalar compressFactor(unsigned phaseIdx) const {
+    ValueType compressFactor(unsigned phaseIdx) const {
         return Z_[phaseIdx];
     }
 
@@ -163,7 +163,7 @@ public:
             sumMoleFractions_[phaseIdx] = 0;
             for (unsigned compIdx = 0; compIdx < numComponents; ++compIdx) {
                 moleFraction_[phaseIdx][compIdx] =
-                    decay<Scalar>(fs.moleFraction(phaseIdx, compIdx));
+                    decay<ValueType>(fs.moleFraction(phaseIdx, compIdx));
 
                 averageMolarMass_[phaseIdx] += moleFraction_[phaseIdx][compIdx]*FluidSystem::molarMass(compIdx);
                 sumMoleFractions_[phaseIdx] += moleFraction_[phaseIdx][compIdx];
@@ -188,7 +188,7 @@ public:
         Valgrind::CheckDefined(L_);
     }
 
-    const Scalar& K(unsigned compIdx) const
+    const ValueType& K(unsigned compIdx) const
     {
         return K_[compIdx];
     }
@@ -196,7 +196,7 @@ public:
     /*!
      * \brief Set the K value of a component [-]
      */
-    void setKvalue(unsigned compIdx, const Scalar& value)
+    void setKvalue(unsigned compIdx, const ValueType& value)
     {
         K_[compIdx] = value;
     }
@@ -204,7 +204,7 @@ public:
     /*!
      * \brief The L value of a composition [-]
      */
-    const Scalar& L() const
+    const ValueType& L() const
     {
         return L_;
     }
@@ -212,7 +212,7 @@ public:
     /*!
      * \brief Set the L value [-]
      */
-    void setLvalue(const Scalar& value)
+    void setLvalue(const ValueType& value)
     {
         L_ = value;
     }
@@ -221,7 +221,7 @@ public:
     * \brief Wilson formula to calculate K
     *
     */
-    Scalar wilsonK_(unsigned compIdx) const
+    ValueType wilsonK_(unsigned compIdx) const
     {
         const auto& acf = FluidSystem::acentricFactor(compIdx);
         const auto& T_crit = FluidSystem::criticalTemperature(compIdx);
@@ -239,20 +239,20 @@ protected:
         return *static_cast<const Implementation*>(this);
     }
 
-    std::array<std::array<Scalar,numComponents>,numPhases> moleFraction_{};
-    std::array<Scalar,numPhases> averageMolarMass_{};
-    std::array<Scalar,numPhases> sumMoleFractions_{}; // per phase
-    std::array<Scalar, numComponents> totalModelFractions_{}; // total mole fractions for each component
-    std::array<Scalar,numPhases> Z_{};
-    std::array<Scalar,numComponents> K_{};
-    Scalar L_{};
+    std::array<std::array<ValueType,numComponents>,numPhases> moleFraction_{};
+    std::array<ValueType,numPhases> averageMolarMass_{};
+    std::array<ValueType,numPhases> sumMoleFractions_{}; // per phase
+    std::array<ValueType, numComponents> totalModelFractions_{}; // total mole fractions for each component
+    std::array<ValueType,numPhases> Z_{};
+    std::array<ValueType,numComponents> K_{};
+    ValueType L_{};
 };
 
 /*!
  * \brief Module for the modular fluid state which provides the
  *        phase compositions assuming immiscibility.
  */
-template <class Scalar,
+template <class ValueType,
           class FluidSystem,
           class Implementation>
 class FluidStateImmiscibleCompositionModule
@@ -269,13 +269,13 @@ public:
     /*!
      * \brief The mole fraction of a component in a phase []
      */
-    Scalar moleFraction(unsigned phaseIdx, unsigned compIdx) const
+    ValueType moleFraction(unsigned phaseIdx, unsigned compIdx) const
     { return (phaseIdx == compIdx)?1.0:0.0; }
 
     /*!
      * \brief The mass fraction of a component in a phase []
      */
-    Scalar massFraction(unsigned phaseIdx, unsigned compIdx) const
+    ValueType massFraction(unsigned phaseIdx, unsigned compIdx) const
     { return (phaseIdx == compIdx)?1.0:0.0; }
 
     /*!
@@ -286,7 +286,7 @@ public:
      * component's molar masses weighted by the current mole fraction:
      * \f[ \bar M_\alpha = \sum_\kappa M^\kappa x_\alpha^\kappa \f]
      */
-    Scalar averageMolarMass(unsigned phaseIdx) const
+    ValueType averageMolarMass(unsigned phaseIdx) const
     { return FluidSystem::molarMass(/*compIdx=*/phaseIdx); }
 
     /*!
@@ -298,7 +298,7 @@ public:
      *
      * http://en.wikipedia.org/wiki/Concentration
      */
-    Scalar molarity(unsigned phaseIdx, unsigned compIdx) const
+    ValueType molarity(unsigned phaseIdx, unsigned compIdx) const
     { return asImp_().molarDensity(phaseIdx)*moleFraction(phaseIdx, compIdx); }
 
     /*!
@@ -329,7 +329,7 @@ protected:
  * \brief Module for the modular fluid state which does not store the
  *        compositions but throws std::logic_error instead.
  */
-template <class Scalar>
+template <class ValueT>
 class FluidStateNullCompositionModule
 {
 public:
@@ -340,13 +340,13 @@ public:
     /*!
      * \brief The mole fraction of a component in a phase []
      */
-    Scalar moleFraction(unsigned /* phaseIdx */, unsigned /* compIdx */) const
+    ValueT moleFraction(unsigned /* phaseIdx */, unsigned /* compIdx */) const
     { throw std::logic_error("Mole fractions are not provided by this fluid state"); }
 
     /*!
      * \brief The mass fraction of a component in a phase []
      */
-    Scalar massFraction(unsigned /* phaseIdx */, unsigned /* compIdx */) const
+    ValueT massFraction(unsigned /* phaseIdx */, unsigned /* compIdx */) const
     { throw std::logic_error("Mass fractions are not provided by this fluid state"); }
 
     /*!
@@ -357,7 +357,7 @@ public:
      * component's molar masses weighted by the current mole fraction:
      * \f[ \bar M_\alpha = \sum_\kappa M^\kappa x_\alpha^\kappa \f]
      */
-    Scalar averageMolarMass(unsigned /* phaseIdx */) const
+    ValueT averageMolarMass(unsigned /* phaseIdx */) const
     { throw std::logic_error("Mean molar masses are not provided by this fluid state"); }
 
     /*!
@@ -369,7 +369,7 @@ public:
      *
      * http://en.wikipedia.org/wiki/Concentration
      */
-    Scalar molarity(unsigned /* phaseIdx */, unsigned /* compIdx */) const
+    ValueT molarity(unsigned /* phaseIdx */, unsigned /* compIdx */) const
     { throw std::logic_error("Molarities are not provided by this fluid state"); }
 
     /*!

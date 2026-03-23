@@ -534,14 +534,14 @@ public:
      * thermodynamic quantities (generic version)
      ****************************************/
     //! \copydoc BaseFluidSystem::density
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
     STATIC_OR_DEVICE LhsEval density(const FluidState& fluidState,
                            const ParameterCache<ParamCacheEval>& paramCache,
                            unsigned phaseIdx) NOTHING_OR_CONST
     { return density<FluidState, LhsEval>(fluidState, phaseIdx, paramCache.regionIndex()); }
 
     //! \copydoc BaseFluidSystem::fugacityCoefficient
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
     STATIC_OR_DEVICE LhsEval fugacityCoefficient(const FluidState& fluidState,
                                        const ParameterCache<ParamCacheEval>& paramCache,
                                        unsigned phaseIdx,
@@ -554,20 +554,20 @@ public:
     }
 
     //! \copydoc BaseFluidSystem::viscosity
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
     STATIC_OR_DEVICE LhsEval viscosity(const FluidState& fluidState,
                              const ParameterCache<ParamCacheEval>& paramCache,
                              unsigned phaseIdx) NOTHING_OR_CONST
     { return viscosity<FluidState, LhsEval>(fluidState, phaseIdx, paramCache.regionIndex()); }
 
     //! \copydoc BaseFluidSystem::enthalpy
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
     STATIC_OR_DEVICE LhsEval enthalpy(const FluidState& fluidState,
                             const ParameterCache<ParamCacheEval>& paramCache,
                             unsigned phaseIdx)
     { return enthalpy<FluidState, LhsEval>(fluidState, phaseIdx, paramCache.regionIndex()); }
 
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
     STATIC_OR_DEVICE LhsEval internalEnergy(const FluidState& fluidState,
                                   const ParameterCache<ParamCacheEval>& paramCache,
                                   unsigned phaseIdx) NOTHING_OR_CONST
@@ -578,7 +578,7 @@ public:
      * index is explicitly passed instead of a parameter cache object)
      ****************************************/
     //! \copydoc BaseFluidSystem::density
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval density(const FluidState& fluidState,
                            unsigned phaseIdx,
                            unsigned regionIdx) NOTHING_OR_CONST
@@ -676,7 +676,7 @@ public:
      * for the standard blackoil model. If enableDissolvedGasInWater is enabled
      * the water density takes into account the amount of dissolved gas
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval saturatedDensity(const FluidState& fluidState,
                                     unsigned phaseIdx,
                                     unsigned regionIdx) NOTHING_OR_CONST
@@ -777,7 +777,7 @@ public:
      * (oil) component is not assumed to be at the thermodynamically possible maximum at
      * the given temperature and pressure.
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval inverseFormationVolumeFactor(const FluidState& fluidState,
                                                 unsigned phaseIdx,
                                                 unsigned regionIdx) NOTHING_OR_CONST
@@ -868,7 +868,7 @@ public:
         }
     }
 
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE std::pair<LhsEval, LhsEval>
     inverseFormationVolumeFactorAndViscosity(const FluidState& fluidState,
                                              unsigned phaseIdx,
@@ -895,7 +895,7 @@ public:
      * for the standard blackoil model. If enableDissolvedGasInWater is enabled
      * the water density takes into account the amount of dissolved gas
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval saturatedInverseFormationVolumeFactor(const FluidState& fluidState,
                                                          unsigned phaseIdx,
                                                          unsigned regionIdx) NOTHING_OR_CONST
@@ -917,7 +917,7 @@ public:
     }
 
     //! \copydoc BaseFluidSystem::fugacityCoefficient
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval fugacityCoefficient(const FluidState& fluidState,
                                        unsigned phaseIdx,
                                        unsigned compIdx,
@@ -1039,7 +1039,7 @@ public:
     }
 
     //! \copydoc BaseFluidSystem::viscosity
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval viscosity(const FluidState& fluidState,
                              unsigned phaseIdx,
                              unsigned regionIdx) NOTHING_OR_CONST
@@ -1131,7 +1131,7 @@ public:
         OPM_THROW(std::logic_error, "Unhandled phase index "+std::to_string(phaseIdx));
     }
 
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval internalEnergy(const FluidState& fluidState,
                                   const unsigned phaseIdx,
                                   const unsigned regionIdx) NOTHING_OR_CONST
@@ -1177,7 +1177,7 @@ public:
     }
 
 
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval internalMixingTotalEnergy(const FluidState& fluidState,
                                              unsigned phaseIdx,
                                              unsigned regionIdx) NOTHING_OR_CONST
@@ -1304,7 +1304,7 @@ public:
 
 
     //! \copydoc BaseFluidSystem::enthalpy
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval enthalpy(const FluidState& fluidState,
                             unsigned phaseIdx,
                             unsigned regionIdx) NOTHING_OR_CONST
@@ -1325,7 +1325,7 @@ public:
      * For the gas phase, this means the R_vw factor, for the water and oil phase,
      * it is always 0.
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval saturatedVaporizationFactor(const FluidState& fluidState,
                                               unsigned phaseIdx,
                                               unsigned regionIdx) NOTHING_OR_CONST
@@ -1351,7 +1351,7 @@ public:
      * For the oil (gas) phase, this means the R_s and R_v factors, for the water phase,
      * it is always 0.
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval saturatedDissolutionFactor(const FluidState& fluidState,
                                               unsigned phaseIdx,
                                               unsigned regionIdx,
@@ -1382,7 +1382,7 @@ public:
      * this method does not prevent dissolving a given component if the corresponding
      * phase's saturation is small-
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval saturatedDissolutionFactor(const FluidState& fluidState,
                                               unsigned phaseIdx,
                                               unsigned regionIdx) NOTHING_OR_CONST
@@ -1406,7 +1406,7 @@ public:
     /*!
      * \brief Returns the bubble point pressure $P_b$ using the current Rs
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval bubblePointPressure(const FluidState& fluidState,
                                        unsigned regionIdx) NOTHING_OR_CONST
     {
@@ -1417,7 +1417,7 @@ public:
     /*!
      * \brief Returns the dew point pressure $P_d$ using the current Rv
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval dewPointPressure(const FluidState& fluidState,
                                        unsigned regionIdx) NOTHING_OR_CONST
     {
@@ -1434,7 +1434,7 @@ public:
      * phase (because water is assumed to be immiscible with everything else). This method
      * here just returns 0, though.
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType>
     STATIC_OR_DEVICE LhsEval saturationPressure(const FluidState& fluidState,
                                       unsigned phaseIdx,
                                       unsigned regionIdx) NOTHING_OR_CONST
@@ -1707,7 +1707,7 @@ public:
     /*!
      * \copydoc BaseFluidSystem::diffusionCoefficient
      */
-    template <class FluidState, class LhsEval = typename FluidState::Scalar, class ParamCacheEval = LhsEval>
+    template <class FluidState, class LhsEval = typename FluidState::ValueType, class ParamCacheEval = LhsEval>
     STATIC_OR_DEVICE LhsEval diffusionCoefficient(const FluidState& fluidState,
                                         const ParameterCache<ParamCacheEval>& paramCache,
                                         unsigned phaseIdx,

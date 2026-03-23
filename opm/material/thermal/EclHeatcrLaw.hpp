@@ -51,7 +51,7 @@ public:
     /*!
      * \brief Given a fluid state, compute the volumetric internal energy of the rock [W/m^3].
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation solidInternalEnergy(const Params& params, const FluidState& fluidState)
     {
         const Evaluation& T = fluidState.temperature(/*phaseIdx=*/0);

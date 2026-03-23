@@ -106,6 +106,10 @@ list(APPEND MAIN_SOURCE_FILES
   opm/input/eclipse/EclipseState/Aquifer/NumericalAquifer/SingleNumericalAquifer.cpp
   opm/input/eclipse/EclipseState/Aquifer/NumericalAquifer/NumericalAquifers.cpp
   opm/input/eclipse/EclipseState/Compositional/CompositionalConfig.cpp
+  opm/input/eclipse/EclipseState/Geochemistry/SpeciesConfig.cpp
+  opm/input/eclipse/EclipseState/Geochemistry/MineralConfig.cpp
+  opm/input/eclipse/EclipseState/Geochemistry/IonExchangeConfig.cpp
+  opm/input/eclipse/EclipseState/Geochemistry/GenericSpeciesConfig.cpp
   opm/input/eclipse/EclipseState/Grid/Box.cpp
   opm/input/eclipse/EclipseState/Grid/BoxManager.cpp
   opm/input/eclipse/EclipseState/Grid/Carfin.cpp
@@ -594,6 +598,7 @@ list(APPEND TEST_SOURCE_FILES
   tests/parser/FIPConfigTests.cpp
   tests/parser/FoamTests.cpp
   tests/parser/FunctionalTests.cpp
+  tests/parser/GeochemistryTests.cpp
   tests/parser/GeomodifierTests.cpp
   tests/parser/GroupTests.cpp
   tests/parser/ImportTests.cpp
@@ -648,6 +653,7 @@ list(APPEND TEST_SOURCE_FILES
   tests/parser/integration/NNCTests.cpp
   tests/parser/integration/NNCTestsLGR.cpp
   tests/parser/WellSolventTests.cpp
+  tests/parser/WellSpeciesTests.cpp
   tests/parser/WellTracerTests.cpp
   tests/parser/WellTests.cpp
   tests/parser/WellTestsLGR.cpp
@@ -717,6 +723,7 @@ list(APPEND TEST_DATA_FILES
   tests/GDFILE_NO_ACTNUM.DATA
   tests/LGR_3WELLS.DATA
   tests/LGR_BASESIM2WELLS.DATA
+  tests/LGR_BASESIM3WELLS.DATA
   tests/LGR_DIFFGROUP.DATA
   tests/LGR_GROUP_EX01.DATA
   tests/LGR_GROUP_EX04.DATA
@@ -730,6 +737,7 @@ list(APPEND TEST_DATA_FILES
   tests/MODEL1_IX.UNSMRY
   tests/MSW.DATA
   tests/MSW_2WELSEGS.DATA
+  tests/NNCLGRTEST.DATA
   tests/PYACTION.DATA
   tests/RESTART_SIM.DATA
   tests/SOFR_TEST.DATA
@@ -945,6 +953,10 @@ list(APPEND PUBLIC_HEADER_FILES
   opm/input/eclipse/EclipseState/EclipseConfig.hpp
   opm/input/eclipse/EclipseState/EclipseState.hpp
   opm/input/eclipse/EclipseState/EndpointScaling.hpp
+  opm/input/eclipse/EclipseState/Geochemistry/SpeciesConfig.hpp
+  opm/input/eclipse/EclipseState/Geochemistry/MineralConfig.hpp
+  opm/input/eclipse/EclipseState/Geochemistry/IonExchangeConfig.hpp
+  opm/input/eclipse/EclipseState/Geochemistry/GenericSpeciesConfig.hpp
   opm/input/eclipse/EclipseState/Grid/Box.hpp
   opm/input/eclipse/EclipseState/Grid/BoxManager.hpp
   opm/input/eclipse/EclipseState/Grid/Carfin.hpp
@@ -1057,6 +1069,7 @@ list(APPEND PUBLIC_HEADER_FILES
   opm/input/eclipse/EclipseState/Tables/SolventDensityTable.hpp
   opm/input/eclipse/EclipseState/Tables/SorwmisTable.hpp
   opm/input/eclipse/EclipseState/Tables/SpecheatTable.hpp
+  opm/input/eclipse/EclipseState/Tables/SpeciesVdTable.hpp
   opm/input/eclipse/EclipseState/Tables/SpecrockTable.hpp
   opm/input/eclipse/EclipseState/Tables/SsfnTable.hpp
   opm/input/eclipse/EclipseState/Tables/StandardCond.hpp
@@ -1074,6 +1087,7 @@ list(APPEND PUBLIC_HEADER_FILES
   opm/input/eclipse/EclipseState/Tables/TracerVdTable.hpp
   opm/input/eclipse/EclipseState/Tables/WatvisctTable.hpp
   opm/input/eclipse/EclipseState/Tables/WsfTable.hpp
+  opm/input/eclipse/EclipseState/Tables/ZmfvdTable.hpp
   opm/input/eclipse/EclipseState/TracerConfig.hpp
   opm/input/eclipse/EclipseState/Util/IOrderSet.hpp
   opm/input/eclipse/EclipseState/Util/OrderedMap.hpp

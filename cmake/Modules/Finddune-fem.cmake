@@ -9,59 +9,27 @@
 
 # Copyright (C) 2015 IRIS AS
 # This code is licensed under The GNU General Public License v3.0
-
-include (OpmPackage)
-
-set (CMAKE_THREAD_PREFER_PTHREAD TRUE)
-
-find_opm_package (
-  # module name
-  "dune-fem"
-
-  # dependencies
-  # TODO: we should probe for all the HAVE_* values listed below;
-  # however, we don't actually use them in our implementation, so
-  # we just include them to forward here in case anyone else does
-  "dune-common REQUIRED;
-   dune-grid  REQUIRED;
-   dune-alugrid;
-   dune-polygongrid;
-   ZLIB;
-   ZOLTAN;
-   METIS;
-   QuadMath;
-   Threads
-  "
-  # header to search for
-  "dune/fem/space/shapefunctionset/legendre.hh"
-
-  # library to search for
-  "dunefem"
-
-  # defines to be added to compilations
-  ""
-
-  # test program
-"#include <dune/fem/space/shapefunctionset/legendre.hh>
-int main (void) {
-   //Dune::Fem::LegendrePolynomials::weight();
-   return 0;
-}
-"
-  # config variables
-  "HAVE_DUNE_FEM;
-   HAVE_METIS;
-   HAVE_ZLIB;
-   HAVE_ZOLTAN;
-   HAVE_PTHREAD
-  ")
-
-#debug_find_vars ("dune-grid")
-
-if(CMAKE_USE_PTHREADS_INIT)
-  set(HAVE_PTHREAD 1)
+if(dune-fem_FOUND)
+  return()
 endif()
 
-# make version number available in config.h
-include (UseDuneVer)
-find_dune_version ("dune" "fem")
+if(dune-fem_FIND_REQUIRED)
+  find_package(dune-fem CONFIG REQUIRED)
+else()
+  find_package(dune-fem CONFIG)
+endif()
+
+if(dune-fem_FOUND)
+  find_package(GMP)
+  find_package(SuperLU)
+  # make version number available in config.h
+  include (UseDuneVer)
+  find_dune_version ("dune" "fem")
+  target_compile_definitions(dunefem
+    INTERFACE
+      HAVE_DUNE_FEM=1
+      DUNE_FEM_VERSION_MAJOR=${DUNE_FEM_VERSION_MAJOR}
+      DUNE_FEM_VERSION_MINOR=${DUNE_FEM_VERSION_MINOR}
+      DUNE_FEM_VERSION_REVISION=${DUNE_FEM_VERSION_REVISION}
+  )
+endif()

@@ -43,7 +43,7 @@ public:
 
     // Standard LBC model. (Lohrenz, Bray & Clark: "Calculating Viscosities of Reservoir
     //                      fluids from Their Compositions", JPT 16.10 (1964).
-    template <class FluidState, class Params, class LhsEval = typename FluidState::Scalar>
+    template <class FluidState, class Params, class LhsEval = typename FluidState::ValueType>
     static LhsEval LBC(const FluidState& fluidState,
                       const Params& /*paramCache*/,
                       unsigned phaseIdx)

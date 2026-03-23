@@ -40,7 +40,7 @@ namespace Opm {
  * \brief Module for the modular fluid state which stores the
  *        phase fugacity coefficients explicitly.
  */
-template <class Scalar,
+template <class ValueType,
           unsigned numPhases,
           unsigned numComponents,
           class Implementation>
@@ -55,19 +55,19 @@ public:
     /*!
      * \brief The fugacity coefficient of a component in a phase []
      */
-    const Scalar& fugacityCoefficient(unsigned phaseIdx, unsigned compIdx) const
+    const ValueType& fugacityCoefficient(unsigned phaseIdx, unsigned compIdx) const
     { return fugacityCoefficient_[phaseIdx][compIdx]; }
 
     /*!
      * \brief The fugacity of a component in a phase [Pa]
      */
-    Scalar fugacity(unsigned phaseIdx, unsigned compIdx) const
+    ValueType fugacity(unsigned phaseIdx, unsigned compIdx) const
     { return asImp_().pressure(phaseIdx)*fugacityCoefficient_[phaseIdx][compIdx]*asImp_().moleFraction(phaseIdx, compIdx); }
 
     /*!
      * \brief Set the fugacity of a component in a phase []
      */
-    void setFugacityCoefficient(unsigned phaseIdx, unsigned compIdx, const Scalar& value)
+    void setFugacityCoefficient(unsigned phaseIdx, unsigned compIdx, const ValueType& value)
     { fugacityCoefficient_[phaseIdx][compIdx] = value; }
 
     /*!
@@ -101,14 +101,14 @@ protected:
     const Implementation& asImp_() const
     { return *static_cast<const Implementation*>(this); }
 
-    std::array<std::array<Scalar, numComponents>, numPhases> fugacityCoefficient_{};
+    std::array<std::array<ValueType, numComponents>, numPhases> fugacityCoefficient_{};
 };
 
 /*!
  * \brief Module for the modular fluid state which stores the phase
  *        fugacity coefficients explicitly assuming immiscibility.
  */
-template <class Scalar,
+template <class ValueT,
           unsigned numPhases,
           unsigned numComponents,
           class Implementation>
@@ -124,19 +124,19 @@ public:
     /*!
      * \brief The fugacity coefficient of a component in a phase []
      */
-    Scalar fugacityCoefficient(unsigned phaseIdx, unsigned compIdx) const
-    { return (phaseIdx == compIdx)?fugacityCoefficient_[phaseIdx]:std::numeric_limits<Scalar>::infinity(); }
+    ValueT fugacityCoefficient(unsigned phaseIdx, unsigned compIdx) const
+    { return (phaseIdx == compIdx)?fugacityCoefficient_[phaseIdx]:std::numeric_limits<ValueT>::infinity(); }
 
     /*!
      * \brief The fugacity of a component in a phase [Pa]
      */
-    Scalar fugacity(unsigned phaseIdx, unsigned compIdx) const
+    ValueT fugacity(unsigned phaseIdx, unsigned compIdx) const
     { return asImp_().pressure(phaseIdx)*fugacityCoefficient(phaseIdx, compIdx)*asImp_().moleFraction(phaseIdx, compIdx); }
 
     /*!
      * \brief Set the fugacity of a component in a phase []
      */
-    void setFugacityCoefficient(unsigned phaseIdx, const Scalar& value)
+    void setFugacityCoefficient(unsigned phaseIdx, const ValueT& value)
     { fugacityCoefficient_[phaseIdx] = value; }
 
     /*!
@@ -168,14 +168,14 @@ protected:
     const Implementation& asImp_() const
     { return *static_cast<const Implementation*>(this); }
 
-    std::array<Scalar, numPhases> fugacityCoefficient_{};
+    std::array<ValueT, numPhases> fugacityCoefficient_{};
 };
 
 /*!
  * \brief Module for the modular fluid state which does not store the
  *        fugacities but throws std::logic_error instead.
  */
-template <class Scalar>
+template <class ValueT>
 class FluidStateNullFugacityModule
 {
 public:
@@ -185,13 +185,13 @@ public:
     /*!
      * \brief The fugacity coefficient of a component in a phase []
      */
-    const Scalar& fugacityCoefficient(unsigned /* phaseIdx */, unsigned /* compIdx */) const
+    const ValueT& fugacityCoefficient(unsigned /* phaseIdx */, unsigned /* compIdx */) const
     { throw std::logic_error("Fugacity coefficients are not provided by this fluid state"); }
 
     /*!
      * \brief The fugacity of a component in a phase [Pa]
      */
-    const Scalar& fugacity(unsigned /* phaseIdx */, unsigned /* compIdx */) const
+    const ValueT& fugacity(unsigned /* phaseIdx */, unsigned /* compIdx */) const
     { throw std::logic_error("Fugacities coefficients are not provided by this fluid state"); }
 
     /*!

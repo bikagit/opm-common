@@ -159,7 +159,7 @@ public:
      *
      * \copydetails VanGenuchten::pC()
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation pcnw(const Params& params, const FluidState& fs)
     {
         const auto& Sw = decay<Evaluation>(fs.saturation(Traits::wettingPhaseIdx));
@@ -218,7 +218,7 @@ public:
          \copydetails VanGenuchten::Sw()
      *
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sw(const Params& params, const FluidState& fs)
     {
         const Evaluation& pC =
@@ -268,7 +268,7 @@ public:
      * \brief Calculate the non-wetting phase saturations depending on
      *        the phase pressures.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sn(const Params& params, const FluidState& fs)
     { return 1 - Sw<FluidState, Evaluation>(params, fs); }
 
@@ -290,7 +290,7 @@ public:
      *  For not-regularized part:
         \copydetails VanGenuchten::krw()
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krw(const Params& params, const FluidState& fs)
     {
         const auto& Sw = decay<Evaluation>(fs.saturation(Traits::wettingPhaseIdx));
@@ -323,7 +323,7 @@ public:
          \copydetails VanGenuchten::krn()
      *
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krn(const Params& params, const FluidState& fs)
     {
         const Evaluation& Sw =

@@ -120,7 +120,7 @@ public:
     /*!
      * \brief The capillary pressure-saturation curve
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation pcnw(const Params& params, const FluidState& fluidState)
     {
         const Evaluation& Sw =
@@ -165,7 +165,7 @@ public:
     /*!
      * \brief The saturation-capillary pressure curve
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sw(const Params& /*params*/, const FluidState& /*fluidState*/)
     { throw std::logic_error("Not implemented: Sw()"); }
 
@@ -177,7 +177,7 @@ public:
      * \brief Calculate the non-wetting phase saturations depending on
      *        the phase pressures.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sn(const Params& params, const FluidState& fluidState)
     { return 1 - Sw<FluidState, Evaluation>(params, fluidState); }
 
@@ -189,7 +189,7 @@ public:
      * \brief The relative permeability for the wetting phase of the
      *        porous medium
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krw(const Params& params, const FluidState& fluidState)
     {
         const Evaluation& Sw =
@@ -228,7 +228,7 @@ public:
      * \brief The relative permeability for the non-wetting phase
      *        of the porous medium
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krn(const Params& params, const FluidState& fluidState)
     {
         const Evaluation& Sn =

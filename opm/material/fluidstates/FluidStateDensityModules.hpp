@@ -39,7 +39,7 @@ namespace Opm {
  * \brief Module for the modular fluid state which stores the
  *       densities explicitly.
  */
-template <class Scalar,
+template <class ValueType,
           unsigned numPhases,
           class Implementation>
 class FluidStateExplicitDensityModule
@@ -51,25 +51,25 @@ public:
     /*!
      * \brief The density of a fluid phase [kg/m^3]
      */
-    const Scalar& density(unsigned phaseIdx) const
+    const ValueType& density(unsigned phaseIdx) const
     { return density_[phaseIdx]; }
 
     /*!
      * \brief The molar density of a fluid phase [mol/m^3]
      */
-    Scalar molarDensity(unsigned phaseIdx) const
+    ValueType molarDensity(unsigned phaseIdx) const
     { return density_[phaseIdx]/asImp_().averageMolarMass(phaseIdx); }
 
     /*!
      * \brief The molar volume of a fluid phase [m^3/mol]
      */
-    Scalar molarVolume(unsigned phaseIdx) const
+    ValueType molarVolume(unsigned phaseIdx) const
     { return 1/molarDensity(phaseIdx); }
 
     /*!
      * \brief Set the density of a phase [kg/m^3]
      */
-    void setDensity(unsigned phaseIdx, const Scalar&  value)
+    void setDensity(unsigned phaseIdx, const ValueType&  value)
     { density_[phaseIdx] = value; }
 
     /*!
@@ -80,7 +80,7 @@ public:
     void assign(const FluidState& fs)
     {
         for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx) {
-            density_[phaseIdx] = decay<Scalar>(fs.density(phaseIdx));
+            density_[phaseIdx] = decay<ValueType>(fs.density(phaseIdx));
         }
     }
 
@@ -101,14 +101,14 @@ protected:
     const Implementation& asImp_() const
     { return *static_cast<const Implementation*>(this); }
 
-    std::array<Scalar, numPhases> density_{};
+    std::array<ValueType, numPhases> density_{};
 };
 
 /*!
  * \brief Module for the modular fluid state which does not  the
  *        densities but throws std::logic_error instead.
  */
-template <class Scalar,
+template <class ValueT,
           unsigned numPhases,
           class Implementation>
 class FluidStateNullDensityModule
@@ -120,19 +120,19 @@ public:
     /*!
      * \brief The density of a fluid phase [kg/m^3]
      */
-    const Scalar& density(unsigned /* phaseIdx */) const
+    const ValueT& density(unsigned /* phaseIdx */) const
     { throw std::logic_error("Density is not provided by this fluid state"); }
 
     /*!
      * \brief The molar density of a fluid phase [mol/m^3]
      */
-    const Scalar& molarDensity(unsigned /* phaseIdx */) const
+    const ValueT& molarDensity(unsigned /* phaseIdx */) const
     { throw std::logic_error("Molar density is not provided by this fluid state"); }
 
     /*!
      * \brief The molar volume of a fluid phase [m^3/mol]
      */
-    const Scalar& molarVolume(unsigned /* phaseIdx */) const
+    const ValueT& molarVolume(unsigned /* phaseIdx */) const
     { throw std::logic_error("Molar volume is not provided by this fluid state"); }
 
     /*!

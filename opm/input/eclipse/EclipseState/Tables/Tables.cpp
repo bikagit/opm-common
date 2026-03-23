@@ -77,6 +77,7 @@
 #include <opm/input/eclipse/EclipseState/Tables/Sof3Table.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/SorwmisTable.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/SpecheatTable.hpp>
+#include <opm/input/eclipse/EclipseState/Tables/SpeciesVdTable.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/SpecrockTable.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/SsfnTable.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/SwfnTable.hpp>
@@ -86,6 +87,7 @@
 #include <opm/input/eclipse/EclipseState/Tables/TracerVdTable.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/WatvisctTable.hpp>
 #include <opm/input/eclipse/EclipseState/Tables/WsfTable.hpp>
+#include <opm/input/eclipse/EclipseState/Tables/ZmfvdTable.hpp>
 
 #include <opm/input/eclipse/Units/Dimension.hpp>
 #include <opm/input/eclipse/Units/UnitSystem.hpp>
@@ -110,6 +112,7 @@
 #include <cstddef>
 #include <functional>
 #include <initializer_list>
+#include <numeric>
 #include <stdexcept>
 #include <string_view>
 #include <utility>
@@ -2548,6 +2551,13 @@ OverburdTable::getOverburdenPressureColumn() const
     return SimpleTable::getColumn(1);
 }
 
+SpeciesVdTable::SpeciesVdTable(const Opm::DeckItem& item, double inv_volume, const int tableID)
+{
+    m_schema.addColumn(Opm::ColumnSchema("DEPTH", Table::STRICTLY_INCREASING, Table::DEFAULT_NONE));
+    m_schema.addColumn(Opm::ColumnSchema("SPECIES_CONCENTRATION", Table::RANDOM, Table::DEFAULT_NONE));
+    SimpleTable::init("SPECIESVD", item, tableID, inv_volume);
+}
+
 TracerVdTable::TracerVdTable(const Opm::DeckItem& item, double inv_volume, const int tableID)
 {
     m_schema.addColumn(Opm::ColumnSchema("DEPTH", Table::STRICTLY_INCREASING, Table::DEFAULT_NONE));
@@ -2833,5 +2843,71 @@ template FlatTable<Stone1exRecord>::FlatTable(const DeckKeyword&);
 template FlatTable<TlmixparRecord>::FlatTable(const DeckKeyword&);
 template FlatTable<VISCREFRecord>::FlatTable(const DeckKeyword&);
 template FlatTable<WATDENTRecord>::FlatTable(const DeckKeyword&);
+
+ZmfvdTable::ZmfvdTable(const DeckItem& item, const int tableID, const int numComponents, const KeywordLocation& location)
+    : numComponents_(numComponents)
+{
+    m_schema.addColumn(ColumnSchema("DEPTH", Table::STRICTLY_INCREASING, Table::DEFAULT_NONE));
+    for (int c = 0; c < numComponents; ++c) {
+        m_schema.addColumn(ColumnSchema(fmt::format("Z_COMP{}", c),
+                                        Table::RANDOM, Table::DEFAULT_NONE));
+    }
+
+    addColumns();
+
+    const auto ncol = static_cast<std::size_t>(1 + numComponents);
+    if ( item.data_size() % ncol != 0) {
+        const std::string reason = fmt::format("ZMFVD table {}: number of data elements ({}) is not a "
+                        "multiple of expected number of columns (1 + {} components = {})",
+                        tableID + 1, item.data_size(), numComponents, ncol);
+        throw OpmInputError(reason, location);
+    }
+
+    const auto nrows = item.data_size() / ncol;
+
+    const std::string tableName {"ZMFVD"};
+    for (std::size_t row = 0; row < nrows; ++row) {
+        // Depth column
+        const std::size_t depthIdx = row * ncol;
+        const double siDepth = item.getSIDouble(depthIdx);
+        getColumn(0).addValue(siDepth, tableName);
+
+        std::vector<double> moles(numComponents, 0.);
+        // Component mole-fraction columns (dimensionless)
+        for (int c = 0; c < numComponents; ++c) {
+            const std::size_t compIdx = row * ncol + 1 + c;
+            const auto mole_fraction = item.get<double>(compIdx);
+            moles[c] = mole_fraction;
+            getColumn(1 + c).addValue(mole_fraction, tableName);
+        }
+        // checking to make sure the sum of the mole fractions are 1.
+        constexpr double epsilon = 1.e-5;
+        const double sum_fractions = std::accumulate(moles.begin(), moles.end(), 0.);
+        if (std::abs(sum_fractions - 1.) > epsilon) {
+            const std::string reason = fmt::format("ZMFVD table {}: sum of mole fractions in row {} is not 1 (sum is {})",
+                            tableID + 1, row + 1, sum_fractions);
+            throw OpmInputError(reason, location);
+        }
+    }
+}
+
+const TableColumn&
+ZmfvdTable::getDepthColumn() const
+{
+    return SimpleTable::getColumn(0);
+}
+
+const TableColumn&
+ZmfvdTable::getMoleFractionColumn(const int componentIdx) const
+{
+    if (componentIdx < 0 || componentIdx >= this->numComponents_) {
+        throw std::out_of_range(fmt::format(
+            "ZmfvdTable::getMoleFractionColumn: componentIdx {} out of valid range [0, {})",
+            componentIdx,
+            this->numComponents_ - 1));
+    }
+
+    return SimpleTable::getColumn(1 + componentIdx);
+}
 
 } // namespace Opm

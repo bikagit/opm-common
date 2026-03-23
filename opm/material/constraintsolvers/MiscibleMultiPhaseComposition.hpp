@@ -164,7 +164,7 @@ public:
                       bool setViscosity,
                       bool setInternalEnergy)
     {
-        static_assert(std::is_same<typename FluidState::Scalar, Evaluation>::value,
+        static_assert(std::is_same<typename FluidState::ValueType, Evaluation>::value,
                       "The scalar type of the fluid state must be 'Evaluation'");
 
 #ifndef NDEBUG

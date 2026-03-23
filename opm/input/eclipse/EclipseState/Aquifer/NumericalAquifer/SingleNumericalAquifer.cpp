@@ -195,6 +195,14 @@ namespace Opm {
             const size_t i = con.I;
             const size_t j = con.J;
             const size_t k = con.K;
+            // Need to check for out-of-bounds access (eventually gives throw in aquiferConnectionNNCs also).
+            if (! (i < grid.getNX() && j < grid.getNY() && k < grid.getNZ()) ) {
+                OpmLog::warning(
+                    fmt::format(
+                        "Connection in numerical aquifer {} has out-of-bounds IJK ({}, {}, {}), allowed range is (1-{}, 1-{}, 1-{}). Connection skipped.",
+                                            this->id_, i+1, j+1, k+1, grid.getNX(), grid.getNY(), grid.getNZ()));
+                continue;
+            }
             if (!actnum[grid.getGlobalIndex(i, j, k)]) continue;
             if (con.connect_active_cell
                || !AquiferHelpers::neighborCellInsideReservoirAndActive(grid, i, j, k, con.face_dir, actnum, cell_global_indices)) {

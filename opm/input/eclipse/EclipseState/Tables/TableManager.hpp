@@ -119,6 +119,7 @@ namespace Opm {
         const TableContainer& getOilvisctTables() const;
         const TableContainer& getGasvisctTables() const;
         const TableContainer& getRtempvdTables() const;
+        const TableContainer& getZmfvdTables() const;
         const TableContainer& getRocktabTables() const;
         const TableContainer& getPlyadsTables() const;
         const TableContainer& getPlyviscTables() const;
@@ -296,6 +297,7 @@ namespace Opm {
         void addTables( const std::string& tableName , size_t numTables);
         void initSimpleTables(const Deck& deck);
         void initRTempTables(const Deck& deck);
+        void initZmfvdTables(const Deck& deck);
         void initDims(const Deck& deck);
         void initRocktabTables(const Deck& deck);
 

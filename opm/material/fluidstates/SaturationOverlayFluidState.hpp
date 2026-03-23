@@ -43,7 +43,7 @@ template <class FluidState>
 class SaturationOverlayFluidState
 {
 public:
-    typedef typename FluidState::Scalar Scalar;
+    using ValueType = typename FluidState::ValueType;
 
     enum { numPhases = FluidState::numPhases };
     enum { numComponents = FluidState::numComponents };
@@ -205,7 +205,7 @@ public:
     /*!
      * \brief Set the saturation [-] of a fluid phase
      */
-    void setSaturation(unsigned phaseIdx, const Scalar& value)
+    void setSaturation(unsigned phaseIdx, const ValueType& value)
     { saturation_[phaseIdx] = value; }
 
     /*!
@@ -223,7 +223,7 @@ public:
 
 protected:
     const FluidState* fs_;
-    std::array<Scalar, numPhases> saturation_;
+    std::array<ValueType, numPhases> saturation_;
 };
 
 } // namespace Opm

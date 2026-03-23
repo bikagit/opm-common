@@ -9,66 +9,25 @@
 
 # Copyright (C) 2012 Uni Research AS
 # This code is licensed under The GNU General Public License v3.0
+if(dune-common_FOUND)
+  return()
+endif()
 
-include (OpmPackage)
-find_opm_package (
-  # module name
-  "dune-common"
+if(dune-common_FIND_REQUIRED)
+  find_package(dune-common CONFIG REQUIRED)
+else()
+  find_package(dune-common CONFIG)
+endif()
 
-  # dependencies
-  "BLAS REQUIRED;
-  LAPACK REQUIRED;
-  MPI;
-  TBB;
-  GMP
-  "
-  # header to search for
-  "dune/common/fvector.hh"
+if(dune-common_FOUND)
+  # make version number available in config.h
+  include (UseDuneVer)
+  find_dune_version ("dune" "common")
+  target_compile_definitions(dunecommon INTERFACE HAVE_DUNE_COMMON=1)
 
-  # library to search for
-  "dunecommon"
-
-  # defines to be added to compilations
-  ""
-
-  # test program
-"#include <dune/common/fvector.hh>
-#include <dune/common/fmatrix.hh>
-int main (void) {
-  Dune::FieldVector<double,1> v;
-  Dune::FieldMatrix<double,1,1> m;
-  m[0][0] = 1.0;
-  v[0]    = 1.0;
-  Dune::FieldVector<double,1> w = m*v;
-  return 0;
-}
-"
-  # config variables
-  "HAS_ATTRIBUTE_UNUSED;
-  HAS_ATTRIBUTE_DEPRECATED;
-  HAS_ATTRIBUTE_DEPRECATED_MSG;
-  HAVE_ARRAY;
-  HAVE_BOOST_MAKE_SHARED_HPP;
-  HAVE_BOOST_SHARED_PTR_HPP;
-  HAVE_GMP;
-  HAVE_MAKE_SHARED;
-  HAVE_MPI;
-  HAVE_NULLPTR;
-  HAVE_STATIC_ASSERT;
-  HAVE_SHARED_PTR;
-  SHARED_PTR_HEADER;
-  SHARED_PTR_NAMESPACE;
-  HAVE_TYPE_TRAITS;
-  HAVE_TR1_TUPLE;
-  HAVE_TUPLE;
-  HAVE_CXA_DEMANGLE
-  ")
-#debug_find_vars ("dune-common")
-
-# make version number available in config.h
-include (UseDuneVer)
-find_dune_version ("dune" "common")
-
-if(${DUNE_COMMON_VERSION_MAJOR}.${DUNE_COMMON_VERSION_MINOR} VERSION_GREATER_EQUAL "2.11")
-  set(CMAKE_CXX_STANDARD 20)
+  if(dune-common_VERSION VERSION_LESS 2.11)
+    find_package(Threads)
+    find_package(TBB)
+    target_include_directories(dunecommon INTERFACE ${dune-common_INCLUDE_DIRS})
+  endif()
 endif()

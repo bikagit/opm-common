@@ -45,6 +45,9 @@
 
 #include <opm/input/eclipse/Deck/Deck.hpp>
 
+#include <opm/input/eclipse/Parser/ErrorGuard.hpp>
+#include <opm/input/eclipse/Parser/ParseContext.hpp>
+
 #include <opm/input/eclipse/Parser/Parser.hpp>
 
 #include <cstddef>
@@ -74,12 +77,15 @@ namespace {
             deck, Opm::Phases{true, true, true}, grid, Opm::TableManager{}
         };
 
+        const auto ctx = Opm::ParseContext{};
+        auto errors = Opm::ErrorGuard{};
+
         // Must be mutable.
         Opm::CompletedCells completed_cells(grid);
         const auto sg = Opm::ScheduleGrid { grid, field_props, completed_cells };
 
         for (const auto& rec : deck["COMPDAT"][0]) {
-            connections.loadCOMPDAT(rec, sg, "WELL", wdfac, loc);
+            connections.loadCOMPDAT(rec, "WELL", wdfac, sg, loc, ctx, errors);
         }
 
         return connections;

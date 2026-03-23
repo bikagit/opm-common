@@ -302,7 +302,7 @@ public:
     /*!
      * \brief The saturation of the gas phase.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sg(const Params& /* params */,
                          const FluidState& /* fluidState */)
     {
@@ -312,7 +312,7 @@ public:
     /*!
      * \brief The saturation of the non-wetting (i.e., oil) phase.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sn(const Params& /* params */,
                          const FluidState& /* fluidState */)
     {
@@ -322,7 +322,7 @@ public:
     /*!
      * \brief The saturation of the wetting (i.e., water) phase.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sw(const Params& /* params */,
                          const FluidState& /* fluidState */)
     {

@@ -126,7 +126,7 @@ public:
      *
      * \param params The parameters of the capillary pressure curve
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation pcnw(const Params& /* params */, const FluidState& /* fs */)
     {
         throw std::logic_error("TwoPhaseLETCurves::pcnw"
@@ -160,7 +160,7 @@ public:
                                " not implemented!");
     }
 
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sw(const Params& /* params */, const FluidState& /* fs */)
     {
         throw std::logic_error("The Sw(fs) method is not yet implemented");
@@ -172,7 +172,7 @@ public:
         throw std::logic_error("The twoPhaseSatSw(fs) method is not yet implemented");
     }
 
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sn(const Params& /* params */, const FluidState& /* fs */)
     {
         throw std::logic_error("The Sn(fs) method is not yet implemented");
@@ -189,7 +189,7 @@ public:
      *
      * \param params The parameters of the relative permeability curve
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krw(const Params& /* params */, const FluidState& /* fs */)
     {
         throw std::logic_error("TwoPhaseLETCurves::krw"
@@ -233,7 +233,7 @@ public:
      *
      * \param params The parameters of the capillary pressure curve
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krn(const Params& /* params */, const FluidState& /* fs */)
     {
         throw std::logic_error("TwoPhaseLETCurves::krn"

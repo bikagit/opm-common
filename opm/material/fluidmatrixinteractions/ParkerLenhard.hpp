@@ -380,7 +380,7 @@ public:
      * \brief Returns the capillary pressure dependend on
      *        the phase saturations.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation pcnw(const Params& params, const FluidState& fs)
     {
         const Evaluation& sw =
@@ -427,7 +427,7 @@ public:
      * \brief Calculate the wetting phase saturations depending on
      *        the phase pressures.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sw(const Params& /*params*/, const FluidState& /*fs*/)
     { throw std::logic_error("Not implemented: ParkerLenhard::Sw()"); }
 
@@ -439,7 +439,7 @@ public:
      * \brief Calculate the non-wetting phase saturations depending on
      *        the phase pressures.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sn(const Params& params, const FluidState& fs)
     { return 1 - Sw<FluidState, Evaluation>(params, fs); }
 
@@ -451,7 +451,7 @@ public:
      * \brief The relative permeability for the wetting phase of
      *        the medium.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krw(const Params& params, const FluidState& fs)
     {
         const Evaluation& sw =
@@ -473,7 +473,7 @@ public:
      * \brief The relative permeability for the non-wetting phase
      *        of the params.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krn(const Params& params, const FluidState& fs)
     {
         const Evaluation& sw =

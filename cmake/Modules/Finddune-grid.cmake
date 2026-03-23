@@ -9,58 +9,19 @@
 
 # Copyright (C) 2013 Uni Research AS
 # This code is licensed under The GNU General Public License v3.0
+if(dune-grid_FOUND)
+  return()
+endif()
 
-include (OpmPackage)
+if(dune-grid_FIND_REQUIRED)
+  find_package(dune-grid CONFIG REQUIRED)
+else()
+  find_package(dune-grid CONFIG)
+endif()
 
-set(DUNE_GRID_EXPERIMENTAL_GRID_EXTENSIONS 1)
-
-find_opm_package (
-  # module name
-  "dune-grid"
-
-  # dependencies
-  # TODO: we should probe for all the HAVE_* values listed below;
-  # however, we don't actually use them in our implementation, so
-  # we just include them to forward here in case anyone else does
-  "dune-common REQUIRED;
-  dune-geometry REQUIRED;
-  dune-uggrid;
-  MPI;
-  UG;
-  Alberta
-  "
-  # header to search for
-  "dune/grid/onedgrid.hh"
-
-  # library to search for
-  "dunegrid"
-
-  # defines to be added to compilations
-  ""
-
-  # test program
-"#include <dune/grid/onedgrid.hh>
-int main (void) {
-  Dune::OneDGrid grid(1, 0., 1.);
-  return grid.size(0);
-}
-"
-  # config variables
-  "HAVE_MPI;
-   HAVE_UG;
-   HAVE_DUNE_FEM;
-   HAVE_GRIDTYPE;
-   HAVE_GRAPE;
-   HAVE_PSURFACE;
-   HAVE_AMIRAMESH;
-   HAVE_ALBERTA;
-   HAVE_STDINT_H;
-   DUNE_GRID_EXPERIMENTAL_GRID_EXTENSIONS;
-   DUNE_ALBERTA_VERSION
-  ")
-
-#debug_find_vars ("dune-grid")
-
-# make version number available in config.h
-include (UseDuneVer)
-find_dune_version ("dune" "grid")
+if(dune-grid_FOUND)
+  target_compile_definitions(dunegrid INTERFACE HAVE_DUNE_GRID=1)
+  # make version number available in config.h
+  include (UseDuneVer)
+  find_dune_version ("dune" "grid")
+endif()

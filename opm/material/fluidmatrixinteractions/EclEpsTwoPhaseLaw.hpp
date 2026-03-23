@@ -140,7 +140,7 @@ public:
      *         constitutive relation (e.g. Brooks & Corey, van
      *         Genuchten, linear...)
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation pcnw(const Params& /*params*/, const FluidState& /*fluidState*/)
     {
         throw std::invalid_argument("The pcnw(fs) method is not yet implemented");
@@ -175,7 +175,7 @@ public:
      * \brief Calculate wetting liquid phase saturation given that
      *        the rest of the fluid state has been initialized
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sw(const Params& /*params*/, const FluidState& /*fluidState*/)
     {
         throw std::invalid_argument("The Sw(fs) method is not yet implemented");
@@ -191,7 +191,7 @@ public:
      * \brief Calculate non-wetting liquid phase saturation given that
      *        the rest of the fluid state has been initialized
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation Sn(const Params& /*params*/, const FluidState& /*fluidState*/)
     {
         throw std::invalid_argument("The Sn(pc) method is not yet implemented");
@@ -212,7 +212,7 @@ public:
      * \return          Relative permeability of the wetting phase calculated as implied by EffLaw e.g. Brooks & Corey, van Genuchten, linear... .
      *
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krw(const Params& /*params*/, const FluidState& /*fluidState*/)
     {
         throw std::invalid_argument("The krw(fs) method is not yet implemented");
@@ -237,7 +237,7 @@ public:
     /*!
      * \brief The relative permeability of the non-wetting phase.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static Evaluation krn(const Params& /*params*/, const FluidState& /*fluidState*/)
     {
         throw std::invalid_argument("The krn(fs) method is not yet implemented");

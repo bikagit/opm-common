@@ -88,7 +88,7 @@ public:
     /*!
      * \brief Guess initial values for all quantities.
      */
-    template <class FluidState, class Evaluation = typename FluidState::Scalar>
+    template <class FluidState, class Evaluation = typename FluidState::ValueType>
     static void guessInitial(FluidState& fluidState,
                              const Dune::FieldVector<Evaluation, numComponents>& /*globalMolarities*/)
     {
@@ -110,11 +110,11 @@ public:
     template <class MaterialLaw, class FluidState>
     static void solve(FluidState& fluidState,
                       const typename MaterialLaw::Params& matParams,
-                      typename FluidSystem::template ParameterCache<typename FluidState::Scalar>& paramCache,
-                      const Dune::FieldVector<typename FluidState::Scalar, numComponents>& globalMolarities,
+                      typename FluidSystem::template ParameterCache<typename FluidState::ValueType>& paramCache,
+                      const Dune::FieldVector<typename FluidState::ValueType, numComponents>& globalMolarities,
                       Scalar tolerance = -1)
     {
-        typedef typename FluidState::Scalar InputEval;
+        typedef typename FluidState::ValueType InputEval;
 
         /////////////////////////
         // Check if all fluid phases are incompressible
@@ -226,9 +226,9 @@ protected:
     static void assignFlashFluidState_(const InputFluidState& inputFluidState,
                                        FlashFluidState& flashFluidState,
                                        const typename MaterialLaw::Params& matParams,
-                                       typename FluidSystem::template ParameterCache<typename FlashFluidState::Scalar>& flashParamCache)
+                                       typename FluidSystem::template ParameterCache<typename FlashFluidState::ValueType>& flashParamCache)
     {
-        typedef typename FlashFluidState::Scalar FlashEval;
+        typedef typename FlashFluidState::ValueType FlashEval;
 
         // copy the temperature: even though the model which uses the flash solver might
         // be non-isothermal, the flash solver does not consider energy. (it could be
@@ -290,8 +290,8 @@ protected:
 
     template <class FluidState>
     static void solveAllIncompressible_(FluidState& fluidState,
-                                        typename FluidSystem::template ParameterCache<typename FluidState::Scalar>& paramCache,
-                                        const Dune::FieldVector<typename FluidState::Scalar, numComponents>& globalMolarities)
+                                        typename FluidSystem::template ParameterCache<typename FluidState::ValueType>& paramCache,
+                                        const Dune::FieldVector<typename FluidState::ValueType, numComponents>& globalMolarities)
     {
         for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx) {
             Scalar rho = FluidSystem::density(fluidState, paramCache, phaseIdx);
@@ -320,12 +320,12 @@ protected:
 
     template <class MaterialLaw, class FlashFluidState, class EvalVector>
     static Scalar update_(FlashFluidState& fluidState,
-                          typename FluidSystem::template ParameterCache<typename FlashFluidState::Scalar>& paramCache,
+                          typename FluidSystem::template ParameterCache<typename FlashFluidState::ValueType>& paramCache,
                           const typename MaterialLaw::Params& matParams,
                           const EvalVector& deltaX)
     {
         // note that it is possible that FlashEval::Scalar is an Evaluation itself
-        typedef typename FlashFluidState::Scalar FlashEval;
+        typedef typename FlashFluidState::ValueType FlashEval;
         typedef MathToolbox<FlashEval> FlashEvalToolbox;
 
         typedef typename FlashEvalToolbox::ValueType InnerEval;
@@ -369,12 +369,12 @@ protected:
 
     template <class MaterialLaw, class FlashFluidState>
     static void completeFluidState_(FlashFluidState& flashFluidState,
-                                    typename FluidSystem::template ParameterCache<typename FlashFluidState::Scalar>& paramCache,
+                                    typename FluidSystem::template ParameterCache<typename FlashFluidState::ValueType>& paramCache,
                                     const typename MaterialLaw::Params& matParams)
     {
-        typedef typename FluidSystem::template ParameterCache<typename FlashFluidState::Scalar> ParamCache;
+        typedef typename FluidSystem::template ParameterCache<typename FlashFluidState::ValueType> ParamCache;
 
-        typedef typename FlashFluidState::Scalar FlashEval;
+        typedef typename FlashFluidState::ValueType FlashEval;
 
         // calculate the saturation of the last phase as a function of
         // the other saturations
@@ -411,7 +411,7 @@ protected:
 
     // retrieves a quantity from the fluid state
     template <class FluidState>
-    static const typename FluidState::Scalar& getQuantity_(const FluidState& fluidState, unsigned pvIdx)
+    static const typename FluidState::ValueType& getQuantity_(const FluidState& fluidState, unsigned pvIdx)
     {
         assert(pvIdx < numEq);
 
@@ -432,7 +432,7 @@ protected:
     template <class FluidState>
     static void setQuantity_(FluidState& fluidState,
                              unsigned pvIdx,
-                             const typename FluidState::Scalar& value)
+                             const typename FluidState::ValueType& value)
     {
         assert(pvIdx < numEq);
 
