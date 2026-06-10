@@ -41,6 +41,14 @@
 #include <vector>
 #include <fstream>
 
+#ifdef OPM_ML_USE_BLAS
+#if defined(__APPLE__)
+#include <Accelerate/Accelerate.h>
+#else
+#include <cblas.h>
+#endif
+#endif
+
 namespace Opm
 {
 
@@ -423,6 +431,7 @@ namespace ML
         bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out) override;
 
     private:
+        template <class E> friend class NNModel;
         ActivationType activation_type_;
     };
 
@@ -443,6 +452,7 @@ namespace ML
         bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out) override;
 
     private:
+        template <class E> friend class NNModel;
         float data_min_;
         float data_max_;
         float feat_inf_;
@@ -466,6 +476,7 @@ namespace ML
         bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out) override;
 
     private:
+        template <class E> friend class NNModel;
         float data_min_;
         float data_max_;
         float feat_inf_;
@@ -486,6 +497,7 @@ namespace ML
         bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out) override;
 
     private:
+        template <class E> friend class NNModel;
         Tensor<float> weights_;
         Tensor<float> biases_;
 
@@ -508,8 +520,38 @@ namespace ML
 
         virtual bool apply(const Tensor<Evaluation>& in, Tensor<Evaluation>& out);
 
+        // Vectorised inference: evaluate the model for N samples in one pass.
+        // in_flat  : flat row-major array of length n_samples * n_inputs
+        // out_flat : flat array of length n_samples * n_outputs (caller-allocated)
+        // n_samples: number of samples in the batch
+        // Only scalar (value()) paths are used — derivatives are not propagated,
+        // matching the existing pointwise path in FlowProblem::updateRelperms.
+        virtual bool applyBatch(const std::vector<float>& in_flat,
+                                std::vector<float>&       out_flat,
+                                int                       n_samples) const;
+
     private:
         std::vector<std::unique_ptr<NNLayer<Evaluation>>> layers_;
+
+        // --- Precomputed flat schedule for fast batched inference ------------
+        // Built once from layers_ (no per-call dynamic_cast / Tensor indexing).
+        // Holds raw pointers into the layer weight/bias storage, which stays
+        // valid for the lifetime of layers_ (never mutated after loadModel).
+        struct BatchLayer {
+            LayerType      type;
+            int            in_dim  = 0;
+            int            out_dim = 0;
+            const float*   weights = nullptr;   // dense: [in_dim*out_dim] row-major
+            const float*   biases  = nullptr;   // dense: [out_dim]
+            ActivationType act     = ActivationType::kLinear;
+            float dmin = 0, dmax = 0, finf = 0, fsup = 0; // (un)scaling params
+        };
+        mutable std::vector<BatchLayer> batchSchedule_;
+        mutable bool                    batchScheduleBuilt_ = false;
+        mutable std::vector<float>      batchCur_;   // reusable scratch (ping)
+        mutable std::vector<float>      batchNxt_;   // reusable scratch (pong)
+
+        void buildBatchSchedule() const;
     };
 
     /** \class Neural Network Timer class
@@ -857,6 +899,158 @@ namespace ML
                                      "{}"),
                                      i));
         }
+        return true;
+    }
+
+    // In-place activation over a flat buffer (batched).
+    template <class T>
+    inline void applyActivationFlat(std::vector<T>& v, ActivationType act)
+    {
+        switch (act) {
+        case ActivationType::kRelu:
+            for (auto& x : v) x = x > T{0} ? x : T{0};
+            break;
+        case ActivationType::kSigmoid:
+            for (auto& x : v)
+                x = x >= T{0} ? T{1} / (T{1} + std::exp(-x))
+                              : std::exp(x) / (T{1} + std::exp(x));
+            break;
+        case ActivationType::kTanh:
+            for (auto& x : v) x = std::tanh(x);
+            break;
+        case ActivationType::kSoftPlus:
+            for (auto& x : v) x = std::log(T{1} + std::exp(x));
+            break;
+        case ActivationType::kHardSigmoid:
+            for (auto& x : v) {
+                T y = x * T{0.2} + T{0.5};
+                x = y <= T{0} ? T{0} : (y >= T{1} ? T{1} : y);
+            }
+            break;
+        default:
+            break;  // kLinear — no-op
+        }
+    }
+
+    // Build the flat inference schedule once: a single dynamic_cast per layer,
+    // caching raw weight/bias pointers and parameters.  Subsequent applyBatch
+    // calls iterate this schedule with no RTTI and direct float* access.
+    template <class Evaluation>
+    void NNModel<Evaluation>::buildBatchSchedule() const
+    {
+        batchSchedule_.clear();
+        batchSchedule_.reserve(layers_.size());
+        for (const auto& layer_ptr : layers_) {
+            BatchLayer bl;
+            if (auto* d = dynamic_cast<const NNLayerDense<Evaluation>*>(layer_ptr.get())) {
+                bl.type    = LayerType::kDense;
+                bl.in_dim  = d->weights_.dims_[0];
+                bl.out_dim = d->weights_.dims_[1];
+                bl.weights = d->weights_.data_.data();
+                bl.biases  = d->biases_.data_.data();
+                bl.act     = d->activation_.activation_type_;
+            } else if (auto* s = dynamic_cast<const NNLayerScaling<Evaluation>*>(layer_ptr.get())) {
+                bl.type = LayerType::kScaling;
+                bl.dmin = s->data_min_; bl.dmax = s->data_max_;
+                bl.finf = s->feat_inf_; bl.fsup = s->feat_sup_;
+            } else if (auto* u = dynamic_cast<const NNLayerUnScaling<Evaluation>*>(layer_ptr.get())) {
+                bl.type = LayerType::kUnScaling;
+                bl.dmin = u->data_min_; bl.dmax = u->data_max_;
+                bl.finf = u->feat_inf_; bl.fsup = u->feat_sup_;
+            } else if (auto* a = dynamic_cast<const NNLayerActivation<Evaluation>*>(layer_ptr.get())) {
+                bl.type = LayerType::kActivation;
+                bl.act  = a->activation_type_;
+            } else {
+                continue;
+            }
+            batchSchedule_.push_back(bl);
+        }
+        batchScheduleBuilt_ = true;
+    }
+
+    // -------------------------------------------------------------------------
+    // applyBatch: vectorised forward pass over N samples.
+    //
+    // Layout (row-major):  in_flat[s*n_inputs + f], out_flat[s*n_outputs + k].
+    // Only float (scalar) arithmetic — no AD derivatives — matching the
+    // pointwise path which stores krn.value().
+    //
+    // Optimisations vs. the reference implementation:
+    //   * Precomputed flat schedule: no per-call dynamic_cast or Tensor::operator().
+    //   * Reused ping-pong scratch buffers (batchCur_/batchNxt_): no per-layer
+    //     reallocation across calls.
+    //   * Dense layer is a matrix product OUT[N,out] = IN[N,in] * W[in,out] + b.
+    //     With -DOPM_ML_USE_BLAS and a large enough batch it dispatches to
+    //     cblas_sgemm; otherwise a cache-friendly scalar loop is used.
+    // -------------------------------------------------------------------------
+    template <class Evaluation>
+    bool NNModel<Evaluation>::applyBatch(const std::vector<float>& in_flat,
+                                         std::vector<float>&       out_flat,
+                                         int                       n_samples) const
+    {
+        if (layers_.empty() || n_samples <= 0)
+            return false;
+        if (!batchScheduleBuilt_)
+            buildBatchSchedule();
+
+        batchCur_.assign(in_flat.begin(), in_flat.end());
+
+        for (const auto& L : batchSchedule_) {
+            switch (L.type) {
+            case LayerType::kDense: {
+                const int in_dim  = L.in_dim;
+                const int out_dim = L.out_dim;
+                batchNxt_.assign(static_cast<std::size_t>(n_samples) * out_dim, 0.0f);
+
+#ifdef OPM_ML_USE_BLAS
+                if (static_cast<long>(n_samples) * in_dim * out_dim >= 4096) {
+                    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                                n_samples, out_dim, in_dim,
+                                1.0f, batchCur_.data(), in_dim,
+                                L.weights, out_dim,
+                                0.0f, batchNxt_.data(), out_dim);
+                    for (int s = 0; s < n_samples; ++s) {
+                        float* o = &batchNxt_[static_cast<std::size_t>(s) * out_dim];
+                        for (int j = 0; j < out_dim; ++j) o[j] += L.biases[j];
+                    }
+                } else
+#endif
+                {
+                    // Cache-friendly scalar GEMM: stream weight rows contiguously.
+                    for (int s = 0; s < n_samples; ++s) {
+                        const float* x = &batchCur_[static_cast<std::size_t>(s) * in_dim];
+                        float*       o = &batchNxt_[static_cast<std::size_t>(s) * out_dim];
+                        for (int i = 0; i < in_dim; ++i) {
+                            const float  xi = x[i];
+                            const float* wr = &L.weights[static_cast<std::size_t>(i) * out_dim];
+                            for (int j = 0; j < out_dim; ++j) o[j] += xi * wr[j];
+                        }
+                        for (int j = 0; j < out_dim; ++j) o[j] += L.biases[j];
+                    }
+                }
+                applyActivationFlat(batchNxt_, L.act);
+                batchCur_.swap(batchNxt_);
+                break;
+            }
+            case LayerType::kScaling:
+                for (auto& v : batchCur_) {
+                    float t = (v - L.dmin) / (L.dmax - L.dmin);
+                    v = t * (L.fsup - L.finf) + L.finf;
+                }
+                break;
+            case LayerType::kUnScaling:
+                for (auto& v : batchCur_) {
+                    float t = (v - L.finf) / (L.fsup - L.finf);
+                    v = t * (L.dmax - L.dmin) + L.dmin;
+                }
+                break;
+            case LayerType::kActivation:
+                applyActivationFlat(batchCur_, L.act);
+                break;
+            }
+        }
+
+        out_flat = batchCur_;
         return true;
     }
 
